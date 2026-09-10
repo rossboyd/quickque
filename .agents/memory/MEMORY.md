@@ -1,0 +1,1 @@
+- [Native audio integration](native-audio-integration.md) — verify streaming semantics and immutable downloads against pinned upstream source, not current README examples.

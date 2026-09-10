@@ -1,0 +1,24 @@
+Quickque Flow third-party notices
+
+FluidAudio 0.15.7
+Copyright FluidInference contributors
+Licensed under the Apache License, Version 2.0:
+https://www.apache.org/licenses/LICENSE-2.0
+Source: https://github.com/FluidInference/FluidAudio/tree/v0.15.7
+
+Parakeet Realtime EOU 120M model
+Copyright NVIDIA Corporation
+Licensed under the NVIDIA Open Model License:
+https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/
+Model: https://huggingface.co/FluidInference/parakeet-realtime-eou-120m-coreml
+Revision recorded when integrated:
+40a23f4c0b333aa17ad8c0f2ea47ec2347f2f355
+
+Silero VAD and its FluidAudio CoreML conversion
+Copyright Silero Team and FluidAudio contributors
+Licensed under the MIT License.
+Model: https://huggingface.co/FluidInference/silero-vad-coreml
+Revision: b419383c55c110e2c9271fa6ee0ea83d03c70d96
+
+The model weights are separately licensed from FluidAudio. They are not
+covered by FluidAudio's Apache-2.0 license.

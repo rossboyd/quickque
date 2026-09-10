@@ -16,6 +16,7 @@ A local-first personal teleprompter for live meetings, with an interruption-frie
 - Frontend: React + Vite
 - Desktop: Tauri 2, using the macOS system webview rather than bundling a browser
 - Persistence: local device storage, no account or server required
+- Local Flow: Apple Silicon Swift sidecar with FluidAudio/Parakeet Realtime EOU and native voice-activity detection. First-use model download is explicit; inference is offline.
 - The scaffolded API/database packages are not used by Quickque.
 
 ## Where things live
@@ -27,12 +28,15 @@ A local-first personal teleprompter for live meetings, with an interruption-frie
 ## Architecture decisions
 
 - Keep scripts local-first because this is a personal meeting utility; do not introduce cloud accounts or server-side script storage without a new requirement.
+- Flow is Mac-first and on-device by user choice. Do not add cloud transcription, API billing, keys, or authentication as a fallback. iPhone work is deferred.
+- The user explicitly values no recordings: audio and recognition text are transient memory buffers, never saved, backed up, or logged. Only scripts/settings/models persist. Do not describe this as forensic memory erasure.
 - Use explicit pause for interruptions. Automatic speaker identification is outside the current scope; never suggest manual playback listens to or recognizes speech.
+- The native helper owns speech-inactivity timing: 30 seconds without detected speech stops capture. Off-script speech counts, and webview timer throttling must not delay shutdown.
 - Distinguish browser preview from native capabilities. Browser transparency cannot reveal another application's window, and browser code cannot reliably pin a window above Zoom or Meet.
 
 ## Product
 
-Create and edit sectioned scripts, navigate sections while reading, pause without losing position, and adjust reading speed and appearance. The Mac reader is designed to float above meeting windows.
+Create and edit sectioned scripts, navigate sections while reading, pause without losing position, and adjust reading speed and appearance. The Mac reader is designed to float above meeting windows. Optional Flow follows locally transcribed English speech; browser preview keeps manual reading and explains the native requirement.
 
 ## User preferences
 

@@ -18,9 +18,11 @@ test("tokenization normalizes while preserving exact UTF-16 source offsets", () 
     [
       ["hello", "Héllo"],
       ["world", "WORLD"],
-      ["don't", "Don’t"],
+      ["do", "Don’t"],
+      ["not", "Don’t"],
       ["stop", "stop"],
-      ["42", "42"],
+      ["forty", "42"],
+      ["two", "42"],
     ],
   );
   for (const token of tokens) assert.equal(source.slice(token.start, token.end), token.source);
@@ -94,6 +96,40 @@ test("reanchor discards partial context", () => {
   aligner.reanchor(4);
   const result = aligner.update("new", "four five six", true);
   assert.equal(result.anchor, 7);
+});
+
+test("matches spoken numbers and expanded contractions without changing source spans", () => {
+  const aligner = new FlowAligner("We don't need 42 new accounts.");
+  const result = aligner.update("u", "we do not need forty two new accounts", true);
+  assert.equal(result.matched, true);
+  assert.equal(result.anchor, aligner.script.length);
+  const number = tokenize("42");
+  assert.deepEqual(number.map(t => [t.start, t.end]), [[0, 2], [0, 2]]);
+});
+
+test("continues a long rolling utterance past the initial forward window", () => {
+  const script = Array.from({ length: 100 }, (_, i) => `word${i}`).join(" ");
+  const aligner = new FlowAligner(script, { fuzzyThreshold: 1 });
+  for (let n = 4; n <= 100; n += 4) {
+    const result = aligner.update("long", script.split(" ").slice(0, n).join(" "), n === 100);
+    assert.equal(result.anchor, n);
+  }
+  assert.equal(aligner.anchor, 100);
+});
+
+test("duplicate partials do not consume a second repeated phrase", () => {
+  const aligner = new FlowAligner("red green blue red green blue ending now");
+  assert.equal(aligner.update("u", "red green blue").anchor, 3);
+  assert.equal(aligner.update("u", "red green blue").anchor, 3);
+  assert.equal(aligner.update("u", "red green blue red green blue").anchor, 6);
+});
+
+test("final duplicate commits accepted partials without moving position", () => {
+  const aligner = new FlowAligner("alpha beta gamma delta epsilon");
+  aligner.update("u", "alpha beta gamma");
+  aligner.update("u", "alpha beta gamma", true);
+  assert.equal(aligner.anchor, 3);
+  assert.equal(aligner.update("v", "delta epsilon", true).anchor, 5);
 });
 
 class FakeTime {

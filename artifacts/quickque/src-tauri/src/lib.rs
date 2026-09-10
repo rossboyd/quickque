@@ -1,7 +1,301 @@
+use serde::{Deserialize, Serialize};
+use std::{
+    io::{self, BufRead, BufReader, Write},
+    process::{Child, ChildStdin, Command, Stdio},
+    sync::{Arc, Mutex},
+};
+use tauri::{AppHandle, Emitter, Manager};
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FlowCommand {
+    action: String,
+    generation: u64,
+}
+
+#[derive(Default)]
+struct ProcessState {
+    generation: u64,
+    child: Option<Child>,
+    stdin: Option<ChildStdin>,
+}
+
+#[derive(Default)]
+struct FlowState {
+    process: Arc<Mutex<ProcessState>>,
+}
+
+impl FlowState {
+    fn shutdown(&self) {
+        let process = self.process.lock().ok().and_then(|mut state| {
+            let child = state.child.take()?;
+            Some((child, state.stdin.take()))
+        });
+        if let Some((mut child, stdin)) = process {
+            // Closing the command pipe lets a healthy helper tear down its
+            // microphone and inference before the unconditional kill below.
+            drop(stdin);
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+impl Drop for FlowState {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+fn status_event(generation: u64, status: &str, message: Option<&str>) -> serde_json::Value {
+    let mut event = serde_json::json!({
+        "type": "status",
+        "generation": generation,
+        "status": status,
+    });
+    if let Some(message) = message {
+        event["message"] = serde_json::Value::String(message.to_owned());
+    }
+    event
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn helper_path() -> Result<std::path::PathBuf, String> {
+    if let Some(path) = std::env::var_os("QUICKQUE_FLOW_HELPER") {
+        return Ok(path.into());
+    }
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("Could not locate Quickque: {error}"))?;
+    Ok(executable
+        .parent()
+        .ok_or_else(|| "Quickque executable has no parent directory.".to_string())?
+        .join("quickque-flow"))
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+enum BoundedLine {
+    Line(Vec<u8>),
+    Oversized,
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn read_bounded_line<R: BufRead>(
+    reader: &mut R,
+    maximum_bytes: usize,
+) -> io::Result<Option<BoundedLine>> {
+    let mut line = Vec::with_capacity(4096);
+    let mut oversized = false;
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            if line.is_empty() && !oversized {
+                return Ok(None);
+            }
+            return Ok(Some(if oversized {
+                BoundedLine::Oversized
+            } else {
+                BoundedLine::Line(line)
+            }));
+        }
+
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let content_bytes = newline.unwrap_or(available.len());
+        if !oversized {
+            if line.len().saturating_add(content_bytes) > maximum_bytes {
+                oversized = true;
+                line.clear();
+            } else {
+                line.extend_from_slice(&available[..content_bytes]);
+            }
+        }
+        let consumed = content_bytes + if newline.is_some() { 1 } else { 0 };
+        reader.consume(consumed);
+
+        if newline.is_some() {
+            return Ok(Some(if oversized {
+                BoundedLine::Oversized
+            } else {
+                BoundedLine::Line(line)
+            }));
+        }
+    }
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn spawn_helper(
+    app: AppHandle,
+    process: Arc<Mutex<ProcessState>>,
+    command: &FlowCommand,
+) -> Result<(), String> {
+    let mut child = Command::new(helper_path()?)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("Could not start the local Flow helper: {error}"))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Flow helper stdout was unavailable.".to_string())?;
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "Flow helper stdin was unavailable.".to_string())?;
+    let child_id = child.id();
+
+    let send_result = serde_json::to_writer(&mut stdin, command)
+        .map_err(|error| format!("Could not encode Flow command: {error}"))
+        .and_then(|_| {
+            stdin
+                .write_all(b"\n")
+                .and_then(|_| stdin.flush())
+                .map_err(|error| format!("Could not send Flow command: {error}"))
+        });
+    if let Err(error) = send_result {
+        drop(stdin);
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
+    }
+
+    {
+        let Ok(mut state) = process.lock() else {
+            drop(stdin);
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Flow process state is unavailable.".to_string());
+        };
+        state.child = Some(child);
+        state.stdin = Some(stdin);
+    }
+
+    std::thread::spawn(move || {
+        const MAXIMUM_EVENT_BYTES: usize = 1024 * 1024;
+        let mut reader = BufReader::new(stdout);
+        let mut invalid_lines = 0_u8;
+        loop {
+            let line = match read_bounded_line(&mut reader, MAXIMUM_EVENT_BYTES) {
+                Ok(Some(BoundedLine::Line(line))) => line,
+                Ok(Some(BoundedLine::Oversized)) => break,
+                Ok(None) | Err(_) => break,
+            };
+            let Ok(event) = serde_json::from_slice::<serde_json::Value>(&line) else {
+                invalid_lines = invalid_lines.saturating_add(1);
+                if invalid_lines >= 8 {
+                    break;
+                }
+                continue;
+            };
+            invalid_lines = 0;
+            let event_generation = event.get("generation").and_then(|value| value.as_u64());
+            let current = process
+                .lock()
+                .ok()
+                .map(|state| {
+                    state.generation == event_generation.unwrap_or(u64::MAX)
+                        && state.child.as_ref().map(Child::id) == Some(child_id)
+                })
+                .unwrap_or(false);
+            if current {
+                let _ = app.emit("quickque:flow", event);
+            }
+        }
+
+        let exited = process.lock().ok().and_then(|mut state| {
+            if state.child.as_ref().map(Child::id) == Some(child_id) {
+                Some((state.generation, state.child.take(), state.stdin.take()))
+            } else {
+                None
+            }
+        });
+        if let Some((generation, child, stdin)) = exited {
+            drop(stdin);
+            if let Some(mut child) = child {
+                // stdout EOF is not sufficient to reap a process. Closing stdin
+                // requests cooperative cleanup; kill bounds cleanup if it is wedged.
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            let _ = app.emit(
+                "quickque:flow",
+                serde_json::json!({
+                    "type": "error",
+                    "generation": generation,
+                    "message": "The local Flow helper exited unexpectedly."
+                }),
+            );
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn flow_command(
+    app: AppHandle,
+    state: tauri::State<'_, FlowState>,
+    command: FlowCommand,
+) -> Result<(), String> {
+    state.shutdown();
+    {
+        let mut process = state
+            .process
+            .lock()
+            .map_err(|_| "Flow process state is unavailable.".to_string())?;
+        process.generation = command.generation;
+    }
+
+    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+    {
+        let _ = app.emit(
+            "quickque:flow",
+            status_event(
+                command.generation,
+                "unsupported",
+                Some("Local Flow requires macOS 14 or later on Apple Silicon."),
+            ),
+        );
+        return Ok(());
+    }
+
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    match command.action.as_str() {
+        "pause" => {
+            let _ = app.emit(
+                "quickque:flow",
+                status_event(command.generation, "paused", None),
+            );
+            Ok(())
+        }
+        "stop" => {
+            let _ = app.emit(
+                "quickque:flow",
+                status_event(command.generation, "stopped", None),
+            );
+            Ok(())
+        }
+        "cancelDownload" => {
+            spawn_helper(app, Arc::clone(&state.process), &command)
+        }
+        "status" | "download" | "start" => {
+            spawn_helper(app, Arc::clone(&state.process), &command)
+        }
+        _ => Err("Unknown Flow action.".to_string()),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .run(tauri::generate_context!())
-        .expect("error while running Quickque");
+        .manage(FlowState::default())
+        .invoke_handler(tauri::generate_handler![flow_command])
+        .build(tauri::generate_context!())
+        .expect("error while building Quickque");
+
+    app.run(|handle, event| {
+        if matches!(event, tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }) {
+            handle.state::<FlowState>().shutdown();
+        }
+    });
 }
