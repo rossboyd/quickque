@@ -23,6 +23,7 @@ interface Candidate {
   scriptStart: number;
   scriptEnd: number;
   transcriptStart: number;
+  transcriptEnd: number;
   matchedWords: number;
   transcriptGaps: number;
   scriptGaps: number;
@@ -39,6 +40,8 @@ const DEFAULTS: Required<AlignmentOptions> = {
 
 function editSimilarity(a: string, b: string): number {
   if (a === b) return 1;
+  // Small function words must not become weak anchors for unrelated speech.
+  if (Math.min(a.length, b.length) < 4) return 0;
   const longest = Math.max(a.length, b.length);
   if (longest === 0) return 1;
   if (Math.abs(a.length - b.length) / longest > 0.4) return 0;
@@ -84,6 +87,7 @@ function exploreCandidate(
   options: Required<AlignmentOptions>,
 ): Candidate | undefined {
   let best: Candidate | undefined;
+  const visited = new Map<string, number>();
 
   const visit = (
     si: number,
@@ -94,11 +98,16 @@ function exploreCandidate(
     similarityTotal: number,
     lastScript: number,
   ): void => {
+    const key = `${si}:${ti}:${transcriptGaps}:${scriptGaps}`;
+    const score = matched * 2 + similarityTotal;
+    if ((visited.get(key) ?? -1) >= score) return;
+    visited.set(key, score);
     if (matched > 0) {
       const candidate: Candidate = {
         scriptStart,
         scriptEnd: lastScript + 1,
         transcriptStart,
+        transcriptEnd: ti,
         matchedWords: matched,
         transcriptGaps,
         scriptGaps,
@@ -120,10 +129,10 @@ function exploreCandidate(
         si,
       );
     }
-    if (transcriptGaps < options.maximumTranscriptGaps) {
+    if (matched > 0 && transcriptGaps < options.maximumTranscriptGaps) {
       visit(si, ti + 1, matched, transcriptGaps + 1, scriptGaps, similarityTotal, lastScript);
     }
-    if (scriptGaps < options.maximumScriptGaps) {
+    if (matched > 0 && scriptGaps < options.maximumScriptGaps) {
       visit(si + 1, ti, matched, transcriptGaps, scriptGaps + 1, similarityTotal, lastScript);
     }
   };
@@ -143,6 +152,9 @@ export class FlowAligner {
   private committedAnchor = 0;
   private utteranceAnchor = 0;
   private utteranceId: string | undefined;
+  private proposedAnchor = 0;
+  private consumedTranscript = 0;
+  private previousTranscript: string[] = [];
 
   constructor(script: string | NormalizedToken[], options: AlignmentOptions = {}) {
     this.script = typeof script === "string" ? tokenize(script) : script;
@@ -156,24 +168,43 @@ export class FlowAligner {
   reanchor(tokenIndex: number): void {
     this.committedAnchor = Math.max(0, Math.min(this.script.length, Math.trunc(tokenIndex)));
     this.utteranceAnchor = this.committedAnchor;
+    this.proposedAnchor = this.committedAnchor;
+    this.consumedTranscript = 0;
+    this.previousTranscript = [];
     this.utteranceId = undefined;
   }
 
   update(utteranceId: string, text: string, isFinal = false): AlignmentResult {
     if (this.utteranceId !== utteranceId) {
+      // A native utterance boundary may arrive without a final callback.
+      this.committedAnchor = Math.max(this.committedAnchor, this.proposedAnchor);
       this.utteranceId = utteranceId;
       this.utteranceAnchor = this.committedAnchor;
+      this.consumedTranscript = 0;
+      this.previousTranscript = [];
     }
     const previousAnchor = this.committedAnchor;
-    const transcript = tokenize(text);
+    const allTranscript = tokenize(text);
+    const values = allTranscript.map(token => token.value);
+    let commonPrefix = 0;
+    while (commonPrefix < values.length && commonPrefix < this.previousTranscript.length &&
+      values[commonPrefix] === this.previousTranscript[commonPrefix]) commonPrefix++;
+    // Partial hypotheses may be revised. Reconsider changed words but never
+    // move the visible reading position backwards.
+    this.consumedTranscript = Math.min(this.consumedTranscript, commonPrefix);
+    this.previousTranscript = values;
+    const transcriptOffset = Math.max(0, allTranscript.length - 48);
+    const transcript = allTranscript.slice(transcriptOffset);
     const candidates: Candidate[] = [];
+    const scriptStart = Math.max(this.utteranceAnchor, this.proposedAnchor - 8);
     const scriptLimit = Math.min(
       this.script.length,
-      this.utteranceAnchor + this.options.forwardWindow,
+      this.proposedAnchor + this.options.forwardWindow,
     );
 
-    for (let si = this.utteranceAnchor; si < scriptLimit; si += 1) {
+    for (let si = scriptStart; si < scriptLimit; si += 1) {
       for (let ti = 0; ti < transcript.length; ti += 1) {
+        if (editSimilarity(this.script[si].value, transcript[ti].value) < this.options.fuzzyThreshold) continue;
         const candidate = exploreCandidate(
           this.script,
           transcript,
@@ -182,15 +213,21 @@ export class FlowAligner {
           scriptLimit,
           this.options,
         );
-        if (candidate) candidates.push(candidate);
+        if (candidate && candidate.scriptEnd > this.proposedAnchor &&
+          candidate.transcriptEnd + transcriptOffset > this.consumedTranscript) {
+          candidates.push(candidate);
+        }
       }
     }
     candidates.sort(compareCandidate);
     const best = candidates[0];
-    if (!best) return this.noMatch(previousAnchor, "insufficient");
+    if (!best) {
+      if (isFinal) this.finishUtterance();
+      return this.noMatch(previousAnchor, "insufficient");
+    }
 
     const requiredWords =
-      best.scriptStart === this.utteranceAnchor
+      best.scriptStart <= this.proposedAnchor
         ? Math.max(2, this.options.minimumWords - 1)
         : this.options.minimumWords;
     if (best.matchedWords < requiredWords) {
@@ -205,15 +242,15 @@ export class FlowAligner {
         candidate.matchedWords === best.matchedWords &&
         Math.abs(candidateQuality(candidate) - bestQuality) < 0.05,
     );
-    if (ambiguous && best.scriptStart !== this.utteranceAnchor) {
+    if (ambiguous && best.scriptStart !== this.proposedAnchor && best.scriptStart !== this.utteranceAnchor) {
       return this.noMatch(previousAnchor, "ambiguous");
     }
 
     const proposedAnchor = best.scriptEnd;
+    this.proposedAnchor = Math.max(this.proposedAnchor, proposedAnchor);
+    this.consumedTranscript = best.transcriptEnd + transcriptOffset;
     if (isFinal) {
-      this.committedAnchor = Math.max(this.committedAnchor, proposedAnchor);
-      this.utteranceAnchor = this.committedAnchor;
-      this.utteranceId = undefined;
+      this.finishUtterance();
     }
     return {
       matched: true,
@@ -231,13 +268,21 @@ export class FlowAligner {
     };
   }
 
+  private finishUtterance(): void {
+    this.committedAnchor = Math.max(this.committedAnchor, this.proposedAnchor);
+    this.utteranceAnchor = this.committedAnchor;
+    this.utteranceId = undefined;
+    this.previousTranscript = [];
+    this.consumedTranscript = 0;
+  }
+
   private noMatch(
     previousAnchor: number,
     reason: "insufficient" | "ambiguous",
   ): AlignmentResult {
     return {
       matched: false,
-      anchor: this.committedAnchor,
+      anchor: this.proposedAnchor,
       previousAnchor,
       matchedWords: 0,
       confidence: 0,

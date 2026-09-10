@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocation, useParams } from 'wouter';
 import { 
-  Play, Pause, X, Minus, Plus, Settings2, Maximize2, Minimize2, ChevronLeft, ChevronRight, Droplets 
+  Play, Pause, X, Minus, Plus, Settings2, Maximize2, Minimize2, ChevronLeft, ChevronRight, Droplets, Loader2
 } from 'lucide-react';
 import { isDesktop, setOverlayMode, setAlwaysOnTop, startDragging } from '@/lib/desktop';
+import { useLocalFlow } from '@/hooks/use-local-flow';
+import { tokenize, NormalizedToken } from '@/lib/flow/tokenize';
+import { FlowStatusPanel } from '@/components/flow-status-panel';
 
 export default function Reader() {
   const { scripts, settings, updateSettings } = useStore();
@@ -13,6 +16,7 @@ export default function Reader() {
   const script = scripts.find(s => s.id === params.id);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [readMode, setReadMode] = useState<"manual" | "flow">("manual");
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
   const [showControls, setShowControls] = useState(true);
 
@@ -24,6 +28,55 @@ export default function Reader() {
   const reqRef = useRef<number>(0);
 
   const [desktopError, setDesktopError] = useState<string | null>(null);
+
+  // Pre-process tokens for Flow aligner
+  const { tokens, enrichedSections } = useMemo(() => {
+    if (!script) return { tokens: [], enrichedSections: [] };
+    
+    let globalIdx = 0;
+    const allTokens: NormalizedToken[] = [];
+    
+    const sections = script.sections.map((sec, secIdx) => {
+      const secTokens = tokenize(sec.content);
+      const enriched = secTokens.map(t => ({
+        ...t,
+        sectionIdx: secIdx,
+        globalTokenIdx: globalIdx++
+      }));
+      allTokens.push(...enriched);
+      
+      const spans: { type: 'text' | 'token'; text: string; startTokenIdx?: number; endTokenIdx?: number }[] = [];
+      let lastEnd = 0;
+      for (const token of enriched) {
+        if (token.start > lastEnd) {
+          spans.push({ type: 'text', text: sec.content.slice(lastEnd, token.start) });
+        }
+        if (token.end > lastEnd) {
+          spans.push({ 
+            type: 'token', 
+            text: token.source, 
+            startTokenIdx: token.globalTokenIdx, 
+            endTokenIdx: token.globalTokenIdx 
+          });
+          lastEnd = token.end;
+        } else {
+          // One-to-many token mapped to the same span
+          if (spans.length > 0 && spans[spans.length - 1].type === 'token') {
+             spans[spans.length - 1].endTokenIdx = token.globalTokenIdx;
+          }
+        }
+      }
+      if (lastEnd < sec.content.length) {
+        spans.push({ type: 'text', text: sec.content.slice(lastEnd) });
+      }
+      
+      return { ...sec, spans, firstTokenIdx: enriched.length > 0 ? enriched[0].globalTokenIdx : null };
+    });
+    
+    return { tokens: allTokens, enrichedSections: sections };
+  }, [script]);
+
+  const flow = useLocalFlow({ tokens, enabled: readMode === "flow" });
 
   useEffect(() => {
     const initDesktop = async () => {
@@ -44,11 +97,10 @@ export default function Reader() {
     initDesktop();
     
     return () => {
-      // Synchronous cleanup can't await reliably on unmount, but we try-catch best effort
       try {
         if (isDesktop()) {
-          setAlwaysOnTop(false).catch(console.error);
-          setOverlayMode(false).catch(console.error);
+          setAlwaysOnTop(false).catch(() => {});
+          setOverlayMode(false).catch(() => {});
         }
       } catch (e) {}
       document.documentElement.classList.remove('is-overlay');
@@ -73,7 +125,6 @@ export default function Reader() {
       }
     } catch (err: any) {
       setDesktopError(`Failed to toggle overlay mode: ${err.message || String(err)}`);
-      // Revert UI state if native call fails
       updateSettings({ compactMode: !newMode });
       if (!newMode) {
         document.documentElement.classList.add('is-overlay');
@@ -85,6 +136,7 @@ export default function Reader() {
 
   const exitReader = useCallback(async () => {
     setIsPlaying(false);
+    flow.stop();
     try {
       if (isDesktop()) {
         await setAlwaysOnTop(false);
@@ -92,34 +144,31 @@ export default function Reader() {
       }
     } catch (err: any) {
       setDesktopError(`Failed to exit overlay: ${err.message || String(err)}`);
-      // Proceed to exit anyway after short delay if it fails
     }
     document.documentElement.classList.remove('is-overlay');
     setLocation('/');
-  }, [setLocation]);
+  }, [setLocation, flow]);
 
   const exactScrollTopRef = useRef<number>(0);
+  const activeTokenSpanRef = useRef<HTMLSpanElement>(null);
 
-  // Scrolling logic
+  // Manual Scrolling logic
   useEffect(() => {
-    if (!isPlaying) {
+    if (readMode !== "manual" || !isPlaying) {
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       return;
     }
 
-    // Sync ref with actual DOM to allow resuming accurately after manual scroll
     if (containerRef.current) {
       exactScrollTopRef.current = containerRef.current.scrollTop;
     }
 
     const scrollLoop = (time: number) => {
       if (!lastTimeRef.current) lastTimeRef.current = time;
-      // Cap delta time to 50ms to prevent massive jumps after backgrounding
       const deltaTime = Math.min(time - lastTimeRef.current, 50);
       lastTimeRef.current = time;
 
       if (containerRef.current && textContentRef.current) {
-        // speed mapping: 50 -> approx 30px per sec depending on font
         const pxPerSecond = (settings.speed / 50) * (settings.fontSize * 1.5);
         const pxPerFrame = (pxPerSecond * deltaTime) / 1000;
         
@@ -128,7 +177,7 @@ export default function Reader() {
           exactScrollTopRef.current += pxPerFrame;
           containerRef.current.scrollTop = exactScrollTopRef.current;
         } else {
-          setIsPlaying(false); // reached end
+          setIsPlaying(false);
         }
       }
       reqRef.current = requestAnimationFrame(scrollLoop);
@@ -139,24 +188,52 @@ export default function Reader() {
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       lastTimeRef.current = 0;
     };
-  }, [isPlaying, settings.speed, settings.fontSize]);
+  }, [isPlaying, readMode, settings.speed, settings.fontSize]);
 
-  // Section tracking during scroll
+  // Flow Smooth scroll following active token ONLY on confident matching
+  useEffect(() => {
+    if (readMode !== "flow" || flow.status !== 'listening' || !flow.isFollowing) {
+      return;
+    }
+    
+    let req: number;
+    const loop = () => {
+      if (activeTokenSpanRef.current && containerRef.current) {
+        const span = activeTokenSpanRef.current;
+        const container = containerRef.current;
+        
+        const spanRect = span.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        
+        // Target is to keep the span at 30% of the container height
+        const targetViewportY = containerRect.top + containerRect.height * 0.3;
+        const delta = spanRect.top - targetViewportY;
+        
+        if (Math.abs(delta) > 5) {
+          container.scrollTop += delta * 0.05;
+          exactScrollTopRef.current = container.scrollTop;
+        }
+      }
+      req = requestAnimationFrame(loop);
+    };
+    req = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(req);
+  }, [readMode, flow.status, flow.isFollowing, flow.anchor]);
+
+  // Section tracking during scroll (only in manual mode or paused)
   useEffect(() => {
     const handleScroll = () => {
       if (!containerRef.current) return;
+      if (readMode === 'flow' && ['listening', 'loading'].includes(flow.status)) return;
       
       const scrollY = containerRef.current.scrollTop;
-      const viewportMid = scrollY + containerRef.current.clientHeight / 3; // read marker is at 1/3
+      const viewportMid = scrollY + containerRef.current.clientHeight / 3;
 
       let currentIdx = 0;
       for (let i = 0; i < sectionRefs.current.length; i++) {
         const el = sectionRefs.current[i];
-        if (el) {
-          // If the element's top is above the viewport mid, it's the current one
-          if (el.offsetTop <= viewportMid) {
-            currentIdx = i;
-          }
+        if (el && el.offsetTop <= viewportMid) {
+          currentIdx = i;
         }
       }
       
@@ -171,7 +248,39 @@ export default function Reader() {
       return () => container.removeEventListener('scroll', handleScroll);
     }
     return undefined;
-  }, [activeSectionIdx]);
+  }, [activeSectionIdx, readMode, flow.status]);
+
+  // Auto-advance section tracking in Flow mode
+  useEffect(() => {
+    if (readMode !== "flow") return;
+    const currentAnchor = flow.anchor;
+    let targetSecIdx = activeSectionIdx;
+    
+    for (let i = 0; i < enrichedSections.length; i++) {
+      const sec = enrichedSections[i];
+      if (sec.spans.length === 0) continue;
+      const lastSpan = sec.spans.slice().reverse().find(s => s.type === 'token');
+      if (!lastSpan) continue;
+      
+      const firstToken = sec.firstTokenIdx;
+      const lastToken = lastSpan.endTokenIdx!;
+      
+      if (firstToken !== null && currentAnchor >= firstToken && currentAnchor <= lastToken + 1) {
+        targetSecIdx = i;
+        if (currentAnchor > lastToken && i < enrichedSections.length - 1) {
+          targetSecIdx = i + 1;
+        }
+        break;
+      }
+    }
+    
+    if (targetSecIdx !== activeSectionIdx) {
+      setActiveSectionIdx(targetSecIdx);
+    }
+  }, [flow.anchor, readMode, enrichedSections, activeSectionIdx]);
+
+  const reanchorRef = useRef(flow.reanchor);
+  reanchorRef.current = flow.reanchor;
 
   const jumpToSection = useCallback((idx: number) => {
     if (!script) return;
@@ -179,14 +288,25 @@ export default function Reader() {
     
     const el = sectionRefs.current[idx];
     if (el && containerRef.current) {
-      // scroll to place the section exactly at the resume marker (30% down)
       const offset = el.offsetTop - (containerRef.current.clientHeight * 0.3);
       const targetTop = offset > 0 ? offset : 0;
       exactScrollTopRef.current = targetTop;
       containerRef.current.scrollTo({ top: targetTop, behavior: 'auto' });
       setActiveSectionIdx(idx);
+
+      if (readMode === "flow" && enrichedSections[idx]) {
+        const firstToken = enrichedSections[idx].firstTokenIdx;
+        if (firstToken !== null) {
+          reanchorRef.current(firstToken);
+        }
+      }
     }
-  }, [script]);
+  }, [script, readMode, enrichedSections]);
+
+  const flowRef = useRef(flow);
+  flowRef.current = flow;
+  const readModeRef = useRef(readMode);
+  readModeRef.current = readMode;
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -201,7 +321,13 @@ export default function Reader() {
 
       if (e.code === 'Space') {
         e.preventDefault();
-        setIsPlaying(p => !p);
+        if (readModeRef.current === 'manual') {
+          setIsPlaying(p => !p);
+        } else {
+          const f = flowRef.current;
+          if (f.status === 'listening' || f.status === 'loading') f.pause();
+          else if (['ready', 'paused', 'silence-stopped', 'stopped', 'error'].includes(f.status)) f.start();
+        }
       } else if (e.code === 'Escape') {
         e.preventDefault();
         exitReader();
@@ -223,7 +349,13 @@ export default function Reader() {
     const handleNativeControl = (e: any) => {
       const detail = e.detail;
       if (detail === 'toggle') {
-        setIsPlaying(p => !p);
+        if (readModeRef.current === 'manual') {
+          setIsPlaying(p => !p);
+        } else {
+          const f = flowRef.current;
+          if (f.status === 'listening' || f.status === 'loading') f.pause();
+          else if (['ready', 'paused', 'silence-stopped', 'stopped', 'error'].includes(f.status)) f.start();
+        }
       } else if (detail === 'next') {
         jumpToSection(activeSectionIdx + 1);
       } else if (detail === 'previous') {
@@ -238,16 +370,17 @@ export default function Reader() {
   // Auto-hide controls
   useEffect(() => {
     let timeout: number;
+    const isActivelyPlaying = readMode === 'manual' ? isPlaying : flow.status === 'listening';
     const resetHide = () => {
       setShowControls(true);
       clearTimeout(timeout);
-      if (isPlaying) {
+      if (isActivelyPlaying) {
         timeout = window.setTimeout(() => setShowControls(false), 3000);
       }
     };
     
     window.addEventListener('mousemove', resetHide);
-    if (isPlaying) {
+    if (isActivelyPlaying) {
       resetHide();
     } else {
       setShowControls(true);
@@ -257,7 +390,7 @@ export default function Reader() {
       window.removeEventListener('mousemove', resetHide);
       clearTimeout(timeout);
     };
-  }, [isPlaying]);
+  }, [isPlaying, readMode, flow.status]);
 
   if (!script) {
     return (
@@ -287,9 +420,9 @@ export default function Reader() {
     >
       {/* Title Bar (Draggable in compact mode) */}
       <div 
-        className={`flex flex-col z-50 transition-opacity duration-300 ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0'}`}
+        className={`flex flex-col z-50 transition-opacity duration-300 ${showControls || (readMode === 'manual' ? !isPlaying : flow.status !== 'listening') ? 'opacity-100' : 'opacity-0'}`}
         onMouseDown={async (e) => {
-          if (settings.compactMode && !(e.target as HTMLElement).closest('button, input')) {
+          if (settings.compactMode && !(e.target as HTMLElement).closest('button, input, select')) {
             try {
               if (isDesktop()) {
                 await startDragging();
@@ -308,72 +441,97 @@ export default function Reader() {
         )}
         <div className="flex items-center justify-between p-3">
           <div className="flex items-center gap-4">
-          <button 
-            onClick={exitReader}
-            className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors backdrop-blur-md"
-            title="Exit (Esc)"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          
-          <div className="flex items-center gap-1">
             <button 
-              onClick={toggleCompactMode}
-              className={`p-2 rounded-full transition-colors backdrop-blur-md ${settings.compactMode ? 'bg-primary text-primary-foreground' : 'hover:bg-black/10 dark:hover:bg-white/10'}`}
-              title="Toggle Compact Overlay"
+              onClick={exitReader}
+              className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors backdrop-blur-md"
+              title="Exit (Esc)"
             >
-              {settings.compactMode ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
+              <X className="w-5 h-5" />
             </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 bg-background/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-border/50 overflow-hidden text-sm max-w-full">
-          <div className="flex items-center gap-1">
-            <button 
-              onClick={() => updateSettings({ fontSize: Math.max(16, settings.fontSize - 4) })}
-              className="p-1 hover:text-primary transition-colors"
-            >
-              <Minus className="w-3 h-3" />
-            </button>
-            <span className="font-mono min-w-[3ch] text-center text-xs">{settings.fontSize}</span>
-            <button 
-              onClick={() => updateSettings({ fontSize: Math.min(120, settings.fontSize + 4) })}
-              className="p-1 hover:text-primary transition-colors"
-            >
-              <Plus className="w-3 h-3" />
-            </button>
-          </div>
-          
-          <div className="w-px h-4 bg-border mx-1" />
-          
-          <div className="flex items-center gap-1.5 flex-1 min-w-[60px]">
-            <Settings2 className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-            <input 
-              type="range" 
-              min="10" 
-              max="150" 
-              value={settings.speed}
-              title="Scroll Speed"
-              onChange={e => updateSettings({ speed: parseInt(e.target.value) })}
-              className="w-12 md:w-20 accent-primary"
-            />
+            
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={toggleCompactMode}
+                className={`p-2 rounded-full transition-colors backdrop-blur-md ${settings.compactMode ? 'bg-primary text-primary-foreground' : 'hover:bg-black/10 dark:hover:bg-white/10'}`}
+                title="Toggle Compact Overlay"
+              >
+                {settings.compactMode ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
-          <div className="w-px h-4 bg-border mx-1" />
+          <div className="flex items-center gap-2 bg-background/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-border/50 overflow-hidden text-sm max-w-full">
+            <div className="flex items-center gap-1.5 flex-1 min-w-[80px]">
+              <select
+                value={readMode}
+                onChange={e => {
+                  const newMode = e.target.value as "manual" | "flow";
+                  setReadMode(newMode);
+                  if (newMode === "flow") {
+                    setIsPlaying(false);
+                    const targetAnchor = enrichedSections[activeSectionIdx]?.firstTokenIdx ?? 0;
+                    flow.reanchor(targetAnchor);
+                  } else {
+                    flow.stop();
+                  }
+                }}
+                className="bg-transparent border-none outline-none text-foreground font-semibold text-xs cursor-pointer"
+              >
+                <option value="manual">Manual Scroll</option>
+                <option value="flow">Voice Follow</option>
+              </select>
+            </div>
 
-          <div className="flex items-center gap-1.5 flex-1 min-w-[60px]">
-            <Droplets className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-            <input 
-              type="range" 
-              min="0" 
-              max="100" 
-              value={settings.backgroundOpacity}
-              title="Background Opacity"
-              onChange={e => updateSettings({ backgroundOpacity: parseInt(e.target.value) })}
-              className="w-12 md:w-20 accent-primary"
-            />
+            <div className="w-px h-4 bg-border mx-1" />
+
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={() => updateSettings({ fontSize: Math.max(16, settings.fontSize - 4) })}
+                className="p-1 hover:text-primary transition-colors"
+              >
+                <Minus className="w-3 h-3" />
+              </button>
+              <span className="font-mono min-w-[3ch] text-center text-xs">{settings.fontSize}</span>
+              <button 
+                onClick={() => updateSettings({ fontSize: Math.min(120, settings.fontSize + 4) })}
+                className="p-1 hover:text-primary transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            </div>
+            
+            <div className="w-px h-4 bg-border mx-1" />
+            
+            <div className="flex items-center gap-1.5 flex-1 min-w-[60px]">
+              <Settings2 className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <input 
+                type="range" 
+                min="10" 
+                max="150" 
+                value={settings.speed}
+                title="Scroll Speed"
+                onChange={e => updateSettings({ speed: parseInt(e.target.value) })}
+                className="w-12 md:w-20 accent-primary"
+                disabled={readMode === 'flow'}
+                style={{ opacity: readMode === 'flow' ? 0.5 : 1 }}
+              />
+            </div>
+
+            <div className="w-px h-4 bg-border mx-1" />
+
+            <div className="flex items-center gap-1.5 flex-1 min-w-[60px]">
+              <Droplets className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                value={settings.backgroundOpacity}
+                title="Background Opacity"
+                onChange={e => updateSettings({ backgroundOpacity: parseInt(e.target.value) })}
+                className="w-12 md:w-20 accent-primary"
+              />
+            </div>
           </div>
-        </div>
         </div>
       </div>
 
@@ -382,9 +540,24 @@ export default function Reader() {
         {/* Read Marker (Resume here marker) */}
         <div className="absolute left-0 right-0 top-[30%] h-[2px] bg-gradient-to-r from-primary/80 via-primary/20 to-transparent z-30 pointer-events-none flex items-center">
           <div className="w-3 h-3 bg-primary rounded-full ml-4 shadow-[0_0_10px_rgba(var(--primary),0.8)]" />
-          {!isPlaying && (
+          {readMode === 'manual' && !isPlaying && (
             <div className="ml-3 px-2 py-0.5 rounded text-xs font-bold bg-primary text-primary-foreground shadow-sm uppercase tracking-wider animate-in fade-in zoom-in duration-200">
               Paused - Space to resume
+            </div>
+          )}
+          {readMode === 'flow' && ['paused', 'silence-stopped', 'stopped', 'ready'].includes(flow.status) && (
+            <div className="ml-3 px-2 py-0.5 rounded text-xs font-bold bg-primary text-primary-foreground shadow-sm uppercase tracking-wider animate-in fade-in zoom-in duration-200">
+              {flow.status === 'ready' ? 'Ready - Start to begin' : flow.status === 'silence-stopped' ? '30 seconds of silence — stopped' : 'Paused - Space to resume'}
+            </div>
+          )}
+          {readMode === 'flow' && flow.status === 'loading' && (
+            <div className="ml-3 px-2 py-0.5 rounded text-xs font-bold bg-primary text-primary-foreground shadow-sm uppercase tracking-wider animate-in fade-in zoom-in duration-200">
+              Starting engine...
+            </div>
+          )}
+          {readMode === 'flow' && flow.status === 'listening' && (
+            <div className="ml-3 px-2 py-0.5 rounded text-xs font-bold bg-primary text-primary-foreground shadow-sm uppercase tracking-wider animate-in fade-in zoom-in duration-200">
+              {flow.isFollowing ? 'Following' : 'Listening — waiting for script'}
             </div>
           )}
         </div>
@@ -401,13 +574,13 @@ export default function Reader() {
           }}
         >
           <div ref={textContentRef} className="max-w-4xl mx-auto space-y-[10vh]">
-            {script.sections.map((section, idx) => (
+            {enrichedSections.map((section, idx) => (
               <div 
                 key={section.id} 
                 ref={el => { sectionRefs.current[idx] = el; }}
                 className={`transition-opacity duration-500 ${activeSectionIdx === idx ? 'opacity-100' : 'opacity-30'}`}
               >
-                {script.sections.length > 1 && (
+                {enrichedSections.length > 1 && (
                   <h3 
                     className="font-bold text-primary mb-6 flex items-center gap-4"
                     style={{ fontSize: `${settings.fontSize * 0.75}px` }}
@@ -421,7 +594,33 @@ export default function Reader() {
                 <div 
                   className="whitespace-pre-wrap font-medium tracking-tight text-foreground"
                 >
-                  {section.content}
+                  {section.spans.map((span, i) => {
+                    if (span.type === 'text') {
+                      return <span key={i}>{span.text}</span>;
+                    } else {
+                      const isRead = flow.anchor > span.endTokenIdx!;
+                      const isActive = flow.anchor >= span.startTokenIdx! && flow.anchor <= span.endTokenIdx!;
+                      
+                      let className = "transition-colors duration-200 ";
+                      if (readMode === "flow") {
+                        if (isActive) {
+                          className += "text-primary bg-primary/20 rounded px-1 py-0.5 shadow-sm";
+                        } else if (isRead) {
+                          className += "text-muted-foreground opacity-60";
+                        }
+                      }
+                      
+                      return (
+                        <span 
+                          key={i} 
+                          className={className}
+                          ref={isActive ? activeTokenSpanRef : null}
+                        >
+                          {span.text}
+                        </span>
+                      );
+                    }
+                  })}
                 </div>
               </div>
             ))}
@@ -429,8 +628,15 @@ export default function Reader() {
         </div>
       </div>
 
+      {readMode === 'flow' && (
+        <FlowStatusPanel 
+          flow={flow} 
+          onCancelMode={() => setReadMode('manual')} 
+        />
+      )}
+
       {/* Bottom Controls / Section Navigation */}
-      <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-4 p-2 md:p-3 rounded-full bg-background/80 backdrop-blur-xl border border-border shadow-2xl z-50 transition-all duration-300 ${showControls || !isPlaying ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+      <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-4 p-2 md:p-3 rounded-full bg-background/80 backdrop-blur-xl border border-border shadow-2xl z-50 transition-all duration-300 ${showControls || (readMode === 'manual' ? !isPlaying : flow.status !== 'listening') ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
         
         <button
           onClick={() => jumpToSection(activeSectionIdx - 1)}
@@ -446,7 +652,7 @@ export default function Reader() {
           onChange={(e) => jumpToSection(Number(e.target.value))}
           className="bg-transparent font-medium text-foreground appearance-none outline-none text-center text-sm px-2 w-32 md:w-48 truncate cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 rounded"
         >
-          {script.sections.map((sec, idx) => (
+          {enrichedSections.map((sec, idx) => (
             <option key={sec.id} value={idx}>
               {idx + 1}. {sec.title || 'Untitled'}
             </option>
@@ -455,7 +661,7 @@ export default function Reader() {
 
         <button
           onClick={() => jumpToSection(activeSectionIdx + 1)}
-          disabled={activeSectionIdx === script.sections.length - 1}
+          disabled={activeSectionIdx === enrichedSections.length - 1}
           className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
           title="Next Section (Right Arrow)"
         >
@@ -465,10 +671,23 @@ export default function Reader() {
         <div className="w-px h-6 bg-border mx-1" />
         
         <button
-          onClick={() => setIsPlaying(!isPlaying)}
-          className="w-14 h-14 flex items-center justify-center bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 hover:scale-105 transition-all focus:outline-none focus:ring-4 focus:ring-primary/30"
+          onClick={() => {
+            if (readMode === 'manual') setIsPlaying(!isPlaying);
+            else {
+              if (flow.status === 'listening') flow.pause();
+              else if (['ready', 'paused', 'silence-stopped', 'stopped', 'error'].includes(flow.status)) flow.start();
+            }
+          }}
+          disabled={readMode === 'flow' && !['ready', 'listening', 'paused', 'silence-stopped', 'stopped', 'loading', 'error'].includes(flow.status)}
+          className="w-14 h-14 flex items-center justify-center bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 hover:scale-105 transition-all focus:outline-none focus:ring-4 focus:ring-primary/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
         >
-          {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-1" />}
+          {readMode === 'flow' && flow.status === 'loading' ? (
+            <Loader2 className="w-6 h-6 animate-spin" />
+          ) : (
+            (readMode === 'manual' ? isPlaying : flow.status === 'listening') ? 
+              <Pause className="w-6 h-6 fill-current" /> : 
+              <Play className="w-6 h-6 fill-current ml-1" />
+          )}
         </button>
       </div>
 
