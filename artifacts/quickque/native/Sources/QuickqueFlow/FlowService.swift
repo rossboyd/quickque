@@ -7,6 +7,14 @@ import Foundation
 let modelRevision = "40a23f4c0b333aa17ad8c0f2ea47ec2347f2f355"
 let vadRevision = "b419383c55c110e2c9271fa6ee0ea83d03c70d96"
 
+enum FlowModelLayout {
+    static let models = "Models"
+    static let eou = "parakeet-eou-streaming/160ms"
+    // FluidAudio Repo.vad.folderName at the pinned revision.
+    static let vadRepository = "silero-vad"
+    static let vadModel = "silero-vad-unified-256ms-v6.2.1.mlmodelc"
+}
+
 actor FlowService {
     let output = Output()
     private var operation: Task<Void, Never>?
@@ -31,13 +39,17 @@ actor FlowService {
         return support.appendingPathComponent("Quickque/Flow", isDirectory: true)
     }
 
-    var modelsRoot: URL { root.appendingPathComponent("Models", isDirectory: true) }
+    var modelsRoot: URL {
+        root.appendingPathComponent(FlowModelLayout.models, isDirectory: true)
+    }
     var marker: URL { root.appendingPathComponent("installed-\(modelRevision)") }
     var eouDirectory: URL {
-        modelsRoot.appendingPathComponent("parakeet-eou-streaming/160ms", isDirectory: true)
+        modelsRoot.appendingPathComponent(FlowModelLayout.eou, isDirectory: true)
     }
     var vadDirectory: URL {
-        root.appendingPathComponent("Models/silero-vad-coreml", isDirectory: true)
+        modelsRoot
+            .appendingPathComponent(FlowModelLayout.vadRepository, isDirectory: true)
+            .appendingPathComponent(FlowModelLayout.vadModel, isDirectory: true)
     }
 
     func handle(_ command: InputCommand) async {

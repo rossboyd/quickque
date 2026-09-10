@@ -8,6 +8,7 @@
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "native:build": "sh scripts/build-flow-helper.sh",
+    "native:test": "cd native && swift test",
     "desktop:dev": "pnpm native:build && tauri dev --config src-tauri/tauri.conf.json",
     "desktop:build": "pnpm native:build && tauri build --config src-tauri/tauri.conf.json",
     "test:flow": "node --test src/lib/flow/flow.test.ts",

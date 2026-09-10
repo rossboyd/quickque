@@ -15,6 +15,7 @@ let package = Package(
         .executableTarget(
             name: "QuickqueFlow",
             dependencies: [.product(name: "FluidAudio", package: "FluidAudio")]
-        )
+        ),
+        .testTarget(name: "QuickqueFlowTests", dependencies: ["QuickqueFlow"])
     ]
 )

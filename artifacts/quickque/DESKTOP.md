@@ -23,6 +23,19 @@ pnpm --filter @workspace/quickque desktop:dev
 pnpm --filter @workspace/quickque desktop:build
 ```
 
+The final command runs the native layout test, builds the Apple Silicon helper,
+builds the desktop app, and creates:
+
+```text
+artifacts/quickque/src-tauri/target/release/bundle/dmg/Quickque_0.1.0_aarch64.dmg
+```
+
+Open that DMG and drag Quickque into Applications. Because a local development
+build is not signed or notarized, macOS may block its first launch. In Finder,
+Control-click Quickque in Applications, choose **Open**, then confirm **Open**.
+Do not bypass Gatekeeper for a DMG you did not build yourself or receive from a
+trusted source.
+
 Both desktop commands first run `native:build`. That command resolves the
 Swift package, compiles an arm64 release helper, and places the target-suffixed
 sidecar where Tauri packages it. To build the helper by itself:
@@ -70,6 +83,11 @@ closed. Cancel never marks an incomplete installation as usable. Models are dura
 ```text
 ~/Library/Application Support/Quickque/Flow/
 ```
+
+The ASR cache follows FluidAudio's pinned
+`Models/parakeet-eou-streaming/160ms` layout. The VAD cache follows its pinned
+`Models/silero-vad/silero-vad-unified-256ms-v6.2.1.mlmodelc` layout. A native
+Swift test asserts both paths before the helper and DMG are built.
 
 After installation, Start forces FluidAudio offline mode. It cannot repair or
 download a model while requesting microphone access. A damaged cache produces
