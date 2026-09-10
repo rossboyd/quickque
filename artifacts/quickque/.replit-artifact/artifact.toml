@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Quickque"
+description = "A personal, local-first teleprompter for live meetings, with interruption-friendly playback, named sections, and a companion Mac floating window."
+version = "1.0.0"
+id = "artifacts/quickque"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24952
+
+[services.development]
+run = "pnpm --filter @workspace/quickque run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/quickque", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/quickque/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24952"
+BASE_PATH = "/"

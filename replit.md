@@ -1,44 +1,48 @@
-# [Project name]
+# Quickque
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A local-first personal teleprompter for live meetings, with an interruption-friendly reader and a lightweight macOS desktop wrapper.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `artifacts/quickque: web` — managed workflow for the browser preview
+- `pnpm --filter @workspace/quickque run desktop:dev` — run the native app on a Mac with prerequisites installed
+- `pnpm --filter @workspace/quickque run desktop:build` — build the Mac app locally
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- See `artifacts/quickque/DESKTOP.md` for Mac prerequisites and packaging details.
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Frontend: React + Vite
+- Desktop: Tauri 2, using the macOS system webview rather than bundling a browser
+- Persistence: local device storage, no account or server required
+- The scaffolded API/database packages are not used by Quickque.
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/quickque/src/` — application and reader
+- `artifacts/quickque/src/lib/desktop.ts` — browser/native capability boundary
+- `artifacts/quickque/src-tauri/` — desktop wrapper and permissions
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Keep scripts local-first because this is a personal meeting utility; do not introduce cloud accounts or server-side script storage without a new requirement.
+- Use explicit pause for interruptions. Automatic speaker identification is outside the current scope; never suggest manual playback listens to or recognizes speech.
+- Distinguish browser preview from native capabilities. Browser transparency cannot reveal another application's window, and browser code cannot reliably pin a window above Zoom or Meet.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Create and edit sectioned scripts, navigate sections while reading, pause without losing position, and adjust reading speed and appearance. The Mac reader is designed to float above meeting windows.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+The requested product name is Quickque. The user wants a lightweight personal Mac application inspired by Speakflow, not a copy of its branding.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Native macOS window behavior and installer signing must be validated on macOS. A working browser preview is not proof of native desktop behavior.
+- The overlay does not modify camera video, but may appear in screen sharing. Advise sharing only the intended application/window, not the whole display.
+- Browser and desktop storage are separate; backups are necessary for migration and recovery.
 
 ## Pointers
 
