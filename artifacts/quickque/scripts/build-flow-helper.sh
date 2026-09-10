@@ -9,6 +9,7 @@ if [ "$(uname -s)" != "Darwin" ] || [ "$(uname -m)" != "arm64" ]; then
 fi
 
 cd "$ROOT/native"
+swift test
 swift build -c release --arch arm64
 
 mkdir -p "$ROOT/src-tauri/binaries"
