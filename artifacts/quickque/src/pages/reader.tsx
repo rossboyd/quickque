@@ -2,12 +2,18 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocation, useParams } from 'wouter';
 import { 
-  Play, Pause, X, Minus, Plus, Settings2, Maximize2, Minimize2, ChevronLeft, ChevronRight, Droplets, Loader2
+  Play, Pause, X, Minus, Plus, Settings2, Maximize2, Minimize2, ChevronLeft, ChevronRight, Droplets, Loader2, Smartphone
 } from 'lucide-react';
 import { isDesktop, setOverlayMode, setAlwaysOnTop, startDragging } from '@/lib/desktop';
 import { useLocalFlow } from '@/hooks/use-local-flow';
 import { tokenize, NormalizedToken } from '@/lib/flow/tokenize';
 import { FlowStatusPanel } from '@/components/flow-status-panel';
+import { RemoteControlDialog } from '@/components/remote-control-dialog';
+import { useReaderCommands } from '@/lib/remote/use-reader-commands';
+import { useRemoteStore } from '@/lib/remote/store';
+import { resolveCommandEffect } from '@/lib/remote/reducer';
+import type { RemoteSnapshot } from '@/lib/remote/types';
+import { invoke } from '@tauri-apps/api/core';
 
 export default function Reader() {
   const { scripts, settings, updateSettings } = useStore();
@@ -29,13 +35,16 @@ export default function Reader() {
 
   const [desktopError, setDesktopError] = useState<string | null>(null);
 
+  const elapsedRef = useRef(0);
+  const lastTickRef = useRef<number | null>(null);
+
   // Pre-process tokens for Flow aligner
   const { tokens, enrichedSections } = useMemo(() => {
     if (!script) return { tokens: [], enrichedSections: [] };
-    
+
     let globalIdx = 0;
     const allTokens: NormalizedToken[] = [];
-    
+
     const sections = script.sections.map((sec, secIdx) => {
       const secTokens = tokenize(sec.content);
       const enriched = secTokens.map(t => ({
@@ -107,10 +116,18 @@ export default function Reader() {
     };
   }, [settings.compactMode]);
 
+  useEffect(() => {
+    return () => {
+      if (isDesktop()) {
+        void useRemoteStore.getState().stopServer();
+      }
+    };
+  }, []);
+
   const toggleCompactMode = useCallback(async () => {
     const newMode = !settings.compactMode;
     updateSettings({ compactMode: newMode });
-    
+
     try {
       if (newMode) {
         document.documentElement.classList.add('is-overlay');
@@ -139,6 +156,7 @@ export default function Reader() {
     flow.stop();
     try {
       if (isDesktop()) {
+        await useRemoteStore.getState().stopServer();
         await setAlwaysOnTop(false);
         await setOverlayMode(false);
       }
@@ -195,7 +213,7 @@ export default function Reader() {
     if (readMode !== "flow" || flow.status !== 'listening' || !flow.isFollowing) {
       return;
     }
-    
+
     let req: number;
     const loop = () => {
       if (activeTokenSpanRef.current && containerRef.current) {
@@ -307,6 +325,125 @@ export default function Reader() {
   flowRef.current = flow;
   const readModeRef = useRef(readMode);
   readModeRef.current = readMode;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const activeSectionIdxRef = useRef(activeSectionIdx);
+  activeSectionIdxRef.current = activeSectionIdx;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+
+  // Presentation Timing
+  useEffect(() => {
+    const activelyPlaying = readMode === 'manual' ? isPlaying : flow.status === 'listening';
+    let req: number;
+
+    const tick = (time: number) => {
+      if (!lastTickRef.current) lastTickRef.current = time;
+      const delta = time - lastTickRef.current;
+      lastTickRef.current = time;
+
+      if (activelyPlaying) {
+        elapsedRef.current += delta;
+      }
+      req = requestAnimationFrame(tick);
+    };
+
+    req = requestAnimationFrame(tick);
+    return () => {
+       cancelAnimationFrame(req);
+       lastTickRef.current = null;
+    };
+  }, [isPlaying, readMode, flow.status]);
+
+  const dispatchCommand = useCallback((cmd: any) => {
+    if (!script) return;
+
+    const effect = resolveCommandEffect(cmd, {
+      readMode: readModeRef.current,
+      isPlaying: isPlayingRef.current,
+      flowStatus: flowRef.current.status,
+      activeSectionIdx: activeSectionIdxRef.current,
+      sectionCount: script.sections.length,
+      speed: settingsRef.current.speed,
+      fontSize: settingsRef.current.fontSize
+    });
+
+    if (!effect) return;
+
+    switch (effect.type) {
+      case 'setPlaying':
+        isPlayingRef.current = effect.playing;
+        setIsPlaying(effect.playing);
+        break;
+      case 'flowStart':
+        flowRef.current.start();
+        break;
+      case 'flowPause':
+        flowRef.current.pause();
+        break;
+      case 'jumpToSection':
+        activeSectionIdxRef.current = effect.index;
+        jumpToSection(effect.index);
+        break;
+      case 'setSpeed':
+        settingsRef.current = { ...settingsRef.current, speed: effect.speed };
+        updateSettings({ speed: effect.speed });
+        break;
+      case 'setFontSize':
+        settingsRef.current = { ...settingsRef.current, fontSize: effect.fontSize };
+        updateSettings({ fontSize: effect.fontSize });
+        break;
+      case 'adjustPosition':
+        if (containerRef.current) {
+          const max = Math.max(0, containerRef.current.scrollHeight - containerRef.current.clientHeight);
+          exactScrollTopRef.current = Math.max(0, Math.min(max, exactScrollTopRef.current + effect.delta));
+          containerRef.current.scrollTop = exactScrollTopRef.current;
+        }
+        break;
+      case 'setReadMode':
+        readModeRef.current = effect.mode;
+        setReadMode(effect.mode);
+        if (effect.mode === 'flow') {
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+          const targetAnchor = enrichedSections[activeSectionIdxRef.current]?.firstTokenIdx ?? 0;
+          flowRef.current.reanchor(targetAnchor);
+        } else {
+          flowRef.current.stop();
+        }
+        break;
+    }
+  }, [script, jumpToSection, updateSettings, enrichedSections]);
+
+  useReaderCommands(dispatchCommand);
+
+  // State publishing
+  const { isRunning, isConnected } = useRemoteStore();
+
+  const publishSnapshot = useCallback(() => {
+    if (!script || !isRunning || !isConnected) return;
+    const snapshot: RemoteSnapshot = {
+      mode: readModeRef.current,
+      section: activeSectionIdx,
+      sectionCount: script.sections.length,
+      elapsedMs: Math.floor(elapsedRef.current),
+      playing: readModeRef.current === 'manual' ? isPlaying : flowRef.current.status === 'listening',
+      fontSize: settings.fontSize,
+      scrollSpeed: settings.speed,
+      position: exactScrollTopRef.current
+    };
+    invoke('remote_publish_state', { snapshot }).catch(() => {});
+  }, [script, isRunning, isConnected, activeSectionIdx, isPlaying, settings.fontSize, settings.speed]);
+
+  useEffect(() => {
+    publishSnapshot();
+  }, [publishSnapshot]);
+
+  useEffect(() => {
+    if (!isRunning || !isConnected) return;
+    const interval = setInterval(publishSnapshot, 1000);
+    return () => clearInterval(interval);
+  }, [isRunning, isConnected, publishSnapshot]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -321,51 +458,32 @@ export default function Reader() {
 
       if (e.code === 'Space') {
         e.preventDefault();
-        if (readModeRef.current === 'manual') {
-          setIsPlaying(p => !p);
-        } else {
-          const f = flowRef.current;
-          if (f.status === 'listening' || f.status === 'loading') f.pause();
-          else if (['ready', 'paused', 'silence-stopped', 'stopped', 'error'].includes(f.status)) f.start();
-        }
+        dispatchCommand({ type: 'TogglePlay' });
       } else if (e.code === 'Escape') {
         e.preventDefault();
         exitReader();
       } else if (e.code === 'ArrowRight') {
         e.preventDefault();
-        jumpToSection(activeSectionIdx + 1);
+        dispatchCommand({ type: 'NextSection' });
       } else if (e.code === 'ArrowLeft') {
         e.preventDefault();
-        jumpToSection(activeSectionIdx - 1);
+        dispatchCommand({ type: 'PreviousSection' });
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeSectionIdx, exitReader, jumpToSection]);
+  }, [exitReader, dispatchCommand]);
 
   // External Native Controls
   useEffect(() => {
     const handleNativeControl = (e: any) => {
-      const detail = e.detail;
-      if (detail === 'toggle') {
-        if (readModeRef.current === 'manual') {
-          setIsPlaying(p => !p);
-        } else {
-          const f = flowRef.current;
-          if (f.status === 'listening' || f.status === 'loading') f.pause();
-          else if (['ready', 'paused', 'silence-stopped', 'stopped', 'error'].includes(f.status)) f.start();
-        }
-      } else if (detail === 'next') {
-        jumpToSection(activeSectionIdx + 1);
-      } else if (detail === 'previous') {
-        jumpToSection(activeSectionIdx - 1);
-      }
+      dispatchCommand(e);
     };
     
     window.addEventListener('quickque:control', handleNativeControl);
     return () => window.removeEventListener('quickque:control', handleNativeControl);
-  }, [activeSectionIdx, jumpToSection]);
+  }, [dispatchCommand]);
 
   // Auto-hide controls
   useEffect(() => {
@@ -457,6 +575,19 @@ export default function Reader() {
               >
                 {settings.compactMode ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
               </button>
+
+              <div className="flex items-center">
+                <RemoteControlDialog
+                  trigger={
+                    <button
+                      className="p-2 rounded-full transition-colors backdrop-blur-md hover:bg-black/10 dark:hover:bg-white/10"
+                      title="Phone Remote"
+                    >
+                      <Smartphone className="w-4 h-4" />
+                    </button>
+                  }
+                />
+              </div>
             </div>
           </div>
 
@@ -465,15 +596,7 @@ export default function Reader() {
               <select
                 value={readMode}
                 onChange={e => {
-                  const newMode = e.target.value as "manual" | "flow";
-                  setReadMode(newMode);
-                  if (newMode === "flow") {
-                    setIsPlaying(false);
-                    const targetAnchor = enrichedSections[activeSectionIdx]?.firstTokenIdx ?? 0;
-                    flow.reanchor(targetAnchor);
-                  } else {
-                    flow.stop();
-                  }
+                  dispatchCommand({ action: 'setReadMode', mode: e.target.value as "manual" | "flow" });
                 }}
                 className="bg-transparent border-none outline-none text-foreground font-semibold text-xs cursor-pointer"
               >
@@ -486,14 +609,14 @@ export default function Reader() {
 
             <div className="flex items-center gap-1">
               <button 
-                onClick={() => updateSettings({ fontSize: Math.max(16, settings.fontSize - 4) })}
+                onClick={() => dispatchCommand({ action: 'fontSize', value: -4 })}
                 className="p-1 hover:text-primary transition-colors"
               >
                 <Minus className="w-3 h-3" />
               </button>
               <span className="font-mono min-w-[3ch] text-center text-xs">{settings.fontSize}</span>
               <button 
-                onClick={() => updateSettings({ fontSize: Math.min(120, settings.fontSize + 4) })}
+                onClick={() => dispatchCommand({ action: 'fontSize', value: 4 })}
                 className="p-1 hover:text-primary transition-colors"
               >
                 <Plus className="w-3 h-3" />
@@ -510,7 +633,7 @@ export default function Reader() {
                 max="150" 
                 value={settings.speed}
                 title="Scroll Speed"
-                onChange={e => updateSettings({ speed: parseInt(e.target.value) })}
+                onChange={e => dispatchCommand({ action: 'scrollSpeed', value: parseInt(e.target.value) - settings.speed })}
                 className="w-12 md:w-20 accent-primary"
                 disabled={readMode === 'flow'}
                 style={{ opacity: readMode === 'flow' ? 0.5 : 1 }}
@@ -639,7 +762,7 @@ export default function Reader() {
       <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-4 p-2 md:p-3 rounded-full bg-background/80 backdrop-blur-xl border border-border shadow-2xl z-50 transition-all duration-300 ${showControls || (readMode === 'manual' ? !isPlaying : flow.status !== 'listening') ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
         
         <button
-          onClick={() => jumpToSection(activeSectionIdx - 1)}
+          onClick={() => dispatchCommand({ action: 'previous' })}
           disabled={activeSectionIdx === 0}
           className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
           title="Previous Section (Left Arrow)"
@@ -649,7 +772,7 @@ export default function Reader() {
 
         <select
           value={activeSectionIdx}
-          onChange={(e) => jumpToSection(Number(e.target.value))}
+          onChange={(e) => dispatchCommand({ action: 'jumpToSection', value: Number(e.target.value) })}
           className="bg-transparent font-medium text-foreground appearance-none outline-none text-center text-sm px-2 w-32 md:w-48 truncate cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 rounded"
         >
           {enrichedSections.map((sec, idx) => (
@@ -660,7 +783,7 @@ export default function Reader() {
         </select>
 
         <button
-          onClick={() => jumpToSection(activeSectionIdx + 1)}
+          onClick={() => dispatchCommand({ action: 'next' })}
           disabled={activeSectionIdx === enrichedSections.length - 1}
           className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
           title="Next Section (Right Arrow)"
@@ -671,13 +794,7 @@ export default function Reader() {
         <div className="w-px h-6 bg-border mx-1" />
         
         <button
-          onClick={() => {
-            if (readMode === 'manual') setIsPlaying(!isPlaying);
-            else {
-              if (flow.status === 'listening') flow.pause();
-              else if (['ready', 'paused', 'silence-stopped', 'stopped', 'error'].includes(flow.status)) flow.start();
-            }
-          }}
+          onClick={() => dispatchCommand({ action: 'playPause' })}
           disabled={readMode === 'flow' && !['ready', 'listening', 'paused', 'silence-stopped', 'stopped', 'loading', 'error'].includes(flow.status)}
           className="w-14 h-14 flex items-center justify-center bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 hover:scale-105 transition-all focus:outline-none focus:ring-4 focus:ring-primary/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
         >

@@ -121,6 +121,55 @@ Every command and event carries the frontend's generation. Rust rejects output
 from replaced helper processes, and every Start resets transcript sequence to
 zero and creates fresh utterance context.
 
+## Local phone remote
+
+The desktop-only phone remote is an account-free HTTP service bound to an
+ephemeral port on all LAN interfaces. It is started and stopped by the
+following Tauri commands (all return a clear `Result` error):
+
+* `remote_start()` returns `{ url, code, expiresInSeconds, sessionId }`.
+* `remote_approve({ sessionId })` approves the one phone currently waiting for
+  presenter approval; `remote_reject()` cancels that request.
+* `remote_stop()` invalidates the session and its credentials immediately.
+* `remote_snapshot()` returns the intentionally minimal presentation state:
+  `connected`, `approved`, `mode`, `section`, `sectionCount`, `elapsedMs`,
+  `playing`, `fontSize`, `scrollSpeed`, and `position`.
+* `remote_publish_state({ snapshot })` publishes the reader's authoritative
+  state to the connected phone; its `connected` and `approved` flags remain
+  controlled by the secure session.
+* `remote_take_commands()` returns and consumes each validated
+  `{ action, value?, requestId }` exactly once; the reader polls this and routes
+  actions through its normal command reducer.
+* `remote_pairing_pending()` is a lightweight presenter polling hook for
+  showing the approval dialog when a phone submits a valid code.
+
+The bridge emits `quickque:remote` events with `started`,
+`controllerApproved`, `controllerRejected`, and `stopped` types. The reader
+uses `remote_pairing_pending()` for approval requests. The phone
+loads the returned `url` (the page is embedded in the app, so no internet is
+needed), submits the six-digit code to `POST /api/pair`, and receives
+`{ status, token, message }`; that token remains unauthorized until presenter
+approval. After approval, `GET /api/events` with the controller token in the
+`Authorization: Bearer` header supplies authoritative
+snapshots. Commands are JSON
+`POST /api/control` requests with the same authorization header and
+`{ action, value?, requestId }`;
+actions are `playPause`, `previous`, `next`, `scrollSpeed`, `fontSize`, and
+`position`. Request IDs are single-use replay protection. Pairing expires in
+five minutes, only one controller is allowed, and requests are rate limited.
+No script, audio, transcript, or library contents are served. The service is
+closed and all credentials discarded on `remote_stop` and application exit.
+
+The URL uses the machine's discovered LAN address. Both devices must be on the
+same trusted network and the Mac firewall must permit Quickque; guest Wi-Fi/client
+isolation, sleep, VPN routing, or unsupported browsers can prevent connection.
+The local page uses HTTP because ordinary phone browsers cannot trust an
+app-generated LAN certificate. The token is kept out of URLs and browser
+history, but the trusted-network requirement remains important because local
+HTTP traffic is not encrypted.
+The phone page reports rejected, expired, and disconnected states and retries
+state polling after brief interruptions.
+
 FluidAudio is Apache-2.0 licensed. The Parakeet weights are separately licensed
 under the **NVIDIA Open Model License**, not MIT or Apache-2.0. Silero VAD is
 MIT licensed. The packaged `THIRD_PARTY_NOTICES.txt` records sources, revisions,

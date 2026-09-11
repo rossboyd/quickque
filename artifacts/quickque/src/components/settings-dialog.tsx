@@ -160,7 +160,7 @@ export function SettingsDialog() {
             <div>
               <p className="font-medium text-foreground mb-1">Desktop Capability</p>
               <p className="text-muted-foreground leading-relaxed">
-                Native transparency and global keyboard shortcuts require the desktop app. If you're using this in a browser, "Compact Overlay Mode" will be confined to this window. For screen sharing, share only your specific app windows, not your whole screen, to prevent Quickque from being recorded.
+                Native transparency, global keyboard shortcuts, and Local Phone Remote hosting require the desktop app. The browser remains available as a manual teleprompter, and "Compact Overlay Mode" is confined to this window. For screen sharing, share only your specific app windows, not your whole screen, to prevent Quickque from being recorded.
               </p>
             </div>
           </div>

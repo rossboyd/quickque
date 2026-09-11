@@ -5,6 +5,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tauri::{AppHandle, Emitter, Manager};
+mod remote;
+use remote::{RemoteInfo, RemoteService, RemoteSnapshot};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,6 +25,12 @@ struct ProcessState {
 #[derive(Default)]
 struct FlowState {
     process: Arc<Mutex<ProcessState>>,
+}
+
+#[derive(Default)]
+struct AppState {
+    flow: FlowState,
+    remote: RemoteService,
 }
 
 impl FlowState {
@@ -233,13 +241,13 @@ fn spawn_helper(
 #[tauri::command]
 fn flow_command(
     app: AppHandle,
-    state: tauri::State<'_, FlowState>,
+    state: tauri::State<'_, AppState>,
     command: FlowCommand,
 ) -> Result<(), String> {
-    state.shutdown();
+    state.flow.shutdown();
     {
         let mut process = state
-            .process
+            .flow.process
             .lock()
             .map_err(|_| "Flow process state is unavailable.".to_string())?;
         process.generation = command.generation;
@@ -275,27 +283,75 @@ fn flow_command(
             Ok(())
         }
         "cancelDownload" => {
-            spawn_helper(app, Arc::clone(&state.process), &command)
+            spawn_helper(app, Arc::clone(&state.flow.process), &command)
         }
         "status" | "download" | "start" => {
-            spawn_helper(app, Arc::clone(&state.process), &command)
+            spawn_helper(app, Arc::clone(&state.flow.process), &command)
         }
         _ => Err("Unknown Flow action.".to_string()),
     }
+}
+
+#[tauri::command]
+fn remote_start(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<RemoteInfo, String> {
+    let info = state.remote.start()?;
+    let _ = app.emit("quickque:remote", serde_json::json!({"type":"started","info":info}));
+    Ok(info)
+}
+
+#[tauri::command]
+fn remote_stop(app: AppHandle, state: tauri::State<'_, AppState>) {
+    state.remote.stop();
+    let _ = app.emit("quickque:remote", serde_json::json!({"type":"stopped"}));
+}
+
+#[tauri::command]
+fn remote_approve(app: AppHandle, state: tauri::State<'_, AppState>, session_id: String) -> Result<(), String> {
+    state.remote.approve(&session_id)?;
+    let _ = app.emit("quickque:remote", serde_json::json!({"type":"controllerApproved"}));
+    Ok(())
+}
+
+#[tauri::command]
+fn remote_reject(app: AppHandle, state: tauri::State<'_, AppState>) {
+    state.remote.reject();
+    let _ = app.emit("quickque:remote", serde_json::json!({"type":"controllerRejected"}));
+}
+
+#[tauri::command]
+fn remote_snapshot(state: tauri::State<'_, AppState>) -> RemoteSnapshot {
+    state.remote.snapshot()
+}
+
+#[tauri::command]
+fn remote_publish_state(state: tauri::State<'_, AppState>, snapshot: RemoteSnapshot) -> Result<(), String> {
+    state.remote.set_snapshot(snapshot)
+}
+
+#[tauri::command]
+fn remote_take_commands(state: tauri::State<'_, AppState>) -> Vec<remote::ControlRequest> {
+    state.remote.take_commands()
+}
+
+#[tauri::command]
+fn remote_pairing_pending(state: tauri::State<'_, AppState>) -> bool {
+    state.remote.pairing_pending()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .manage(FlowState::default())
-        .invoke_handler(tauri::generate_handler![flow_command])
+        .manage(AppState::default())
+        .invoke_handler(tauri::generate_handler![flow_command, remote_start, remote_stop, remote_approve, remote_reject, remote_snapshot, remote_publish_state, remote_take_commands, remote_pairing_pending])
         .build(tauri::generate_context!())
         .expect("error while building Quickque");
 
     app.run(|handle, event| {
         if matches!(event, tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }) {
-            handle.state::<FlowState>().shutdown();
+            let state = handle.state::<AppState>();
+            state.flow.shutdown();
+            state.remote.stop();
         }
     });
 }
