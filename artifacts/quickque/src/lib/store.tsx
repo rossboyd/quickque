@@ -84,7 +84,7 @@ type StoreContextType = {
   updateScript: (
     id: string,
     updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt' | 'presentation'>>,
-  ) => void;
+  ) => boolean;
   deleteScript: (id: string) => void;
   deleteScripts: (ids: string[]) => boolean;
   restoreScripts: (ids: string[]) => boolean;
@@ -788,17 +788,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     id: string,
     updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt' | 'presentation'>>,
   ) => {
-    if (!scriptsRef.current.some(script => script.id === id)) return;
+    if (!scriptsRef.current.some(script => script.id === id)) return false;
     const nextScripts = scriptsRef.current.map(script => (
       script.id === id ? { ...script, ...updates, updatedAt: Date.now() } : script
     ));
-    commitLibrary({
+    return commitLibrary({
       scripts: nextScripts,
       trash: trashRef.current,
       customOrder: customOrderRef.current,
       sortMode: sortModeRef.current,
       activeScriptId: activeScriptIdRef.current,
-    });
+    }).ok;
   }, [commitLibrary]);
 
   const updateScriptPresentation = useCallback((
@@ -1698,6 +1698,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (changed) {
         commitUserScripts(nextScripts);
       }
+      return changed;
     },
     [commitUserScripts],
   );

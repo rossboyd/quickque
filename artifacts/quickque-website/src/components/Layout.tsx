@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { Menu, X } from 'lucide-react';
 import { useSiteConfig } from '../hooks/useData';
+import { BrandMark } from './BrandMark';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { config } = useSiteConfig();
@@ -21,7 +22,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <header className="site-header px-6 lg:px-12 h-24 flex items-center justify-between sticky top-0 bg-white/80 backdrop-blur-xl z-40">
         <Link href="/" className="site-brand font-serif font-medium text-2xl flex items-center gap-3">
-          <img src={`${config?.basePath}logo.svg`} alt="" width="36" height="28" className="w-9 h-7 object-contain" />
+          <BrandMark className="w-9 h-7" />
           <span>Quickque</span>
         </Link>
 
@@ -63,7 +64,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <footer className="site-footer border-t border-[var(--border)] py-12 mt-16 text-center text-[var(--text-muted)] bg-white">
         <div className="max-w-[1200px] mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-3">
-            <img src={`${config?.basePath}logo.svg`} alt="" width="25" height="20" className="w-6 h-5 object-contain opacity-50" />
+            <BrandMark className="w-6 h-5 opacity-50" />
             <p>© {new Date().getFullYear()} Quickque contributors.</p>
           </div>
           <div className="flex gap-6 font-medium">

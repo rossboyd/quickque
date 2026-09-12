@@ -4,6 +4,8 @@ import { Play, Plus, Trash, ChevronUp, ChevronDown, ChevronLeft, Users, SplitSqu
 import { Script, ScriptSection, Settings, DEFAULT_SETTINGS } from '@/lib/types';
 import { MAX_SECTIONS } from '@/lib/store-persistence';
 import { getFontFamilyCss, getTextColorCss } from '@/lib/appearance';
+import { getCharacterColor } from '@/lib/actor-colors';
+import { MarkdownEditor } from './markdown-editor';
 import { getScriptPurpose, getSceneSetupIssues, getPerformanceSummary, type SceneSetupIssue } from '@/lib/script-purpose';
 import { listLocalVoices } from '@/lib/scene-speech';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -27,7 +29,7 @@ export function Editor({
   settings = DEFAULT_SETTINGS,
 }: { 
   script: Script; 
-  onChange: (u: Partial<Script>) => void; 
+  onChange: (u: Partial<Script>) => boolean; 
   onPresent: () => void; 
   onCloseMobile: () => void;
   settings?: Settings;
@@ -35,6 +37,7 @@ export function Editor({
   const script = baseScript as ActorScript;
   const isPerformance = getScriptPurpose(script) === 'performance';
   const sectionLabel = isPerformance ? 'turn' : 'section';
+  const [showMarkdown, setShowMarkdown] = useState(false);
   const [checkingVoices, setCheckingVoices] = useState(false);
   const [preflightIssues, setPreflightIssues] = useState<SceneSetupIssue[] | null>(null);
   const currentScript = useRef<ActorScript | null>(script);
@@ -186,7 +189,8 @@ export function Editor({
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => setShowMarkdown(true)} className="rounded-full border border-border px-3 py-2 text-sm font-medium hover:bg-muted">Markdown</button>
               {isPerformance && <button
                 aria-label="Scene Partner setup"
                 onClick={() => setShowActorPanel(true)}
@@ -215,7 +219,7 @@ export function Editor({
           <div className="max-w-4xl mx-auto space-y-6 pb-32">
             {isPerformance && <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
               <p className="text-sm font-medium">{getPerformanceSummary(script)}</p>
-              <p className="text-sm text-muted-foreground">Add cast → choose your role → assign dialogue → preview partner → rehearse.</p>
+              <p className="text-sm text-muted-foreground">Add cast → assign In Person or AI Partner → choose colours → assign dialogue → rehearse.</p>
               <p className="text-xs text-muted-foreground">Record on another camera. Quickque never records.</p>
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <span role="status">{!isActorEnabled ? 'Partner audio off · rehearse at your own pace' : setupIssues.length ? `${setupIssues.length} setup ${setupIssues.length === 1 ? 'issue' : 'issues'} to resolve` : 'Ready · local voices checked before rehearsal'}</span>
@@ -224,7 +228,7 @@ export function Editor({
               </div>
             </div>}
             {script.sections.map((section, idx) => (
-              <div key={section.id} className="group relative bg-card rounded-xl border border-card-border shadow-sm focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/40 transition-all">
+              <div key={section.id} style={isPerformance ? { borderLeftWidth: 4, borderLeftColor: getCharacterColor(script.actor?.characters.find(character => character.id === section.characterId)) } : undefined} className="group relative bg-card rounded-xl border border-card-border shadow-sm focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/40 transition-all">
                 <div className="flex flex-col border-b border-card-border bg-muted/30 rounded-t-xl min-w-0">
                   <div className="flex items-center justify-between p-3">
                     <div className="flex items-center flex-1 gap-2 min-w-0">
@@ -285,6 +289,7 @@ export function Editor({
                   <div className="flex flex-wrap items-center gap-3 px-3 md:px-11 pb-3 pt-1">
                     {isPerformance && (
                       <div className="flex items-center gap-2">
+                        <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full border border-foreground/20" style={{ backgroundColor: getCharacterColor(script.actor?.characters.find(character => character.id === section.characterId)) }} />
                         <label className="text-xs font-medium text-muted-foreground">Character:</label>
                         <select
                           aria-label={`Character for turn ${idx + 1}`}
@@ -294,7 +299,7 @@ export function Editor({
                         >
                           <option value="">Unassigned</option>
                           {script.actor?.characters.map((char) => (
-                            <option key={char.id} value={char.id}>{char.name}</option>
+                            <option key={char.id} value={char.id}>{char.name} · {script.actor?.myRoleIds.includes(char.id) ? 'In Person' : 'AI Partner'}</option>
                           ))}
                         </select>
                       </div>
@@ -345,6 +350,7 @@ export function Editor({
         </div>
       </div>
 
+      {showMarkdown && <MarkdownEditor key={script.id} script={script} onSave={onChange} onClose={() => setShowMarkdown(false)} />}
       <Dialog open={preflightIssues !== null} onOpenChange={open => { if (!open) setPreflightIssues(null); }}>
         <DialogContent className="max-h-[80vh] overflow-y-auto">
           <DialogHeader>

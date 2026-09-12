@@ -1,5 +1,6 @@
 import type { ActorCharacter, ActorMode, ActorVoice, Script, ScriptSection } from './types.ts';
 import { getScriptPurpose } from './script-purpose.ts';
+import { isCharacterColor } from './actor-colors.ts';
 import { generateId } from './utils.ts';
 import { normalizePresentation } from './presentation-preferences.ts';
 
@@ -61,6 +62,7 @@ export function isValidActorCharacter(value: unknown): value is ActorCharacter {
   return (
     isBoundedId(value.id) &&
     isBoundedString(value.name, MAX_ACTOR_NAME_LENGTH, true) &&
+    (value.accentColor === undefined || isCharacterColor(value.accentColor)) &&
     isBoundedString(value.age, MAX_ACTOR_AGE_LENGTH) &&
     isBoundedString(value.gender, MAX_ACTOR_GENDER_LENGTH) &&
     isBoundedString(value.style, MAX_ACTOR_STYLE_LENGTH) &&
@@ -104,6 +106,7 @@ export function cloneActor(actor: ActorMode): ActorMode {
     characters: actor.characters.map(character => ({
       id: character.id,
       name: character.name,
+      ...(character.accentColor !== undefined ? { accentColor: character.accentColor } : {}),
       age: character.age,
       gender: character.gender,
       style: character.style,
@@ -148,6 +151,7 @@ export function cloneActorWithFreshCharacterIds(
     characters.push({
       id,
       name: character.name,
+      ...(character.accentColor !== undefined ? { accentColor: character.accentColor } : {}),
       age: character.age,
       gender: character.gender,
       style: character.style,
@@ -181,6 +185,7 @@ export function deleteActorCharacter(
       .map(character => ({
         id: character.id,
         name: character.name,
+        ...(character.accentColor !== undefined ? { accentColor: character.accentColor } : {}),
         age: character.age,
         gender: character.gender,
         style: character.style,
