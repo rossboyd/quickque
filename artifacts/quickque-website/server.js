@@ -4,9 +4,6 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createServer as createHttpServer } from 'node:http';
 import { loadSiteDataSync, getBasePath, pathWithinBase, serializeSiteData } from './lib/server/content.js';
-import { COMMERCE_AMOUNT, COMMERCE_CURRENCY, createCommerceService } from './lib/server/commerce.js';
-import { initializeStripeRuntime } from './lib/server/stripeBootstrap.js';
-import { processStripeWebhook } from './lib/server/stripeClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = __dirname;
@@ -194,7 +191,7 @@ export async function createServer(
   options = {}
 ) {
   // A validation server may pass options as the third argument when no HMR
-  // port is needed. External Stripe initialization is otherwise normal.
+  // port is needed.
   if (hmrPort && typeof hmrPort === 'object') {
     options = hmrPort;
     hmrPort = undefined;
@@ -208,29 +205,6 @@ export async function createServer(
   const uniqueRoutes = (routes) => [...new Set(routes)];
   const app = express();
   const httpServer = createHttpServer(app);
-  const stripeRuntime =
-    options.stripeRuntime ||
-    (options.skipStripeInitialization || options.skipExternalInitialization
-      ? {
-          mode: 'unavailable',
-          sync: null,
-          client: null,
-          message: 'Checkout is temporarily unavailable.'
-        }
-      : await initializeStripeRuntime({
-          config: siteData.config,
-          isProduction: Boolean(isProd),
-          basePath: configBasePath
-        }));
-  const commerceService =
-    options.commerceService ||
-    createCommerceService({
-      config: siteData.config,
-      basePath: configBasePath,
-      isProduction: Boolean(isProd),
-      runtime: stripeRuntime,
-      trustedOrigin: options.trustedOrigin
-    });
   let vite;
 
   if (isProd) {
@@ -262,60 +236,30 @@ export async function createServer(
   });
   app.get(`${baseRoute}/api/license` || '/api/license', (req, res) => sendBody(res, siteData.license, 200, 'text/plain; charset=utf-8'));
 
-  // Stripe must receive the original request bytes. Register this route before
-  // express.json() and before Vite/static fallthrough.
   const webhookRoute = `${baseRoute}/api/stripe/webhook` || '/api/stripe/webhook';
-  app.post(webhookRoute, express.raw({ type: 'application/json', limit: '256kb' }), async (req, res) => {
-    const signature = req.headers['stripe-signature'];
-    const sig = Array.isArray(signature) ? signature[0] : signature;
-    if (!sig || !Buffer.isBuffer(req.body)) {
-      return sendJson(res, { error: 'Webhook request is invalid.' }, 400);
-    }
-    if (!stripeRuntime.sync) {
-      return sendJson(res, { error: 'Webhook processing is temporarily unavailable.' }, 503);
-    }
-    try {
-      await processStripeWebhook(req.body, sig, stripeRuntime.sync);
-      return sendJson(res, { received: true });
-    } catch {
-      return sendJson(res, { error: 'Webhook processing failed.' }, 400);
-    }
-  });
+  app.post(webhookRoute, (_req, res) =>
+    sendJson(res, { error: 'Payment webhooks are disabled while dummy checkout is active.' }, 410)
+  );
 
   app.use(express.json({ limit: '16kb' }));
   const commerceStatusRoute = `${baseRoute}/api/commerce/status` || '/api/commerce/status';
   const commerceCheckoutRoute = `${baseRoute}/api/commerce/checkout` || '/api/commerce/checkout';
   const commerceSessionRoute = `${baseRoute}/api/commerce/session` || '/api/commerce/session';
-  app.get(commerceStatusRoute, async (req, res) => {
-    try {
-      return res.json(await commerceService.status(req, res));
-    } catch {
-      return sendJson(res, { available: false, mode: 'unavailable', message: 'Checkout is temporarily unavailable.' });
-    }
-  });
-  app.post(commerceCheckoutRoute, async (req, res) => {
-    try {
-      return await commerceService.checkout(req, res);
-    } catch {
-      return sendJson(res, { error: 'Checkout is temporarily unavailable.' }, 503);
-    }
-  });
-  app.get(commerceSessionRoute, async (req, res) => {
-    try {
-      const result = await commerceService.session(req, res);
-      return res.json(result);
-    } catch {
-      return sendJson(res, {
-        status: 'invalid',
-        mode: 'unavailable',
-        amount: COMMERCE_AMOUNT,
-        currency: COMMERCE_CURRENCY,
-        version: null,
-        downloadUrl: null,
-        message: 'Checkout session is invalid.'
-      });
-    }
-  });
+  app.get(commerceStatusRoute, (_req, res) =>
+    sendJson(res, { available: false, mode: 'dummy', message: 'Payment checkout is disabled. The demo runs only in your browser.' }, 410)
+  );
+  app.post(commerceCheckoutRoute, (_req, res) =>
+    sendJson(res, { error: 'Payment checkout is disabled. No purchase can be created.' }, 410)
+  );
+  app.get(commerceSessionRoute, (_req, res) =>
+    sendJson(res, {
+      status: 'disabled',
+      mode: 'dummy',
+      version: null,
+      downloadUrl: null,
+      message: 'Payment verification is disabled. No payment, licence, or download was created.'
+    }, 410)
+  );
 
   // The result page is intentionally never cacheable or indexable. The client
   // page also supplies noindex metadata, while these headers cover direct SSR.
@@ -414,7 +358,7 @@ export async function createServer(
     sendBody(res, 'Not found', 404, 'text/plain; charset=utf-8');
   });
 
-  return { app, httpServer, vite, siteData, commerceService, stripeRuntime };
+  return { app, httpServer, vite, siteData };
 }
 
 const invokedFile = process.argv[1] ? path.resolve(process.argv[1]) : '';

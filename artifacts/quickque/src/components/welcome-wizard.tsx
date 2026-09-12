@@ -6,9 +6,10 @@ import { FlowSetupWizard } from '@/components/flow-setup-wizard';
 import { useLocalFlow } from '@/hooks/use-local-flow';
 import { tokenize } from '@/lib/flow/tokenize';
 import { BrandMark } from '@/components/brand-mark';
+import { ChatterboxSetup } from '@/components/chatterbox-setup';
 import {
   Play,
-  FolderOpen, Mic, BookOpen, Keyboard, X,
+  FolderOpen, Mic, BookOpen, Keyboard, X, Volume2,
   CheckCircle2, Loader2, AlertCircle
 } from 'lucide-react';
 
@@ -112,6 +113,7 @@ export function WelcomeWizard() {
     { id: 'intro', title: 'Welcome' },
     { id: 'storage', title: 'Storage' },
     { id: 'voice', title: 'Voice Follow' },
+    { id: 'chatterbox', title: 'Chatterbox Turbo' },
     { id: 'tour', title: 'Controls' },
     { id: 'finish', title: 'Finish' }
   ];
@@ -249,6 +251,28 @@ export function WelcomeWizard() {
               {step === 3 && (
                 <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
                   <div className="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Volume2 className="w-8 h-8" />
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-2xl font-bold mb-2">Chatterbox Turbo</h3>
+                    <p className="text-muted-foreground text-sm leading-relaxed">
+                      Chatterbox gives Scene Partner characters a free local AI voice. It is separate from Voice Follow, which listens to your microphone to scroll the prompter.
+                    </p>
+                  </div>
+                  <ChatterboxSetup />
+                  <button
+                    type="button"
+                    onClick={() => setStep(4)}
+                    className="w-full py-3 bg-secondary text-secondary-foreground font-medium rounded-lg hover:bg-secondary/80 transition-colors"
+                  >
+                    {isDesktop() ? 'Skip for now' : 'Continue in browser'}
+                  </button>
+                </div>
+              )}
+
+              {step === 4 && (
+                <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
+                  <div className="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-4">
                     <Keyboard className="w-8 h-8" />
                   </div>
                   <div className="text-center">
@@ -280,7 +304,7 @@ export function WelcomeWizard() {
                 </div>
               )}
 
-              {step === 4 && (
+              {step === 5 && (
                 <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
                   <div className="w-16 h-16 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
                     <CheckCircle2 className="w-8 h-8" />
@@ -314,7 +338,7 @@ export function WelcomeWizard() {
             </div>
             {profileError && <p role="alert" className="px-6 pb-3 text-sm text-destructive">{profileError}</p>}
 
-            {step < 4 && (
+            {step < 5 && (
               <div className="p-6 pt-0 flex items-center justify-between mt-auto">
                 <div className="flex gap-1.5">
                   {steps.map((s, i) => (
@@ -330,7 +354,7 @@ export function WelcomeWizard() {
                       Back
                     </button>
                   )}
-                  {step !== 2 && (
+                  {step !== 2 && step !== 3 && (
                     <button
                       onClick={nextStep}
                       disabled={!canGoNext()}

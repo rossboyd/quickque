@@ -108,9 +108,11 @@ function validateConfig(config) {
   }
   const offer = config.commerce;
   if (!offer || offer.currency !== COMMERCE_PRICE.currency ||
-      offer.billing !== 'one-time' || offer.sourceLicence !== 'MIT' ||
+      offer.billing !== 'free, monthly or lifetime' || offer.sourceLicence !== 'MIT' ||
+      offer.monthlyAmount !== 250 || offer.freeVoiceFollowSeconds !== 30 ||
+      offer.voiceFollowLimitScope !== 'per session' || offer.entitlementsLive !== false ||
       typeof offer.liveEnabled !== 'boolean') {
-    fail('commerce must describe the configured GBP one-time Mac package with MIT source.');
+    fail('commerce must describe Free, GBP monthly and lifetime plans with MIT source and preview-only entitlements.');
   }
   if (offer.liveEnabled && config.release.status === 'unavailable') {
     fail('Live purchases cannot be enabled without a verified Mac release.');
@@ -123,7 +125,8 @@ function validateConfig(config) {
     commerce: {
       ...offer,
       amount: COMMERCE_PRICE.amount,
-      displayPrice: COMMERCE_PRICE.displayPrice
+      displayPrice: COMMERCE_PRICE.displayPrice,
+      monthlyDisplayPrice: new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(offer.monthlyAmount / 100)
     },
     basePath: basePathWithSlash(basePath),
     productionOrigin

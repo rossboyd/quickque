@@ -1,3 +1,4 @@
+import { useDebugLicence } from '../lib/debug-licence';
 import { useState, useEffect, useRef, useCallback, type MutableRefObject } from 'react';
 import { invokeAcknowledgedFlowCommand } from '../lib/flow/command-acknowledgement';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
@@ -21,7 +22,7 @@ import {
 } from '../lib/flow/native-errors';
 
 // One wrapper also traces best-effort stop commands, even after UI unmount.
-async function invoke(name: string, args: { command: { action: string; generation: number } }) {
+async function invoke(name: string, args: { command: { action: string; generation: number; sessionId?: string } }) {
   const { action, generation } = args.command;
   const started = performance.now();
   recordFlowDebug('command_sent', generation, undefined, action);
@@ -35,7 +36,7 @@ async function invoke(name: string, args: { command: { action: string; generatio
   }
 }
 
-export type FlowStatus = "needs-model" | "ready" | "downloading" | "loading" | "listening" | "paused" | "silence-stopped" | "stopped" | "unsupported" | "error";
+export type FlowStatus = "needs-model" | "ready" | "downloading" | "loading" | "listening" | "paused" | "silence-stopped" | "stopped" | "unsupported" | "limit-reached" | "error";
 
 export interface FlowState {
   status: FlowStatus;
@@ -102,6 +103,8 @@ function bridgeError(error: unknown, operation: string): string {
 }
 
 export function useLocalFlow({ tokens, enabled, sceneCompletion: sceneCompletionEnabled = false }: UseLocalFlowArgs): FlowState {
+  const licence = useDebugLicence();
+  const readerSession = useRef(crypto.randomUUID());
   const [status, setStatus] = useState<FlowStatus>("unsupported");
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
@@ -154,6 +157,13 @@ export function useLocalFlow({ tokens, enabled, sceneCompletion: sceneCompletion
     setStatus(s);
   }, []);
 
+  useEffect(() => {
+    if (licence.licensed && statusRef.current === 'limit-reached') {
+      setStatusSync('ready');
+      setDownloadMessage(null);
+    }
+  }, [licence.licensed, setStatusSync]);
+
   const clearErrorDetails = useCallback(() => {
     setErrorDetails(null);
   }, []);
@@ -162,7 +172,7 @@ export function useLocalFlow({ tokens, enabled, sceneCompletion: sceneCompletion
     if (!isDesktop()) return;
     await invokeAcknowledgedFlowCommand(
       { action, generation: gen },
-      command => invoke("flow_command", { command }),
+      command => invoke("flow_command", { command: { ...command, sessionId: readerSession.current } }),
       err => {
         if (!activeRef.current || activeGenRef.current !== gen) return;
         activeGenRef.current = nextGen();
@@ -271,6 +281,7 @@ export function useLocalFlow({ tokens, enabled, sceneCompletion: sceneCompletion
           const payload = event.payload;
           recordFlowEvent(payload, activeGenRef.current);
           if (!payload || payload.generation !== activeGenRef.current) return;
+          if (statusRef.current === "limit-reached") return;
 
           if (payload.type === "audio_level") {
             const sample = parseAudioLevel(
@@ -288,14 +299,14 @@ export function useLocalFlow({ tokens, enabled, sceneCompletion: sceneCompletion
             } else if (payload.status === "ready" || payload.status === "needs-model" ||
               payload.status === "listening" || payload.status === "silence-stopped" ||
               payload.status === "paused" || payload.status === "stopped" ||
-              payload.status === "unsupported") {
+              payload.status === "unsupported" || payload.status === "limit-reached") {
               clearWatchdog();
             }
             if (payload.status === "error") {
               fail(payload.message || "The local audio engine stopped.");
             } else {
-              if (!["needs-model", "ready", "downloading", "loading", "listening", "paused", "silence-stopped", "stopped", "unsupported"].includes(payload.status)) return;
-              if (["paused", "silence-stopped", "stopped", "unsupported", "needs-model", "ready"].includes(payload.status)) {
+              if (!["needs-model", "ready", "downloading", "loading", "listening", "paused", "silence-stopped", "stopped", "unsupported", "limit-reached"].includes(payload.status)) return;
+              if (["paused", "silence-stopped", "stopped", "unsupported", "needs-model", "ready", "limit-reached"].includes(payload.status)) {
                 captureRequestedRef.current = false;
                 setIsFollowing(false);
                 setWarning(null);

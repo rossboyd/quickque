@@ -442,7 +442,7 @@ export function ActorAuthoringPanel({
                           </select>
                         </div>
                         
-                        {char.voice.engine === 'turbo' && <ChatterboxSetup onReady={() => void loadVoices()} />}
+                        {char.voice.engine === 'turbo' && <ChatterboxSetup compact onReady={() => void loadVoices()} />}
 
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between">

@@ -15,7 +15,7 @@ const script = (id, content = 'Body text') => ({
 test('guide control labels exist in the current app, not just in the guide', () => {
   const library = read('../../quickque/src/pages/library.tsx');
   const settings = read('../../quickque/src/components/settings-dialog.tsx');
-  for (const label of ['New script', 'Move to Trash', 'Restore to library', 'Select all shown', 'Export as JSON']) {
+  for (const label of ['New script', 'Move to Trash', 'Restore', 'Rehearse', 'Export as JSON']) {
     assert.ok(library.includes(label), `App label changed: ${label}; re-audit scripts guide`);
     assert.ok(article('scripts').includes(label), `Guide missing current label: ${label}`);
   }

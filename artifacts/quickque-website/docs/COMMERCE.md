@@ -1,76 +1,86 @@
-# Quickque commerce runbook
+# Quickque plans and disabled commerce
 
-## What is sold
+## Product model
 
-Quickque for Mac is a **£77 GBP one-time** purchase. The purchased version may
-be used forever. Future major upgrades may cost extra. The source is MIT
-licensed. This website does not issue a licence key or download from a
-sandbox payment.
+The website describes these planned official-app tiers:
 
-The server owns the Stripe price (`quickque_mac_perpetual_gbp`) and always
-validates the synced product metadata, amount, currency, one-time mode, and
-browser binding. Browser input cannot select a price, amount, or Stripe mode.
+| Plan | Price | Voice Follow |
+|---|---|---|
+| Free | £0 | 30 seconds of active following per presentation/rehearsal session |
+| Monthly | £2.50/month | Unlimited while the paid subscription is active |
+| Lifetime | £25 once | Permanent unlimited Voice Follow in Quickque for Mac |
 
-## Prerequisites
+The confirmed lifetime price is £25, configured with `QUICKQUE_PRICE_GBP=25`.
+That environment variable controls the lifetime price only. Monthly is 250 pence in site.json and is formatted server-side.
 
-- The Stripe Replit connection is attached; credentials are fetched at runtime
-  through the connection API, never committed to the repository.
-- PostgreSQL and `DATABASE_URL` are available, and `SESSION_SECRET` is set.
-- The server startup runs `stripe-replit-sync` migrations, registers the
-  managed webhook, and awaits a backfill. The raw webhook route must remain
-  before JSON parsing.
-- In development, seed the connected Stripe **test** account:
+The confirmed Free allowance is 30 seconds per session. Pause/resume and
+microphone restart within the same reader session do not reset the 30 seconds.
+A new presentation/rehearsal session gets a fresh allowance. This is not a daily
+cap or one-time total trial.
+The native app now enforces the active-listening allowance, with standalone logic
+tests passing; physical Mac verification remains outstanding. Paid entitlement
+activation is not implemented.
 
-  ```sh
-  pnpm --filter @workspace/scripts exec tsx src/seed-quickque.ts
-  ```
+Free includes the workspace, editing/import, manual/timed playback and Scene
+Partner with system voices. Paid plans unlock unlimited Voice Follow, cached
+Chatterbox performance dialogue, optional presentation narration, local audio
+listening and audio-only MP4 export. The subscription
+renews until cancelled; cancellation preserves access to the end of the paid
+period, then Free applies without deleting or locking scripts. Lifetime includes
+future updates to these paid features in Quickque for Mac, not separate future products
+or services and not a perpetual support/OS-compatibility guarantee. Planned
+paid access is per person on their own Macs; personal/commercial use is allowed.
 
-  The seed is idempotent and refuses to alter live mode. It creates or
-  validates the real product and price through Stripe's API and uses inclusive
-  tax behavior. The provider product description deliberately identifies this
-  as a sandbox catalogue entry for the unreleased Mac app; it must not claim a
-  verified release.
+These website terms do not change the repository's MIT licence or remove the
+right to modify, build and redistribute that source. Root LICENSE is unchanged.
+A feature entitlement is distinct from source-code licensing. Existing MIT
+rights must not be described as revoked by a future commercial distribution.
 
-## Sandbox versus release gate
+## Obsidian research
 
-**Current state: sandbox-only.** There is no fulfilment or download path in
-this deployment. A successful test payment is only a payment-flow check and
-does not make the Mac app available.
+Reviewed official https://obsidian.md/pricing and https://obsidian.md/license
+on 2026-09-12, using a sub-agent as requested. Obsidian core is free. Its $25
+one-time Catalyst payment supports development and provides perks; it is not a
+lifetime unlock of paid application features. Sync/Publish subscriptions are
+separate services. Quickque adopts the free-core/optional-paid structure with
+its own feature unlock and original wording, not a copy of Obsidian's terms.
 
-Development and the published demo can expose hosted Stripe Checkout only when
-the connected runtime and validated catalogue are both in Stripe test mode and
-the appropriate trusted origin is configured. The published demo intentionally
-uses the same sandbox checkout and does not require live Stripe credentials.
-A successful test payment is reported explicitly as a test result; it never
-grants a licence or download.
+## Current payment boundary
 
-Live charges stay impossible until all of the following are true:
+Payments and paid activation are disabled. The public plan buttons say coming
+soon. The optional, explicitly labelled dummy checkout charges nothing,
+collects no billing/contact/payment information, and creates no subscription,
+order, receipt, licence, entitlement or download. No payment provider is called.
+There is no verified prebuilt Mac release currently offered by this website.
 
-1. A prebuilt Mac release exists and has been verified on Apple Silicon.
-2. `productionOrigin` is a confirmed HTTPS production origin.
-3. The release, product metadata, and live Stripe catalogue have been reviewed.
-4. The seller has completed Stripe account activation, business identity and
-   bank verification, and enabled the intended payment methods.
-5. The seller has confirmed applicable UK/international VAT treatment,
-   inclusive pricing/tax registration, refund/cancellation terms, support
-   contact, and Stripe dispute handling.
-6. A production webhook has been verified end to end without exposing secrets.
+Startup must not initialize the retained Stripe runtime, run migrations,
+register webhooks, sync a catalogue, or fetch provider credentials. Legacy
+commerce and webhook endpoints return HTTP 410. Existing inactive one-time
+Stripe code must not be treated as an implementation of the new monthly plan.
 
-Until then `liveEnabled` remains `false`, release status remains `unavailable`,
-and all environments reject live mode. Production may present the clearly
-labelled sandbox CTA, but it cannot accept a live charge or issue a licence or
-download.
+## Remaining implementation before sales
 
-## Payment data and operations
+Verify the native session timer on a Mac. Implement monthly/lifetime entitlement
+verification and expiry, and a
+way to manage/cancel subscriptions. Prepare real monthly and lifetime products,
+fulfilment, receipts, required tax disclosures and refund/cancellation handling.
+Agree the activation/offline behaviour and test it without ever sending scripts
+or microphone content to billing systems. Validate the Mac distribution and
+replace the dummy flow deliberately. None of this is accomplished by editing
+the website, and the page states that limitation explicitly.
 
-Stripe-hosted Checkout handles payment details. The website must not collect,
-log, or return card numbers, payment methods, customer email addresses, or
-other payment PII. Treat Stripe dashboard data and synced payment records as
-restricted payment data. Only a bound browser can query its checkout session;
-session IDs are not confirmation credentials.
+## Saved AI audio implementation
 
-For a real release, document the support/refund process before enabling live
-payments. Test successful, unpaid, expired, provider-failure, replay, and
-cross-browser session cases in Stripe test mode first. The result endpoint
-continues to return `downloadUrl: null` until an independently verified
-release and fulfilment flow are deliberately added.
+Chatterbox generation, cached playback and MP4 export are paid app features.
+The owner requested a temporary Settings → Debug → Licensed mode toggle.
+It is available in packaged test builds, defaults to Unlicensed, and persists
+on the Mac. Native generation, playback/export and Voice Follow use that setting.
+This deliberately simulates access; it is not payment or licence verification.
+Browser preview stores only its own simulated setting; native audio remains Mac-only.
+Performance edits queue Chatterbox AI Partner audio after saved changes; presentation
+audio is generated only by explicit request. Matching revisions are required for
+rehearsal and export. Exported MP4s remain user files after subscription expiry.
+See the app's `docs/SCRIPT_AUDIO.md` for implementation and Mac verification.
+
+Stripe is the selected future payment provider. The owner explicitly requested
+that checkout remain dummy for now; do not activate Stripe or issue paid licences.

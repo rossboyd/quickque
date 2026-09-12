@@ -11,6 +11,14 @@ interface FlowStatusPanelProps {
 export function FlowStatusPanel({ flow, onCancelMode, onOpenWizard }: FlowStatusPanelProps) {
   const warning = flow.warning ? <AudioDropWarning flow={flow} /> : null;
 
+  if (flow.status === 'limit-reached') {
+    return <div role="status" className="absolute inset-x-4 bottom-24 max-w-md mx-auto rounded-xl border border-border bg-card p-5 shadow-lg z-50">
+      <h3 className="font-semibold">This session’s free Voice Follow is complete</h3>
+      <p className="my-3 text-sm text-muted-foreground">You’ve used 30 seconds of active listening. Keep rehearsing or presenting in manual mode. Unlimited Voice Follow is included with £2.50/month or £25 lifetime; checkout is currently a demo.</p>
+      <button onClick={onCancelMode} className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground">Continue in manual mode</button>
+    </div>;
+  }
+
   if (flow.error && !['needs-model', 'unsupported', 'downloading'].includes(flow.status)) {
     return (
       <>

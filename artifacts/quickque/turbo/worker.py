@@ -1,4 +1,4 @@
-"""Bundled offline Chatterbox worker. JSON protocol; never writes dialogue/audio."""
+"""Bundled offline Chatterbox worker. JSON protocol; explicitly generated audio is persisted in the script cache."""
 import argparse
 import contextlib
 import hashlib
@@ -12,6 +12,7 @@ import socket
 import sys
 import tempfile
 import urllib.request
+import wave
 
 LOCK = json.loads(Path(__file__).with_name('model-lock.json').read_text())
 TOTAL_BYTES = sum(item['bytes'] for item in LOCK['files'])
@@ -181,32 +182,171 @@ def speak(directory, request):
     emit({'status': 'finished'})
 
 
+
+CACHE_VERSION = 'chatterbox-cache-v1:' + LOCK['revision']
+
+
+def validate_batch(request):
+    if not isinstance(request, dict) or not isinstance(request.get('entries'), list) or not 1 <= len(request['entries']) <= 2000:
+        raise SpeechFailure('SCRIPT_AUDIO_INVALID', 'Choose between 1 and 2000 spoken passages.')
+    if not isinstance(request.get('scriptId'), str) or not 1 <= len(request['scriptId']) <= 200:
+        raise SpeechFailure('SCRIPT_AUDIO_INVALID', 'Invalid script identity.')
+    for field in ('revision',):
+        if not isinstance(request.get(field), str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', request[field]):
+            raise SpeechFailure('SCRIPT_AUDIO_INVALID', 'Invalid script audio identity.')
+    ids = set()
+    total = 0
+    for entry in request['entries']:
+        validate_request(entry)
+        if not isinstance(entry.get('id'), str) or not 1 <= len(entry['id']) <= 200 or entry['id'] in ids:
+            raise SpeechFailure('SCRIPT_AUDIO_INVALID', 'Every passage needs a unique identifier.')
+        ids.add(entry['id'])
+        total += len(entry['text'].encode())
+    if total > 2_000_000:
+        raise SpeechFailure('SCRIPT_AUDIO_INVALID', 'This script is too large to generate in one batch.')
+    return request
+
+
+def entry_key(entry):
+    content = [CACHE_VERSION, entry['text'], entry['voiceId'], entry['rate']]
+    return hashlib.sha256(json.dumps(content, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+
+
+def wav_duration(path):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 128 * 1024 * 1024:
+        return None
+    try:
+        with wave.open(str(path), 'rb') as audio:
+            if audio.getnchannels() != 1 or audio.getsampwidth() != 2 or not 8000 <= audio.getframerate() <= 96000 or audio.getnframes() <= 0:
+                return None
+            audio.setpos(audio.getnframes() - 1)
+            if len(audio.readframes(1)) != 2:
+                return None
+            return audio.getnframes() / audio.getframerate()
+    except (OSError, EOFError, wave.Error):
+        return None
+
+
+def cache_status(root, request):
+    validate_batch(request)
+    folder = root / hashlib.sha256(request['scriptId'].encode()).hexdigest()
+    entries = []
+    for entry in request['entries']:
+        key = entry_key(entry)
+        duration = wav_duration(folder / (key + '.wav'))
+        entries.append({'id': entry['id'], 'key': key, 'durationSeconds': duration})
+    missing = sum(entry['durationSeconds'] is None for entry in entries)
+    return {'scriptId': request['scriptId'], 'revision': request['revision'], 'status': 'missing' if missing else 'ready', 'missing': missing, 'entries': entries}
+
+
+def atomic_json(path, value):
+    temporary = path.with_suffix('.json.partial')
+    with temporary.open('w') as output:
+        json.dump(value, output)
+        output.flush()
+        os.fsync(output.fileno())
+    temporary.replace(path)
+
+
+def render_batch(directory, entries, folder):
+    # Load the model once for every missing passage in this save, never during playback.
+    if not verify(directory, full=True):
+        raise SpeechFailure('SCENE_SPEECH_TURBO_UNAVAILABLE', 'Download Chatterbox before generating audio.')
+    os.environ.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1', PYTORCH_ENABLE_MPS_FALLBACK='0')
+    socket.create_connection = no_network
+    socket.socket.connect = no_network
+    socket.socket.connect_ex = no_network
+    with quiet_runtime():
+        import torch
+        from chatterbox.tts_turbo import ChatterboxTurboTTS, punc_norm
+        if not torch.backends.mps.is_available():
+            raise SpeechFailure('SCENE_SPEECH_TURBO_UNSUPPORTED', 'Chatterbox needs an Apple Silicon Mac with MPS available.')
+        model = ChatterboxTurboTTS.from_local(directory, device='mps')
+    for entry in entries:
+        target = folder / (entry_key(entry) + '.wav')
+        if wav_duration(target) is not None:
+            yield entry  # Repeated identical dialogue shares the first generated WAV.
+            continue
+        temporary = target.with_suffix('.wav.partial')
+        try:
+            with quiet_runtime(), torch.inference_mode(), wave.open(str(temporary), 'wb') as output:
+                output.setnchannels(1)
+                output.setsampwidth(2)
+                output.setframerate(model.sr)
+                total = 0
+                for line in validate_request(entry):
+                    if len(model.tokenizer(punc_norm(line), truncation=False)['input_ids']) > 128:
+                        raise SpeechFailure('SCENE_SPEECH_TEXT_TOO_LONG', 'Shorten this passage before generating audio.')
+                    audio = model.generate(line)  # Keep the official Perth watermark.
+                    if not 0 < audio.numel() <= model.sr * 30 or not bool(torch.isfinite(audio).all()):
+                        raise SpeechFailure('SCENE_SPEECH_TURBO_AUDIO', 'Could not generate clean audio. Retry this passage.')
+                    pcm = (audio.detach().cpu().flatten().clamp(-1, 1).numpy() * 32767).astype('<i2').tobytes()
+                    total += len(pcm)
+                    if total > 128 * 1024 * 1024:
+                        raise SpeechFailure('SCENE_SPEECH_TURBO_AUDIO', 'This passage is too long. Split it into shorter passages.')
+                    output.writeframes(pcm)
+            if wav_duration(temporary) is None:
+                raise SpeechFailure('SCENE_SPEECH_TURBO_AUDIO', 'Generated audio did not pass verification.')
+            with temporary.open('rb') as completed_audio:
+                os.fsync(completed_audio.fileno())
+            temporary.replace(target)
+            yield entry
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def generate_batch(directory, root, request, renderer=render_batch):
+    status = cache_status(root, request)
+    folder = root / hashlib.sha256(request['scriptId'].encode()).hexdigest()
+    if root.is_symlink() or folder.is_symlink():
+        raise SpeechFailure('SCRIPT_AUDIO_INVALID', 'Invalid script audio folder.')
+    folder.mkdir(parents=True, exist_ok=True)
+    missing = [entry for entry in request['entries'] if wav_duration(folder / (entry_key(entry) + '.wav')) is None]
+    completed = len(request['entries']) - len(missing)
+    for _ in renderer(directory, missing, folder) if missing else []:
+        completed += 1
+        emit({'status': 'generating', 'scriptId': request['scriptId'], 'revision': request['revision'], 'completed': completed, 'total': len(request['entries'])})
+    status = cache_status(root, request)
+    if status['missing']:
+        raise SpeechFailure('SCRIPT_AUDIO_INCOMPLETE', 'Some passages are missing. Generate audio again.')
+    # Only a complete revision becomes playable; interruption retains previous revision.
+    atomic_json(folder / 'manifest.json', status)
+    emit(status)
+    return status
+
 def main():
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
-    for name in ('status', 'install', 'speak', 'check-runtime'):
+    for name in ('status', 'install', 'speak', 'check-runtime', 'check-package', 'generate-batch', 'cache-status'):
         mode.add_argument('--' + name, action='store_true')
     parser.add_argument('--model-dir', type=Path, required=True)
+    parser.add_argument('--cache-dir', type=Path)
     args = parser.parse_args()
     if args.status:
         emit({'status': 'ready' if verify(args.model_dir) else 'not-installed', 'totalBytes': TOTAL_BYTES, 'voice': LOCK['voice']})
     elif args.install:
         install(args.model_dir)
-    elif args.check_runtime:
+    elif args.check_runtime or args.check_package:
         with quiet_runtime():
             import torch
             import sounddevice
             from chatterbox.tts_turbo import ChatterboxTurboTTS
             import perth
             watermarker = perth.PerthImplicitWatermarker()
-            if not torch.backends.mps.is_available():
+            if not args.check_package and not torch.backends.mps.is_available():
                 raise SpeechFailure('SCENE_SPEECH_TURBO_UNSUPPORTED', 'MPS is unavailable in the bundled runtime.')
-        emit({'status': 'runtime-ready'})
+        emit({'status': 'package-ready' if args.check_package else 'runtime-ready', 'mpsAvailable': torch.backends.mps.is_available()})
     else:
-        raw = sys.stdin.buffer.read(1024 * 1024 + 1)
-        if len(raw) > 1024 * 1024:
+        raw = sys.stdin.buffer.read(4 * 1024 * 1024 + 1)
+        if len(raw) > 4 * 1024 * 1024:
             raise SpeechFailure('SCENE_SPEECH_TEXT_TOO_LONG', 'This speech request is too large.')
-        speak(args.model_dir, json.loads(raw))
+        request = json.loads(raw)
+        if args.generate_batch:
+            generate_batch(args.model_dir, args.cache_dir, request)
+        elif args.cache_status:
+            emit(cache_status(args.cache_dir, request))
+        else:
+            speak(args.model_dir, request)
 
 
 if __name__ == '__main__':

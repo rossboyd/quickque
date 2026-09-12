@@ -1,0 +1,44 @@
+name: Mac package verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      QUICKQUE_PRICE_GBP: "25"
+      # Hosted VMs validate packaged imports; physical Metal/audio tests remain separate.
+      QUICKQUE_BUILD_PACKAGE_ONLY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v6
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - run: pnpm install --frozen-lockfile
+      - name: Check application source
+        run: pnpm --filter @workspace/quickque typecheck
+      - name: Build and verify unsigned Mac package
+        run: pnpm --filter @workspace/quickque desktop:build
+      - name: Keep internal test installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: quickque-mac-test-installer
+          path: artifacts/quickque/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 7

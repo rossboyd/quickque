@@ -71,5 +71,73 @@ class WorkerTests(unittest.TestCase):
             self.assertFalse(worker.verify(directory))
 
 
+class CacheTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.request = {'scriptId': 'script-1', 'revision': 'revision-1', 'entries': [
+            {'id': 'turn-1', 'text': 'Hello world.', 'voiceId': worker.VOICE_ID, 'rate': 1},
+            {'id': 'turn-2', 'text': 'Goodbye world.', 'voiceId': worker.VOICE_ID, 'rate': 1}]}
+        self.calls = []
+
+    def render(self, directory, entries, folder):
+        import wave
+        self.calls.append([entry['id'] for entry in entries])
+        for entry in entries:
+            with wave.open(str(folder / (worker.entry_key(entry) + '.wav')), 'wb') as output:
+                output.setnchannels(1)
+                output.setsampwidth(2)
+                output.setframerate(24000)
+                output.writeframes(b'\0\0' * 2400)
+            yield entry
+
+    def generate(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            return worker.generate_batch(self.root / 'model', self.root, self.request, renderer=self.render)
+
+    def test_cache_reuses_audio_and_only_regenerates_changed_dialogue(self):
+        self.assertEqual(self.generate()['status'], 'ready')
+        self.generate()
+        self.assertEqual(len(self.calls), 1)
+        self.request['revision'] = 'revision-2'
+        self.request['entries'][1]['text'] = 'A revised goodbye.'
+        self.generate()
+        self.assertEqual(self.calls[-1], ['turn-2'])
+        manifest = json.loads((self.root / hashlib.sha256(b'script-1').hexdigest() / 'manifest.json').read_text())
+        self.assertEqual(manifest['revision'], 'revision-2')
+        self.assertAlmostEqual(manifest['entries'][0]['durationSeconds'], .1)
+
+    def test_interrupted_generation_does_not_commit_partial_revision(self):
+        self.generate()
+        self.request['revision'] = 'revision-2'
+        self.request['entries'][1]['text'] = 'Revised.'
+        def fail(*args):
+            raise KeyboardInterrupt()
+            yield
+        with self.assertRaises(KeyboardInterrupt):
+            worker.generate_batch(self.root / 'model', self.root, self.request, renderer=fail)
+        manifest = json.loads((self.root / hashlib.sha256(b'script-1').hexdigest() / 'manifest.json').read_text())
+        self.assertEqual(manifest['revision'], 'revision-1')
+
+    def test_corrupt_wav_is_regenerated(self):
+        self.generate()
+        path = self.root / hashlib.sha256(b'script-1').hexdigest() / (worker.entry_key(self.request['entries'][0]) + '.wav')
+        path.write_bytes(b'not audio')
+        self.assertEqual(worker.cache_status(self.root, self.request)['missing'], 1)
+        self.generate()
+        self.assertEqual(self.calls[-1], ['turn-1'])
+
+    def test_path_traversal_and_duplicate_ids_rejected(self):
+        for identity in ['../secret', '/tmp', 'a/b', '']:
+            self.request['revision'] = identity
+            with self.assertRaises(worker.SpeechFailure):
+                worker.cache_status(self.root, self.request)
+        self.request['revision'] = 'revision-1'
+        self.request['entries'][1]['id'] = 'turn-1'
+        with self.assertRaises(worker.SpeechFailure):
+            worker.cache_status(self.root, self.request)
+
+
 if __name__ == '__main__':
     unittest.main()

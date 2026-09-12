@@ -38,7 +38,6 @@ for (const width of [390, 1280]) {
     await page.getByRole('switch', { name: 'Partner audio' }).click();
     await page.getByRole('button', { name: 'Close scene partner cast' }).click();
     await page.reload();
-    if (width < 768) await page.getByRole('button', { name: 'Audition rehearsal', exact: true }).click();
     await expect(page.getByRole('combobox', { name: 'Script type' })).toHaveValue('performance');
     await expect(page.getByRole('button', { name: 'Rehearse', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Scene Partner setup', exact: true }).click();
@@ -91,7 +90,6 @@ for (const width of [390, 1280]) {
     await page.getByRole('group', { name: 'Colour presets for Jamie', exact: true }).getByRole('button', { name: 'Amber', exact: true }).click();
     await page.getByRole('button', { name: 'Close scene partner cast' }).click();
     await page.reload();
-    if (width < 768) await page.getByRole('button', { name: 'The return', exact: true }).click();
     await page.getByRole('button', { name: 'Scene Partner setup', exact: true }).click();
     await expect(page.getByRole('group', { name: 'Who performs Alex?', exact: true }).getByRole('button', { name: 'In Person', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByLabel('Colour for Alex', { exact: true })).toHaveValue('#14b8a6');
@@ -163,7 +161,7 @@ test('AI Partner speaking hands back to In Person and cues remain visible in com
     localStorage.setItem('quickque_scripts', JSON.stringify([script]));
     localStorage.setItem('quickque_active_script', script.id);
   });
-  await page.reload();
+  await page.goto('/edit');
   await page.getByRole('button', { name: 'Rehearse', exact: true }).click();
   const now = page.getByLabel('Speaking now', { exact: true });
   const next = page.getByLabel('Up next', { exact: true });
@@ -273,7 +271,7 @@ test('free Chatterbox voice can be assigned and persists without enabling browse
   await page.getByRole('button', { name: 'Add Character', exact: true }).click();
   await page.getByRole('combobox', { name: 'Voice Engine', exact: true }).selectOption('turbo');
   await expect(page.getByText('Chatterbox Turbo · Free local voice', { exact: true })).toBeVisible();
-  await expect(page.getByText('Open the Quickque Mac app to download and use Chatterbox.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Installation is available in the Quickque Mac app.' })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Voice Selection', exact: true })).toHaveValue('chatterbox-turbo:default-en');
   await page.getByRole('button', { name: 'Preview voice for New Character', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'SCENE_SPEECH_TURBO_UNSUPPORTED' })).toBeVisible();

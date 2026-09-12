@@ -43,7 +43,8 @@
     ],
     "externalBin": [
       "binaries/quickque-flow",
-      "binaries/quickque-speech"
+      "binaries/quickque-speech",
+      "binaries/quickque-audio-export"
     ],
     "targets": [
       "app",

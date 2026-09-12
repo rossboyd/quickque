@@ -11,27 +11,24 @@ export function LicensePage({ context }: { context?: any }) {
 
   return (
     <div className="max-w-3xl mx-auto w-full px-4 py-16">
-      <Meta title="License" description="Quickque open source license" context={context} />
+      <Meta title="License" description="Quickque Free, Monthly and Lifetime terms, and the MIT source licence" context={context} />
       <div className="mb-12 border-b border-[var(--border)] pb-8">
-        <h1 className="text-4xl font-semibold mb-4">License</h1>
-        <p className="text-xl text-[var(--text-muted)]">Quickque is distributed under the MIT License.</p>
+        <h1 className="text-4xl font-semibold mb-4">Licence information</h1>
+        <p className="text-xl text-[var(--text-muted)]">Free to use. Optional unlimited Voice Follow and saved AI audio. MIT-licensed source.</p>
       </div>
 
-      <p className="mb-8 leading-relaxed">
-        You can use Quickque-owned code and documentation for personal or commercial work,
-        modify it, and redistribute it. Keep the copyright and permission notice with
-        copies or substantial portions. There is no warranty. This summary does not
-        replace the license below.
-      </p>
-      <p className="mb-8 leading-relaxed">
-        The source remains MIT-licensed and available to build yourself. A proposed optional
-        packaged Mac distribution is {config?.commerce?.displayPrice} as a one-time purchase; a purchased version is
-        intended to remain usable forever, while future major upgrades may cost extra. Live
-        purchases are gated because there is no verified release or native Mac validation yet,
-        and a sandbox checkout creates no license or download. If enabled, checkout sends
-        billing and payment data to <a href="https://stripe.com/privacy" target="_blank" rel="noreferrer" className="text-[var(--accent)] underline">Stripe</a>,
-        not Quickque scripts or audio; see the <a href="https://github.com/rossboyd/quickque/blob/main/artifacts/quickque-website/docs/COMMERCE.md" target="_blank" rel="noreferrer" className="text-[var(--accent)] underline">commerce runbook</a>.
-      </p>
+      <section className="mb-10 space-y-5 leading-relaxed">
+        <h2 className="text-2xl font-semibold">Planned Quickque app access</h2>
+        <p>Quickque’s Free plan is for personal and commercial use. It includes the script workspace, editing, manual and timed playback, Scene Partner with system voices, and 30 seconds of active Voice Follow per presentation or rehearsal session. Pausing and resuming does not restart the allowance.</p>
+        <p><strong>Monthly:</strong> {config?.commerce?.monthlyDisplayPrice || '£2.50'} per month for unlimited Voice Follow and saved AI audio features while the subscription is active. Renewal can be cancelled at any time. Access continues through the paid period, then returns to Free. Cancellation does not delete or lock your scripts.</p>
+        <p><strong>Lifetime:</strong> {config?.commerce?.displayPrice} once for permanent access to unlimited Voice Follow and saved AI audio features in Quickque for Mac, with no recurring charge. Future updates to these features are included. Separate future products or services are not included. This is a permanent feature entitlement, not a promise of perpetual support or compatibility with every future operating system.</p>
+        <p>Both paid plans include cached Chatterbox AI Partner dialogue, optional presentation narration, local listening and audio-only MP4 export. Presentation narration uses the default AI voice and requires an explicit Generate audio action. Your exported files remain yours to keep after a subscription ends; app generation, playback and export require active paid access. JSON script backups do not contain generated audio.</p>
+        <p>A paid entitlement is for one person on their own Macs. You retain ownership of your scripts and other content. No separate commercial-use subscription is required.</p>
+        <p className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 text-sm"><strong>Not live yet:</strong> these are the planned product terms. Paid activation and subscription management are deferred. Current test builds use a Licensed / Unlicensed toggle in Settings → Debug; it does not verify a purchase. The native Free Voice Follow timer is implemented and awaiting Mac verification. Payments are disabled and no verified prebuilt Mac release is currently available. The dummy checkout creates no purchase, subscription, licence, entitlement or download.</p>
+        <h2 className="pt-3 text-2xl font-semibold">The source licence is separate</h2>
+        <p>Quickque-owned source code and documentation remain under MIT. You can use them for personal or commercial work, modify them, build your own version and redistribute them, subject to the copyright and permission notice below. Buying a paid feature entitlement is optional and does not replace, revoke or restrict these source rights. The official app’s planned Free allowance does not impose a new restriction on MIT-licensed source.</p>
+        <p>This summary does not replace the MIT licence below. Third-party code and models retain their own terms.</p>
+      </section>
       <div className="bg-[var(--surface)] p-8 rounded-lg border border-[var(--border)] overflow-x-auto">
         <pre className="text-sm text-[var(--foreground)] whitespace-pre-wrap font-mono leading-relaxed">
           {license}
@@ -47,24 +44,8 @@ export function LicensePage({ context }: { context?: any }) {
           <a href={`${config?.basePath}fonts/OFL-Manrope.txt`} className="text-[var(--accent)] underline">Manrope</a>{' '}
           font, retain their own SIL Open Font License 1.1 notices.
         </p>
-        <p className="mb-4">
-          Third-party components and models are distributed under their respective licenses.
-          FluidAudio is Apache-2.0 licensed. Silero VAD is MIT licensed. Please see the complete{' '}
-          <a href="https://github.com/rossboyd/quickque/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noreferrer" className="text-[var(--accent)] hover:underline">
-            THIRD_PARTY_NOTICES.md
-          </a>{' '}
-          and the native{' '}
-          <a href="https://github.com/rossboyd/quickque/blob/main/artifacts/quickque/native/THIRD_PARTY_NOTICES.txt" target="_blank" rel="noreferrer" className="text-[var(--accent)] hover:underline">
-            THIRD_PARTY_NOTICES.txt
-          </a>{' '}
-          for exact revisions and license links.
-        </p>
-        <p>
-          <strong>Note:</strong> The optional Parakeet speech recognition weights downloaded by Flow are separately licensed under the 
-          <a href="https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/" target="_blank" rel="noreferrer" className="text-[var(--accent)] hover:underline ml-1">
-            NVIDIA Open Model License
-          </a>, not MIT or Apache-2.0.
-        </p>
+        <p className="mb-4">Chatterbox and Perth retain Resemble AI’s MIT notices. Their default model and voice download is separate from Quickque’s paid app feature entitlement. Apple speech features use macOS system frameworks and available system assets.</p>
+        <p>See the <a href="https://github.com/rossboyd/quickque/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noreferrer" className="text-[var(--accent)] underline">third-party notices</a> and the <a href="https://github.com/rossboyd/quickque/tree/main/artifacts/quickque/turbo" target="_blank" rel="noreferrer" className="text-[var(--accent)] underline">Chatterbox runtime licences</a> for component-specific information.</p>
       </div>
     </div>
   );

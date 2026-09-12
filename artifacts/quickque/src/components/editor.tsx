@@ -1,3 +1,4 @@
+import { ScriptAudioPanel } from './script-audio-panel';
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { calculateWordCount, estimateTime, formatTime, generateId } from '@/lib/utils';
 import { Play, Plus, Trash, ChevronUp, ChevronDown, ChevronLeft, Users, PanelLeft, SplitSquareVertical } from 'lucide-react';
@@ -188,7 +189,7 @@ export function Editor({
                 <ChevronLeft className="w-5 h-5" />
               </button>
               <button type="button" onClick={onToggleLibrary} aria-label={libraryVisible ? 'Hide library' : 'Show library'} aria-expanded={libraryVisible} className="hidden md:inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"><PanelLeft className="h-4 w-4" /></button>
-              <span className="hidden sm:inline text-sm text-muted-foreground">Workspace <span className="mx-2 opacity-40">/</span></span>
+              <button type="button" aria-label="Back to workspace" onClick={onCloseMobile} className="hidden sm:inline text-sm text-muted-foreground hover:text-foreground">Workspace <span className="mx-2 opacity-40">/</span></button>
               <span className="truncate text-sm font-medium">{script.title || 'Untitled script'}</span>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -252,6 +253,7 @@ export function Editor({
                 {isActorEnabled && setupIssues.length > 0 && <button onClick={() => setPreflightIssues(setupIssues)} className="font-medium text-primary hover:underline">Review setup</button>}
               </div>
             </div>}
+            <ScriptAudioPanel key={script.id} script={script} />
             {script.sections.map((section, idx) => (
               <div key={section.id} style={isPerformance ? { borderLeftWidth: 4, borderLeftColor: getCharacterColor(script.actor?.characters.find(character => character.id === section.characterId)) } : undefined} className="document-section group relative border-b border-border/70 pb-6 focus-within:border-primary/40 transition-colors">
                 <div className="flex flex-col min-w-0">

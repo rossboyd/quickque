@@ -21,4 +21,10 @@ uv pip sync --python .venv/bin/python requirements-macos.lock
   --add-data 'PERTH-LICENSE.txt:.' worker.py
 # Fail the app build if frozen imports, watermark assets or MPS are broken.
 # This does not download models, synthesize or record any audio.
-./dist/quickque-turbo/quickque-turbo --check-runtime --model-dir /nonexistent/quickque-build-check
+if [ "${QUICKQUE_BUILD_PACKAGE_ONLY:-0}" = 1 ]; then
+  # Hosted Mac VMs do not expose Metal. This validates frozen imports only;
+  # a physical Apple Silicon Mac must still pass --check-runtime and playback.
+  ./dist/quickque-turbo/quickque-turbo --check-package --model-dir /nonexistent/quickque-build-check
+else
+  ./dist/quickque-turbo/quickque-turbo --check-runtime --model-dir /nonexistent/quickque-build-check
+fi

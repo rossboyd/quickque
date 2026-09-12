@@ -97,24 +97,19 @@ never silently overwrite, elevate privileges, or disable Gatekeeper. Native
 build/signing/device verification belongs to the desktop release work, not the
 website checks.
 
-## Optional packaged Mac distribution
+## Free, Monthly and Lifetime plans
 
-Set the shared `QUICKQUE_PRICE_GBP` environment variable to the GBP price, for
-example `77`. The server validates up to two decimal places and converts it to
-Stripe's integer pence amount. The proposed packaged Mac app uses that
-environment price as a one-time purchase, separate from
-the free MIT-licensed source and its available source builds. A purchased
-version is intended to remain usable forever; future major upgrades may cost
-extra. No verified release or native Mac validation is available yet, so live
-purchases remain gated. Development and the published demo may use the
-connected Stripe test-mode catalogue; a sandbox checkout creates no licence or
-download and never requires live Stripe credentials.
+The planned Free app includes 30 seconds of active Voice Follow per session.
+Monthly unlocks unlimited Voice Follow and saved AI audio for £2.50/month; Lifetime is a permanent
+unlock including future updates to these paid features in Quickque for Mac. The current
+lifetime price is £25, controlled by `QUICKQUE_PRICE_GBP`. Monthly is configured
+as 250 pence in `config/site.json`.
 
-When checkout is enabled, billing and payment data goes to
-[Stripe's privacy policy](https://stripe.com/privacy). The website backend
-processes payment references and guest-checkout verification; it does not
-receive Quickque scripts or audio. See the
-[Stripe commerce runbook](docs/COMMERCE.md) for the current checkout boundary.
+The MIT source licence is unchanged. Paid activation and subscription management
+are not implemented. The native Free session timer awaits Mac verification. Payments remain disabled. The optional
+dummy checkout makes no payment-provider calls and issues no entitlement or
+download. No verified prebuilt release is available. See the
+[commerce runbook](docs/COMMERCE.md) for confirmed plans and remaining work.
 
 ## Public origin and indexing
 

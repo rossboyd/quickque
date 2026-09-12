@@ -65,13 +65,20 @@ if (!process.argv.includes('--content-only')) {
       assert.equal(cloneBlocks.length, 1, 'Installation must have one complete clone/build sequence');
     }
     if (route === 'pricing/') {
-      assert.ok(html.includes(config.commerce.displayPrice), 'Pricing is server rendered');
-      assert.match(html, /major upgrades/i, 'Forever licence excludes promised free major upgrades');
+      assert.match(html, /£2\.50/, 'Monthly pricing is server rendered');
+      assert.match(html, /30 seconds per session/, 'Free Voice Follow allowance is explicit');
+      assert.match(html, /Lifetime/, 'Lifetime plan is available for comparison');
+      assert.match(html, /Separate future products or services are not included/i, 'Lifetime entitlement has a clear scope');
+      assert.match(html, /not implemented in the current app/i, 'Planned entitlement is not presented as enforced');
       assert.match(html, /MIT/, 'Paid package does not replace the MIT source licence');
+      assert.match(html, /dummy checkout/i, 'Pricing clearly labels the temporary dummy flow');
+      assert.doesNotMatch(html, /Stripe|card number|payment method/i, 'Pricing does not request or advertise provider payment');
     }
     if (route === 'checkout/result/') {
-      assert.match(html, /noindex/, 'Private payment results must never be indexed');
-      assert.doesNotMatch(html, /rel="canonical"/, 'Payment results must not have public canonicals');
+      assert.match(html, /noindex/, 'Private dummy results must never be indexed');
+      assert.doesNotMatch(html, /rel="canonical"/, 'Dummy results must not have public canonicals');
+      assert.match(html, /No payment was made/, 'Dummy completion is explicitly non-payment');
+      assert.doesNotMatch(html, /Download Quickque|Payment confirmed/, 'Dummy completion grants nothing');
     }
     pages.set(new URL(route, base).pathname.replace(/\/$/, ''), html);
   }

@@ -26,4 +26,4 @@ channel = "stable-25_05"
 
 [userenv.shared]
 CODEX_HOME = "/home/runner/workspace/.codex"
-QUICKQUE_PRICE_GBP = "77"
+QUICKQUE_PRICE_GBP = "25"

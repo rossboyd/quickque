@@ -30,7 +30,9 @@
     "test:resume": "node --test src/lib/reader-resume-position.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "turbo:build": "sh scripts/build-turbo-runtime.sh",
-    "turbo:test": "python3 -m unittest discover -s turbo -p 'test_*.py'"
+    "turbo:test": "python3 -m unittest discover -s turbo -p 'test_*.py'",
+    "test:workspace": "playwright test tests/workspace-home.spec.ts --reporter=line",
+    "test:script-audio": "node --test src/lib/script-audio-model.test.ts && playwright test tests/script-audio.spec.ts --reporter=line"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

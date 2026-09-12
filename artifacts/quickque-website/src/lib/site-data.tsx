@@ -26,6 +26,11 @@ export interface SiteConfig {
     updates: string;
     sourceLicence: string;
     liveEnabled: boolean;
+    monthlyAmount: number;
+    monthlyDisplayPrice: string;
+    freeVoiceFollowSeconds: number;
+    voiceFollowLimitScope: string;
+    entitlementsLive: boolean;
   };
   release: {
     status: string;

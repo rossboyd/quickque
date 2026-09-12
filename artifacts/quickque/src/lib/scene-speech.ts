@@ -80,7 +80,7 @@ export function voiceFailureMessage(error: unknown): string {
     SCENE_SPEECH_VOICE_UNAVAILABLE: 'This character’s saved voice is unavailable. Refresh the list and choose an installed voice. If necessary, install one in System Settings → Accessibility → Read & Speak.',
     SCENE_SPEECH_TIMEOUT: 'The selected voice did not finish speaking. Try another installed voice. If all voices fail, restart Quickque.',
     SCENE_SPEECH_STOP_FAILED: 'Quickque could not confirm speech stopped. Restart Quickque before trying again.',
-    SCENE_SPEECH_TURBO_UNAVAILABLE: 'Download Chatterbox in Scene Partner setup, then preview Chatterbox Default.',
+    SCENE_SPEECH_TURBO_UNAVAILABLE: 'Download Chatterbox in Settings or Scene Partner setup, then preview Chatterbox Default.',
   };
   return advice[failure.code]
     ? `${advice[failure.code]} (${failure.code})`

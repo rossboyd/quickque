@@ -1,3 +1,4 @@
+import { SavedScriptAudio } from '@/components/saved-script-audio';
 import { useEffect, type ReactNode } from 'react';
 import { FlowDebugOverlay } from '@/components/flow-debug-overlay';
 import { WelcomeWizard } from '@/components/welcome-wizard';
@@ -27,6 +28,8 @@ function Router() {
     <RoutedErrorBoundary>
       <Switch>
         <Route path="/" component={Library} />
+        <Route path="/edit" component={Library} />
+        <Route path="/trash" component={Library} />
         <Route path="/read/:id">{params => <Reader key={params.id} />}</Route>
         <Route component={NotFound} />
       </Switch>
@@ -45,6 +48,7 @@ function App() {
   }, []);
   return (
     <StoreProvider>
+      <SavedScriptAudio />
       <div className="contents" data-quickque-ready>
         <TooltipProvider>
           <WouterRouter base={routerBase}>

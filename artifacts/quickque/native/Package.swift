@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .executable(name: "quickque-flow", targets: ["QuickqueFlow"]),
         .executable(name: "quickque-speech", targets: ["QuickqueSpeech"]),
+        .executable(name: "quickque-audio-export", targets: ["QuickqueAudioExport"]),
     ],
     targets: [
         .executableTarget(
@@ -17,6 +18,8 @@ let package = Package(
             name: "QuickqueSpeech",
             dependencies: []
         ),
+        .executableTarget(name: "QuickqueAudioExport", dependencies: []),
+        .testTarget(name: "QuickqueAudioExportTests", dependencies: ["QuickqueAudioExport"]),
         .testTarget(name: "QuickqueFlowTests", dependencies: ["QuickqueFlow"])
     ]
 )

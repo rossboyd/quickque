@@ -3,13 +3,16 @@
 The user requested open-source Chatterbox with a free voice for an M2 / 24 GB
 Mac. The integrated engine uses **Chatterbox Default**, the default `conds.pt`
 from ResembleAI/chatterbox-turbo. The upstream model metadata and Chatterbox
-source are MIT. No paid service, key, account, or user Python is required.
+source are MIT. No external paid voice service, key, account, or user Python is required.
+Saved script audio and MP4 export are Quickque paid features; the model itself remains free.
 
 ## User flow
 
 Scene Partner setup → expand an AI Partner character → Voice Engine →
 **Chatterbox Turbo (Free · Local)** → **Download Chatterbox · 2.99 GB**.
-When installed, preview **Chatterbox Default**, close setup, and rehearse.
+When installed, preview **Chatterbox Default**. Paid users generate saved audio
+before rehearsing; the performance editor schedules generation after saved edits.
+Presentations offer an optional **Generate audio** action.
 Each character keeps its assignment and colour. This version offers one
 English voice shared by all Chatterbox characters, at its natural rate (1×).
 Existing system-voice assignments are preserved until the user changes them.
@@ -21,7 +24,10 @@ reference audio is downloaded. Incomplete downloads cannot become installed
 models; staging is recovered on the next attempt after a hard cancellation.
 Normal synthesis has offline environment flags and Python network connections
 blocked. Scripts enter the worker on stdin, never as arguments or files.
-Audio is played directly from RAM. The official Perth watermark is retained.
+Voice previews play directly from RAM. Explicit script generation persists PCM16 WAV
+audio beneath `script-audio-v1/<sha256(scriptId)>` in Quickque app data, linked by script ID.
+The official Perth watermark is retained. Script JSON backups do not include these
+audio files; MP4 export creates a portable listening copy.
 
 ## Desktop build
 
@@ -63,14 +69,30 @@ and browser tests cover setup validation and persistence of the assignment.
 
 The existing native child-process stop barrier covers Turbo as well as system
 speech: stop kills/reaps the worker before microphone following can resume.
-The worker is onedir (no extraction subprocess). Within a turn it prepares and
-plays one bounded passage at a time. Output bounds are checked after generation,
-so peak model memory still needs measurement. It does not cache whole scripts.
+The worker is onedir (no extraction subprocess). Saved audio generation verifies
+and loads the model once per batch, generates missing passages and atomically
+commits a complete revision. Keys include model/cache version, text, voice and
+rate; unchanged passages are reused. Cancellation retains the prior complete
+revision, and partial WAVs never qualify as playable. Rehearsal preloads saved
+WAVs into Web Audio buffers before Start; it never falls back to live synthesis
+on a missing Chatterbox passage. Model memory still needs Mac measurement.
 
-This first integration loads/verifies the model for each turn. Cold starts and
-gaps between passages may be noticeable; no low-latency or peak-memory guarantee
-has been measured. A warm resident worker is a future optimisation, requiring
-its own cancellation and invalidation tests.
+Generation/read/export use the temporary Settings → Debug → Licensed mode
+toggle, including packaged test builds. It defaults to Unlicensed and persists
+on the Mac. This owner-requested simulation replaces the environment override;
+it does not verify a licence or payment. Removing audio never requires payment.
+Old content revisions remain available for reuse until **Remove audio** is used.
+
+MP4 export concatenates the committed revision in script order and invokes the
+bundled `quickque-audio-export` Swift helper, which encodes AAC in a real audio-only
+MP4 container. It uses a native save dialog and atomic final rename; temporary
+WAV/MP4 files are removed on success, cancellation or failure. Export and generation
+are serialized. An operating-system hard kill can leave temporary files.
+
+Python cache tests additionally cover reuse, changed passages, corrupt WAVs,
+interrupted revisions and invalid identities. Native unit tests cover WAV parsing
+and cache identity validation. Linux typechecking with Tauri stubs is only a
+structural check, not a substitute for the native Mac build.
 
 **Not verified on this Linux development host:** frozen arm64 build, actual
 speaker output, no-network operation at OS level, Mac cancellation latency,

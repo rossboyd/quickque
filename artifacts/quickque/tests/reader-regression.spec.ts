@@ -40,7 +40,7 @@ async function seed(page: Page) {
     localStorage.setItem('quickque-flow-setup-done', 'true');
     localStorage.removeItem('quickque_presentation_defaults');
   }, { scripts, legacySettings });
-  await page.reload();
+  await page.goto('/edit');
 }
 
 async function settleLayout(page: Page) {

@@ -9,7 +9,7 @@ import { DocumentImportDialog } from '@/components/document-import-dialog';
 import { getVisibleScripts, downloadFile } from '@/lib/library-management';
 import { getScriptPurpose, getPerformanceSummary, getSceneSetupIssues } from '@/lib/script-purpose';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { SortMode } from '@/lib/types';
+import { SortMode, Script } from '@/lib/types';
 import { Editor } from '@/components/editor';
 import { RecoveryUI } from '@/components/recovery-ui';
 import { BrandMark } from '@/components/brand-mark';
@@ -18,7 +18,7 @@ import {
   Trash2, Copy, FileText, 
   Trash, AlertTriangle, MonitorPlay,
   FileUp, ArrowUpDown, Edit2, Code, ArrowUp, ArrowDown, ChevronDown,
-  RotateCcw, X,
+  RotateCcw, X, Play, Home,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -73,7 +73,8 @@ export default function Library() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [droppedError, setDroppedError] = useState<string | null>(null);
-  const [_, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const isHome = location !== '/edit';
   const [showWizard, setShowWizard] = useState(false);
 
   useEffect(() => {
@@ -97,10 +98,18 @@ export default function Library() {
 
   const setupFlow = useLocalFlow({ tokens: setupTokens, enabled: showWizard });
 
-  const [viewMode, setViewMode] = useState<'library' | 'trash'>('library');
+  const [viewMode, setViewMode] = useState<'library' | 'trash'>(location === '/trash' ? 'trash' : 'library');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{type: 'trash' | 'restore' | 'permanent', ids: string[]} | null>(null);
-  const [isMobileEditorOpen, setIsMobileEditorOpen] = useState(false);
+  const isMobileEditorOpen = !isHome;
+  const setIsMobileEditorOpen = (open: boolean) => setLocation(open ? '/edit' : '/');
+  const [homeIssues, setHomeIssues] = useState<{ script: Script; messages: string[] } | null>(null);
+  const [checkingScript, setCheckingScript] = useState<string | null>(null);
+  const playGeneration = useRef(0);
+  const latestScripts = useRef(scripts);
+  latestScripts.current = scripts;
+  useEffect(() => () => { playGeneration.current += 1; }, []);
+  useEffect(() => { setViewMode(location === '/trash' ? 'trash' : 'library'); }, [location]);
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -189,6 +198,25 @@ export default function Library() {
     setIsMobileEditorOpen(true);
   };
 
+  const playFromHome = async (script: Script) => {
+    const generation = ++playGeneration.current;
+    setCheckingScript(script.id);
+    try {
+      let issues = getSceneSetupIssues(script);
+      const needsVoices = script.actor?.enabled && script.sections.some(section => section.characterId && !script.actor!.myRoleIds.includes(section.characterId));
+      if (!issues.length && getScriptPurpose(script) === 'performance' && needsVoices) {
+        const voices = await listLocalVoices();
+        issues = getSceneSetupIssues(script, new Set(voices.map(voice => voice.id)));
+      }
+      if (generation !== playGeneration.current || latestScripts.current.find(item => item.id === script.id) !== script) return;
+      if (issues.length) { setHomeIssues({ script, messages: issues.map(issue => issue.message) }); return; }
+      setActiveScriptId(script.id);
+      setLocation(`/read/${script.id}`);
+    } catch {
+      if (generation === playGeneration.current) setHomeIssues({ script, messages: ['Could not check local voices. Open the editor and check Scene Partner setup.'] });
+    } finally { if (generation === playGeneration.current) setCheckingScript(null); }
+  };
+
   const handlePresent = () => {
     if (activeScriptId) {
       setLocation(`/read/${activeScriptId}`);
@@ -226,6 +254,45 @@ export default function Library() {
       }
     }
     handleDragEnd();
+  };
+
+  const scriptMenu = (script: Script, idx: number) => {
+    const isActive = script.id === activeScriptId;
+    const isDraggable = sortMode === 'custom' && !search && viewMode === 'library';
+    return (<ScriptMenu
+                      viewMode={viewMode}
+                      isActive={isActive}
+                      scriptTitle={script.title || 'Untitled Script'}
+                      onRename={() => setEditingId(script.id)}
+                      onDuplicate={() => handleDuplicate(script.id)}
+                      onDelete={() => setConfirmAction({ type: 'trash', ids: [script.id] })}
+                      onRestore={() => setConfirmAction({ type: 'restore', ids: [script.id] })}
+                      onPermanentDelete={() => setConfirmAction({ type: 'permanent', ids: [script.id] })}
+                      onExportJSON={() => {
+                        const data = exportScripts([script.id], 'json');
+                        downloadFile(`${script.title || 'script'}.json`, data);
+                      }}
+                      onExportTXT={() => {
+                        const data = exportScripts([script.id], 'txt');
+                        downloadFile(`${script.title || 'script'}.txt`, data, 'text/plain');
+                      }}
+                      canMoveUp={isDraggable && idx > 0}
+                      canMoveDown={isDraggable && idx < visibleItems.length - 1}
+                      onMoveUp={() => {
+                        const newOrder = [...visibleItems.map(s => s.id)];
+                        const temp = newOrder[idx];
+                        newOrder[idx] = newOrder[idx - 1];
+                        newOrder[idx - 1] = temp;
+                        reorderScripts(newOrder);
+                      }}
+                      onMoveDown={() => {
+                        const newOrder = [...visibleItems.map(s => s.id)];
+                        const temp = newOrder[idx];
+                        newOrder[idx] = newOrder[idx + 1];
+                        newOrder[idx + 1] = temp;
+                        reorderScripts(newOrder);
+                      }}
+                    />);
   };
 
   if (recoveryRequired) {
@@ -280,8 +347,8 @@ export default function Library() {
         {/* SIDEBAR */}
         <div className={cn(
           "workspace-library flex-shrink-0 border-r border-border bg-sidebar flex-col z-10 relative",
-          libraryVisible ? "w-full md:w-[264px]" : "w-full md:!hidden",
-          isMobileEditorOpen ? "hidden md:flex" : "flex"
+          isHome ? "md:w-[224px]" : libraryVisible ? "w-full md:w-[264px]" : "w-full md:!hidden",
+          isHome || isMobileEditorOpen ? "hidden md:flex" : "flex"
         )}>
         <div className="p-4 pb-4 space-y-6">
           <div className="flex items-center justify-between">
@@ -291,7 +358,7 @@ export default function Library() {
             </h1>
 
           </div>
-          <div className="flex flex-col gap-1.5">
+          {!isHome && <div className="flex flex-col gap-1.5">
             <button
               onClick={handleCreate}
               className="flex items-center justify-center gap-2 rounded-lg bg-sidebar-accent px-3 py-2.5 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
@@ -309,6 +376,7 @@ export default function Library() {
             </button>
           </div>
 
+          }
           <nav aria-label="Script library" className="flex flex-col gap-1">
             <button
               className={cn(
@@ -316,10 +384,10 @@ export default function Library() {
                 viewMode === 'library' ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               aria-current={viewMode === 'library' ? 'page' : undefined}
-              onClick={() => { setViewMode('library'); setSearch(''); }}
+              onClick={() => { setViewMode('library'); setSearch(''); setLocation('/'); }}
             >
-              <FileText className="h-4 w-4" />
-              Library
+              <Home className="h-4 w-4" />
+              Workspace
               <span className="text-xs opacity-60">{scripts.length}</span>
             </button>
             <button
@@ -328,7 +396,7 @@ export default function Library() {
                 viewMode === 'trash' ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               aria-current={viewMode === 'trash' ? 'page' : undefined}
-              onClick={() => { setViewMode('trash'); setSearch(''); }}
+              onClick={() => { setViewMode('trash'); setSearch(''); setLocation('/trash'); }}
             >
               <Trash2 className="h-4 w-4" />
               Trash
@@ -336,7 +404,7 @@ export default function Library() {
             </button>
           </nav>
 
-          <div className="space-y-3">
+          <div className={isHome ? "hidden" : "space-y-3"}>
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input 
@@ -386,7 +454,7 @@ export default function Library() {
           </div>
         </div>
 
-        {sortMode === 'custom' && viewMode === 'library' && (
+        {!isHome && sortMode === 'custom' && viewMode === 'library' && (
           <div className="px-5 pb-3 text-[11px] leading-relaxed text-muted-foreground">
             {search ? (
               "Clear search to reorder scripts."
@@ -396,8 +464,8 @@ export default function Library() {
           </div>
         )}
 
-        {viewMode === 'trash' && <p className="px-5 pb-3 text-[11px] text-muted-foreground">Kept on this device until you permanently delete them.</p>}
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        {!isHome && viewMode === 'trash' && <p className="px-5 pb-3 text-[11px] text-muted-foreground">Kept on this device until you permanently delete them.</p>}
+        <div className={isHome ? "hidden" : "flex-1 overflow-y-auto p-2 space-y-1"}>
           {visibleItems.length === 0 ? (
             <div className="p-4 text-center text-muted-foreground text-sm mt-4">
               {search ? 'No scripts found' : viewMode === 'trash' ? (
@@ -468,40 +536,7 @@ export default function Library() {
                   </div>
                   
                   <div className="relative flex-shrink-0">
-                    <ScriptMenu 
-                      viewMode={viewMode}
-                      isActive={isActive}
-                      scriptTitle={script.title || 'Untitled Script'}
-                      onRename={() => setEditingId(script.id)}
-                      onDuplicate={() => handleDuplicate(script.id)}
-                      onDelete={() => setConfirmAction({ type: 'trash', ids: [script.id] })}
-                      onRestore={() => setConfirmAction({ type: 'restore', ids: [script.id] })}
-                      onPermanentDelete={() => setConfirmAction({ type: 'permanent', ids: [script.id] })}
-                      onExportJSON={() => {
-                        const data = exportScripts([script.id], 'json');
-                        downloadFile(`${script.title || 'script'}.json`, data);
-                      }}
-                      onExportTXT={() => {
-                        const data = exportScripts([script.id], 'txt');
-                        downloadFile(`${script.title || 'script'}.txt`, data, 'text/plain');
-                      }}
-                      canMoveUp={isDraggable && idx > 0}
-                      canMoveDown={isDraggable && idx < visibleItems.length - 1}
-                      onMoveUp={() => {
-                        const newOrder = [...visibleItems.map(s => s.id)];
-                        const temp = newOrder[idx];
-                        newOrder[idx] = newOrder[idx - 1];
-                        newOrder[idx - 1] = temp;
-                        reorderScripts(newOrder);
-                      }}
-                      onMoveDown={() => {
-                        const newOrder = [...visibleItems.map(s => s.id)];
-                        const temp = newOrder[idx];
-                        newOrder[idx] = newOrder[idx + 1];
-                        newOrder[idx + 1] = temp;
-                        reorderScripts(newOrder);
-                      }}
-                    />
+                    {scriptMenu(script, idx)}
                   </div>
                 </div>
               );
@@ -517,7 +552,7 @@ export default function Library() {
       {/* EDITOR */}
       <div className={cn(
         "flex-1 flex-col min-w-0 bg-background relative overflow-hidden",
-        isMobileEditorOpen ? "flex" : "hidden md:flex"
+        "flex"
       )}>
         <Dialog open={showCreate} onOpenChange={open => { if (!creatingSample) setShowCreate(open); }}>
         <DialogContent className="sm:max-w-lg">
@@ -560,7 +595,7 @@ export default function Library() {
           }}
         />
 
-        {showBanner && (
+        {!isHome && showBanner && (
           <div className="flex-shrink-0 p-4 bg-primary/10 border-b border-primary/20 z-40 flex items-center justify-between animate-in slide-in-from-top-2">
             <div>
               <h3 className="font-semibold text-primary">Welcome to Quickque!</h3>
@@ -576,7 +611,50 @@ export default function Library() {
           </div>
         )}
 
-        {activeScript ? (
+        {isHome ? <main className="workspace-home flex-1 overflow-y-auto bg-card px-5 py-6 md:px-10 md:py-9">
+          <div className="mx-auto max-w-6xl space-y-8">
+            <header className="flex flex-wrap items-start justify-between gap-4">
+              <div><p className="mb-1 text-xs text-muted-foreground">Quickque workspace</p><h1 className="text-2xl font-semibold tracking-tight">{viewMode === 'trash' ? 'Trash' : 'Your scripts'}</h1><p className="mt-2 text-sm text-muted-foreground">{viewMode === 'trash' ? 'Restore scripts or permanently remove them.' : 'Pick a script to edit, present or rehearse.'}</p></div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => setIsImportOpen(true)} aria-label="Import Document" className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">Import document</button>
+                <button type="button" onClick={handleCreate} className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"><Plus className="h-4 w-4" />New script</button>
+              </div>
+            </header>
+            <div className="flex flex-wrap gap-3 md:hidden">
+              <button type="button" onClick={() => setLocation('/')} className="text-sm text-primary">Workspace</button>
+              <button type="button" onClick={() => setLocation('/trash')} className="text-sm text-muted-foreground">Trash ({trash.length})</button>
+              <SettingsDialog />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <label className="relative w-full sm:max-w-sm"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><input aria-label="Search scripts" placeholder="Search scripts…" value={search} onChange={event => setSearch(event.target.value)} className="w-full rounded-md border border-border bg-transparent py-2 pl-9 pr-3 text-sm focus-visible:outline-primary" /></label>
+              {viewMode === 'library' && <select aria-label="Sort scripts" value={sortMode} onChange={event => setSortMode(event.target.value as SortMode)} className="rounded-md border border-border bg-card px-3 py-2 text-sm">{Object.entries(SORT_LABELS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>}
+              <span className="text-xs text-muted-foreground">{visibleItems.length} {visibleItems.length === 1 ? 'script' : 'scripts'}</span>
+            </div>
+            {visibleItems.length === 0 ? <div className="rounded-lg border border-dashed border-border py-16 text-center"><FileText className="mx-auto mb-4 h-8 w-8 text-muted-foreground" /><p className="font-medium">{search ? 'No scripts found' : viewMode === 'trash' ? 'Trash is empty' : 'A fresh workspace'}</p><p className="mt-2 text-sm text-muted-foreground">{search ? 'Try a different search.' : viewMode === 'trash' ? 'Deleted scripts will appear here.' : 'Create a script or import a document to begin.'}</p></div> :
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              {visibleItems.map((script, idx) => {
+                const performance = getScriptPurpose(script) === 'performance';
+                const words = script.sections.reduce((sum, section) => sum + calculateWordCount(section.content), 0);
+                const preview = script.sections.map(section => section.content).filter(Boolean).slice(0, 3).join(' ');
+                return <article key={script.id} aria-label={script.title || 'Untitled Script'} className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
+                  <div className="h-36 overflow-hidden border-b border-border bg-muted/45 p-5"><p className="line-clamp-4 text-sm leading-7 text-muted-foreground">{preview.slice(0, 700) || 'Your next script starts here.'}</p></div>
+                  <div className="flex-1 space-y-3 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      {editingId === script.id ? <input autoFocus aria-label="Rename script" maxLength={200} defaultValue={script.title} className="min-w-0 flex-1 rounded border border-border bg-transparent px-2 py-1" onBlur={event => { const title = event.target.value.trim(); if (title) updateScript(script.id, { title }); setEditingId(null); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') setEditingId(null); }} /> : <h2 className="min-w-0 pt-1 font-semibold"><button type="button" className="line-clamp-2 text-left hover:text-primary focus-visible:outline-primary" onClick={() => viewMode === 'library' && handleOpenScript(script.id)}>{script.title || 'Untitled Script'}</button></h2>}
+                      {scriptMenu(script, idx)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{performance ? 'Performance' : 'Presentation'} · {words} words · {formatTime(estimateTime(words))}</p>
+                    <p className="text-xs text-muted-foreground">Updated {new Date(script.updatedAt).toLocaleDateString()}</p>
+                  </div>
+                  {viewMode === 'library' && <div className="grid grid-cols-2 gap-2 px-4 pb-4">
+                    <button type="button" aria-label={`Edit ${script.title || 'Untitled Script'}`} onClick={() => handleOpenScript(script.id)} className="flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"><Edit2 className="h-3.5 w-3.5" />Edit</button>
+                    <button type="button" disabled={checkingScript !== null} aria-label={`${performance ? 'Rehearse' : 'Present'} ${script.title || 'Untitled Script'}`} onClick={() => void playFromHome(script)} className="flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"><Play className="h-3.5 w-3.5" />{checkingScript === script.id ? 'Checking…' : performance ? 'Rehearse' : 'Present'}</button>
+                  </div>}
+                </article>;
+              })}
+            </div>}
+          </div>
+        </main> : activeScript ? (
           <Editor 
             script={activeScript} 
             settings={settings}
@@ -605,6 +683,13 @@ export default function Library() {
       </div>
       
       </div> {/* End layout flex */}
+
+      <Dialog open={homeIssues !== null} onOpenChange={open => { if (!open) setHomeIssues(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>Finish setting up your performance</DialogTitle><DialogDescription>These items need attention before partner playback.</DialogDescription></DialogHeader>
+          <ul className="space-y-2 text-sm">{homeIssues?.messages.map((message, index) => <li key={index}>{message}</li>)}</ul>
+          <button type="button" onClick={() => { if (homeIssues) handleOpenScript(homeIssues.script.id); setHomeIssues(null); }} className="rounded-md bg-primary px-4 py-2 text-primary-foreground">Edit script setup</button>
+        </DialogContent>
+      </Dialog>
 
       {/* Action Dialog */}
       <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>

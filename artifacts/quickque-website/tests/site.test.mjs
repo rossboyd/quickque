@@ -73,15 +73,17 @@ test('every public page renders on the server with unique production metadata', 
   }
 });
 
-test('checkout results are a valid private route even with a production origin', () => {
+test('dummy checkout completion is explicit, private, and never claims payment', () => {
   const publicData = { ...data, config: { ...data.config, productionOrigin: 'https://example.org' } };
   const context = { isProduction: true };
-  const result = render('/website/checkout/result?session_id=not-proof-of-payment', context, publicData);
+  const result = render('/website/checkout/result?demo=complete', context, publicData);
   assert.notEqual(context.status, 404);
   assert.equal(result.metadata.noindex, true);
   assert.equal(result.metadata.canonical, undefined);
-  assert.match(result.html, /Checking your checkout/);
+  assert.match(result.html, /Dummy checkout complete/);
+  assert.match(result.html, /No payment was made/);
   assert.doesNotMatch(result.html, /Payment confirmed/);
+  assert.doesNotMatch(result.html, /Download Quickque/);
 });
 
 test('preview remains noindex even with a production origin configured', () => {

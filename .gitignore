@@ -49,6 +49,11 @@ Thumbs.db
 .cache/
 .local/
 
+# Codex transient runtime state
+/.codex/*_cache.json
+/.codex/*.sqlite-shm
+/.codex/*.sqlite-wal
+
 # Browser regression artifacts
 **/test-results/
 **/playwright-report/

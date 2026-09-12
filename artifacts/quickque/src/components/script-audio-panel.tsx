@@ -1,0 +1,128 @@
+import { useDebugLicence } from '@/lib/debug-licence';
+import { useEffect, useRef, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import type { Script } from '@/lib/types';
+import { getScriptPurpose } from '@/lib/script-purpose';
+import { audioRequest, scriptAudioEntries, DEFAULT_AUDIO_VOICE } from '@/lib/script-audio-model';
+import { AUDIO_CHANGED, AUDIO_JOB_CHANGED, audioJobs, audioEntitlement, audioStatus, generateAudio, cancelAudioGeneration, deleteAudio, exportAudio, PreparedScriptAudio } from '@/lib/script-audio';
+import { isDesktop } from '@/lib/desktop';
+
+export function ScriptAudioPanel({ script }: { script: Script }) {
+  const licence = useDebugLicence();
+  const [paid, setPaid] = useState(false);
+  const [message, setMessage] = useState('Checking saved audio…');
+  const [ready, setReady] = useState(false);
+  const [operation, setOperation] = useState<'generate' | 'listen' | 'export' | 'delete' | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const busy = operation !== null || generating;
+  const operationId = useRef(0);
+  const revisionRef = useRef('');
+  const [playing, setPlaying] = useState(false);
+  const player = useRef<PreparedScriptAudio | null>(null);
+  const aborter = useRef<AbortController | null>(null);
+  const version = JSON.stringify([script.id, scriptAudioEntries(script), licence.licensed]);
+  const current = useRef(version);
+  current.current = version;
+  const performance = getScriptPurpose(script) === 'performance';
+
+  useEffect(() => {
+    let live = true;
+    setReady(false);
+    setGenerating(false);
+    setOperation(null);
+    operationId.current++;
+    setPlaying(false);
+    let refreshId = 0;
+    const refresh = async () => {
+      const id = ++refreshId;
+      try {
+        const access = await audioEntitlement();
+        if (!live || id !== refreshId) return;
+        setPaid(access.paid);
+        if (!access.paid) { setMessage(access.reason || 'Enable Licensed mode in Settings → Debug to try saved AI audio.'); return; }
+        const request = await audioRequest(script);
+        if (!live || id !== refreshId) return;
+        revisionRef.current = request.revision;
+        if (!request.entries.length) { setMessage(performance ? 'Assign a Chatterbox voice to an AI Partner to prepare their lines.' : 'Add script text to generate audio.'); return; }
+        const status = await audioStatus(request);
+        if (!live || id !== refreshId) return;
+        setReady(status.status === 'ready');
+        const job = audioJobs.get(script.id);
+        if (job?.revision === request.revision && job.running) { setGenerating(true); setMessage('Generating audio on this Mac…'); return; }
+        setGenerating(false);
+        if (job?.revision === request.revision && job.error) { setMessage(job.error); return; }
+        setMessage(status.status === 'ready' ? 'Audio saved on this Mac. Ready to listen.' : 'No matching audio saved. Generate audio for this version.');
+      } catch (error) { if (live && id === refreshId) setMessage(String(error)); }
+    };
+    void refresh();
+    window.addEventListener(AUDIO_CHANGED, refresh);
+    window.addEventListener(AUDIO_JOB_CHANGED, refresh);
+    let unlisten: (() => void) | undefined;
+    if (isDesktop()) void listen<{scriptId: string; revision: string; completed: number; total: number}>('script-audio-progress', event => {
+      if (live && event.payload.scriptId === script.id && event.payload.revision === revisionRef.current) setMessage(`Generating audio: ${event.payload.completed} of ${event.payload.total} lines…`);
+    }).then(stop => { if (!live) stop(); else unlisten = stop; }).catch(() => {});
+    return () => {
+      live = false;
+      operationId.current++;
+      unlisten?.();
+      window.removeEventListener(AUDIO_CHANGED, refresh);
+      window.removeEventListener(AUDIO_JOB_CHANGED, refresh);
+      aborter.current?.abort();
+      void player.current?.dispose();
+      player.current = null;
+    };
+  }, [version]);
+
+  const run = async (kind: 'generate' | 'listen' | 'export' | 'delete', action: (valid: () => boolean) => Promise<void>) => {
+    const expected = version;
+    const id = ++operationId.current;
+    const valid = () => current.current === expected && operationId.current === id;
+    setOperation(kind);
+    try { await action(valid); } catch (error) { if (valid()) setMessage(String(error)); }
+    finally { if (valid()) setOperation(null); }
+  };
+  const generate = () => run('generate', async valid => {
+    setMessage('Generating audio on this Mac…');
+    const request = await audioRequest(script);
+    if (!valid()) return;
+    revisionRef.current = request.revision;
+    await generateAudio(request);
+  });
+  const play = () => run('listen', async valid => {
+    const request = await audioRequest(script);
+    if (!valid()) return;
+    const prepared = new PreparedScriptAudio(request);
+    player.current = prepared;
+    const controller = new AbortController();
+    aborter.current = controller;
+    setPlaying(true);
+    setMessage('Preparing saved audio…');
+    try {
+      await prepared.prepare();
+      if (!valid()) return;
+      setMessage('Playing saved audio…');
+      for (const entry of request.entries) await prepared.speak(entry.text, { engine: 'turbo', voiceId: entry.voiceId || DEFAULT_AUDIO_VOICE, rate: entry.rate }, controller.signal);
+      if (valid()) setMessage('Finished listening.');
+    } finally {
+      await prepared.dispose();
+      if (valid()) setPlaying(false);
+    }
+  });
+  const button = 'rounded-md border border-border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50';
+  return <details className="rounded-lg border border-border px-4 py-3">
+    <summary className="cursor-pointer text-sm font-medium">AI rehearsal audio <span className="ml-2 text-xs text-muted-foreground">Paid feature</span></summary>
+    <div className="mt-3 space-y-3 text-sm">
+      <p className="text-muted-foreground">{performance ? 'Chatterbox AI Partner lines are prepared after saved edits. In Person lines and notes are left silent.' : 'Optional: generate a spoken version of this script to learn it by listening. Uses Chatterbox Default, not a clone of your voice.'}</p>
+      <p className="text-xs text-muted-foreground">Included with £2.50/month or £25 lifetime. Audio is stored with this script’s ID on this Mac; JSON backups do not include audio.</p>
+      <p role="status" className="text-xs">{message}</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={button} disabled={!paid || busy || !scriptAudioEntries(script).length} onClick={generate}>Generate audio</button>
+        <button type="button" className={button} disabled={!paid || !ready || busy} onClick={play}>Listen to script</button>
+        <button type="button" className={button} disabled={!paid || !ready || busy} onClick={() => run('export', async valid => { const request = await audioRequest(script); if (!valid()) return; const path = await exportAudio(request); if (path && valid()) setMessage('MP4 exported.'); })}>Export MP4</button>
+        {playing && <button type="button" className={button} onClick={() => { aborter.current?.abort(); }}>Stop listening</button>}
+        {(operation === 'generate' || generating) && <button type="button" className={button} onClick={() => { void cancelAudioGeneration().catch(error => setMessage(String(error))); }}>Cancel generation</button>}
+        {isDesktop() && <button type="button" className={button} disabled={busy} onClick={() => run('delete', () => deleteAudio(script.id))}>Remove saved audio</button>}
+      </div>
+    </div>
+  </details>;
+}

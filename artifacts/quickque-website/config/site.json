@@ -3,15 +3,21 @@
   "branch": "main",
   "basePath": "/website/",
   "productionOrigin": null,
-  "guideVersion": "Current source · 0.1.0",
+  "guideVersion": "Current source \u00b7 0.1.0",
   "commerce": {
     "name": "Quickque for Mac",
     "currency": "gbp",
-    "billing": "one-time",
-    "licence": "Use the purchased version forever.",
-    "updates": "Future major upgrades may cost extra.",
+    "billing": "free, monthly or lifetime",
+    "licence": "Lifetime access to unlimited Voice Follow and saved AI audio features in Quickque for Mac.",
+    "updates": "Lifetime includes future updates to these paid Quickque for Mac features; separate products and services are not included.",
     "sourceLicence": "MIT",
-    "liveEnabled": false
+    "liveEnabled": false,
+    "mode": "dummy",
+    "notice": "Temporary dummy checkout only. No payment, licence, or download is created.",
+    "monthlyAmount": 250,
+    "freeVoiceFollowSeconds": 30,
+    "voiceFollowLimitScope": "per session",
+    "entitlementsLive": false
   },
   "sourceCommand": "git clone https://github.com/rossboyd/quickque.git\ncd quickque\npnpm install --frozen-lockfile\npnpm --filter @workspace/quickque desktop:build",
   "release": {

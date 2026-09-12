@@ -13,10 +13,13 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager};
 mod remote;
 mod turbo;
+mod script_audio;
+mod debug_licence;
 use remote::{RemoteInfo, RemoteService, RemoteSnapshot, RemoteStatus};
 
 mod local_library;
 mod flow_protocol;
+mod voice_allowance;
 mod scene_speech_state;
 use scene_speech_state::{
     terminate_scene_speech_child, SceneSpeechProcess, SceneSpeechState,
@@ -27,12 +30,15 @@ use scene_speech_state::{
 struct FlowCommand {
     action: String,
     generation: u64,
+    #[serde(default)]
+    session_id: Option<String>,
 }
 
 const MAXIMUM_STDERR_BYTES: usize = 8192;
 static NEXT_SCENE_SPEECH_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 #[derive(Default)]
 struct ProcessState {
+    allowance: voice_allowance::VoiceAllowance,
     generation: u64,
     child: Option<Child>,
     stdin: Option<ChildStdin>,
@@ -64,6 +70,7 @@ impl FlowState {
         if generation <= process.generation {
             return Ok((false, None));
         }
+        process.allowance.pause(std::time::Instant::now());
         let previous = process
             .child
             .take()
@@ -746,6 +753,9 @@ fn spawn_helper(
         state.stderr = stderr;
     }
 
+    if command.action == "start" {
+        monitor_voice_allowance(app.clone(), Arc::clone(&process), command_generation, child_id);
+    }
     std::thread::spawn(move || {
         const MAXIMUM_EVENT_BYTES: usize = 1024 * 1024;
         let mut reader = BufReader::new(stdout);
@@ -884,12 +894,21 @@ fn spawn_helper(
                     let _ = app.emit("quickque:flow", event);
                 }
             } else if event_generation == Some(command_generation) {
+                if event_type == Some("status") {
+                    if let Ok(mut state) = process.lock() {
+                        if state.generation == command_generation && state.child.as_ref().map(Child::id) == Some(child_id) {
+                            if event["status"] == "listening" { state.allowance.start(std::time::Instant::now()); }
+                            else { state.allowance.pause(std::time::Instant::now()); }
+                        }
+                    }
+                }
                 let _ = app.emit("quickque:flow", event);
             }
         }
 
         let exited = process.lock().ok().and_then(|mut state| {
             if state.child.as_ref().map(Child::id) == Some(child_id) {
+                state.allowance.pause(std::time::Instant::now());
                 Some((
                     state.generation,
                     state.child.take(),
@@ -957,6 +976,47 @@ fn spawn_helper(
     Ok(())
 }
 
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn monitor_voice_allowance(app: AppHandle, process: Arc<Mutex<ProcessState>>, generation: u64, child_id: u32) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        let expired = match process.lock() {
+            Ok(state) if state.generation == generation && state.child.as_ref().map(Child::id) == Some(child_id) =>
+                state.allowance.running() && state.allowance.expired(std::time::Instant::now()),
+            _ => return,
+        };
+        if !expired { continue; }
+        let state = app.state::<AppState>();
+        let Ok(_guard) = state.flow.command_lock.lock() else { return; };
+        let previous = {
+            let Ok(mut current) = process.lock() else { return; };
+            if current.generation != generation || current.child.as_ref().map(Child::id) != Some(child_id) { return; }
+            if !current.allowance.expired(std::time::Instant::now()) { continue; }
+            current.allowance.pause(std::time::Instant::now());
+            current.child.take().map(|child| (child, current.stdin.take(), current.stderr.take()))
+        };
+        match state.flow.reap(previous) {
+            Ok(()) => { let _ = app.emit("quickque:flow", status_event(generation, "limit-reached", Some("Your 30 seconds of free Voice Follow for this session are used. Continue in manual mode."))); }
+            Err(error) => { let _ = app.emit("quickque:flow", status_event(generation, "error", Some(&error))); }
+        }
+        return;
+    });
+}
+
+#[tauri::command]
+fn debug_licence_get() -> bool { debug_licence::licensed() }
+
+#[tauri::command]
+fn debug_licence_set(app: AppHandle, state: tauri::State<'_, AppState>, licensed: bool) -> Result<bool, String> {
+    let _guard = state.flow.command_lock.lock().map_err(|_| "Voice Follow state unavailable.")?;
+    let mut process = state.flow.process.lock().map_err(|_| "Voice allowance unavailable.")?;
+    debug_licence::save(&app, licensed)?;
+    process.allowance.set_unlimited(licensed);
+    drop(process);
+    if !licensed { let _ = script_audio::cancel(&app.state::<script_audio::AudioState>()); }
+    Ok(licensed)
+}
+
 #[tauri::command]
 fn flow_command(
     app: AppHandle,
@@ -977,6 +1037,16 @@ fn flow_command(
         diagnostic_event(command.generation, "rust_command_received"),
     );
     state.flow.reap(previous)?;
+    if command.action == "start" {
+        let mut process = state.flow.process.lock().map_err(|_| "Voice allowance unavailable.")?;
+        let session = command.session_id.as_deref().unwrap_or("legacy-reader");
+        if session.is_empty() || session.len() > 200 { return Err("Invalid reader session.".into()); }
+        process.allowance.session(session, script_audio::paid(), std::time::Instant::now());
+        if process.allowance.expired(std::time::Instant::now()) {
+            let _ = app.emit("quickque:flow", status_event(command.generation, "limit-reached", Some("Your 30 seconds of free Voice Follow for this session are used. Continue in manual mode.")));
+            return Ok(());
+        }
+    }
 
     #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
     {
@@ -1225,9 +1295,20 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .manage(turbo::InstallState::default())
+        .manage(script_audio::AudioState::default())
         .manage(local_library::LocalLibraryState::default())
+        .setup(|app| { debug_licence::load(app.handle()); Ok(()) })
         .invoke_handler(tauri::generate_handler![
+            debug_licence_get,
+            debug_licence_set,
             flow_command,
+            script_audio::script_audio_entitlement,
+            script_audio::script_audio_status,
+            script_audio::script_audio_generate,
+            script_audio::script_audio_cancel,
+            script_audio::script_audio_read,
+            script_audio::script_audio_export,
+            script_audio::script_audio_delete,
             turbo::turbo_status,
             turbo::turbo_install,
             turbo::turbo_cancel_install,
@@ -1258,6 +1339,7 @@ pub fn run() {
             let state = handle.state::<AppState>();
             state.flow.shutdown();
             let _ = state.scene_speech.stop();
+            let _ = script_audio::cancel(&handle.state::<script_audio::AudioState>());
             let _ = turbo::cancel(&handle.state::<turbo::InstallState>());
             state.remote.stop();
         }

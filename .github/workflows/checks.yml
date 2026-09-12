@@ -10,6 +10,8 @@ permissions:
 jobs:
   web:
     runs-on: ubuntu-latest
+    env:
+      QUICKQUE_PRICE_GBP: "25"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -21,6 +23,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck
+      - run: rustc --test artifacts/quickque/src-tauri/src/voice_allowance.rs -o /tmp/voice-allowance-tests && /tmp/voice-allowance-tests
       - run: pnpm --filter @workspace/quickque test:flow
       - run: pnpm --filter @workspace/quickque test:remote
       - run: pnpm --filter @workspace/quickque test:document-import

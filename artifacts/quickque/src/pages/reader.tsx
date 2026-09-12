@@ -281,6 +281,7 @@ export default function Reader() {
     ? characters.map(character => character.id)
     : sceneMyRoleIds;
   const scene = useScenePartner({
+    script: script ?? undefined,
     enabled: sceneEnabled,
     turns: sceneTurns,
     myRoleIds: effectiveSceneMyRoleIds,
@@ -432,7 +433,7 @@ export default function Reader() {
     if (sceneEnabled || readMode !== 'flow') return;
     if (flow.status !== 'listening' && playback.state.phase === 'playing') playback.suspendForPreparation();
     if (flow.status === 'listening' && playback.state.phase === 'starting') playback.activate();
-    if (['error', 'silence-stopped', 'paused', 'stopped', 'unsupported', 'needs-model', 'ready', 'downloading'].includes(flow.status) &&
+    if (['error', 'silence-stopped', 'paused', 'stopped', 'unsupported', 'needs-model', 'ready', 'downloading', 'limit-reached'].includes(flow.status) &&
         ['starting', 'playing'].includes(playback.state.phase)) playback.pause();
     if (flow.status === 'listening' && tokens.length > 0 && flow.anchor >= tokens.length) completePlayback();
   }, [sceneEnabled, flow.status, flow.anchor, readMode, tokens.length, playback, completePlayback]);
@@ -1709,7 +1710,9 @@ export default function Reader() {
                                     Resume Flow
                                   </button>
                                 </>
-                              : `Flow for your turn: ${flow.error ?? flow.status}.`}
+                              : flow.status === 'limit-reached'
+                                ? 'Your 30 seconds of free Voice Follow for this session are used. Continue with Next for your turns.'
+                                : `Flow for your turn: ${flow.error ?? flow.status}.`}
                         </p>
                       )}
                       {scene.message && (
