@@ -1,0 +1,24 @@
+{
+  "repository": "https://github.com/rossboyd/quickque",
+  "branch": "main",
+  "basePath": "/website/",
+  "productionOrigin": null,
+  "guideVersion": "Current source · 0.1.0",
+  "commerce": {
+    "name": "Quickque for Mac",
+    "amount": 7700,
+    "currency": "gbp",
+    "displayPrice": "£77",
+    "billing": "one-time",
+    "licence": "Use the purchased version forever.",
+    "updates": "Future major upgrades may cost extra.",
+    "sourceLicence": "MIT",
+    "liveEnabled": false
+  },
+  "sourceCommand": "git clone https://github.com/rossboyd/quickque.git\ncd quickque\npnpm install --frozen-lockfile\npnpm --filter @workspace/quickque desktop:build",
+  "release": {
+    "status": "unavailable",
+    "checkedAt": "2026-09-12",
+    "reason": "No verified prebuilt release is available. Mac installer and physical-device verification remain outstanding."
+  }
+}

@@ -4,3 +4,5 @@
 - [Flow diagnostic evidence](flow-diagnostic-evidence.md) — a frontend timeout does not prove a model-check stall; distinguish bridge, helper startup, input receipt, and model execution.
 - [pnpm build approvals](pnpm-build-approvals.md) — use the narrow allowBuilds map across pnpm 10.26+ and 11; legacy approval settings were removed in 11.
 - [Native library compatibility](native-library-compatibility.md) — reconcile chosen-folder scripts with browser metadata; recovery must block queued autosaves.
+- [React SSR router compatibility](react-ssr-router.md) — Wouter's memory-location hook can fail React 19 SSR despite passing typechecks; verify actual HTML responses.
+- [Stripe bootstrap compatibility](stripe-bootstrap-compatibility.md) — credential aliases, awaited catalogue sync, and managed webhook secret selection differ from generic templates.

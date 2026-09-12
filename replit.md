@@ -57,3 +57,6 @@ The requested product name is Quickque. The user wants a lightweight personal Ma
 ## Pointers
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- The separate public website lives in `artifacts/quickque-website` at `/website/`; it must not move the app or access its local storage.
+- Website authoring, source-only release readiness, indexing configuration, and verification commands are documented in `artifacts/quickque-website/README.md`.
+- Quickque-owned code and docs use the root MIT license. Third-party/model terms remain separate; see `THIRD_PARTY_NOTICES.md`.

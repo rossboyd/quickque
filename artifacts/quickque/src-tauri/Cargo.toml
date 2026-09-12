@@ -3,6 +3,7 @@ name = "quickque"
 version = "0.1.0"
 description = "Quickque desktop wrapper"
 authors = ["Quickque"]
+license = "MIT"
 edition = "2021"
 
 [lib]
