@@ -37,3 +37,14 @@ element whose client height determines those spacers.
 **Why:** In short overlay windows the padding can exceed the available height,
 so measuring and recalculating padding becomes a self-referential resize loop.
 This escaped arithmetic unit tests and appeared only in the 360 × 260 DOM test.
+
+Do not use Flow token counts or a final inline span's leading edge to decide
+where manual reading ends. Measure the trailing edge of the rendered section.
+
+**Why:** Manual copy can be scrollable without speech tokens (emoji or
+punctuation), and one inline text span can wrap across many lines. A trailing
+section may also contain only its visible heading. Token-based endpoints or
+leading-edge-plus-one-line estimates silently mark these scripts complete early.
+
+**How to apply:** Include wrapped non-token copy and title-only final sections
+when checking completion or remaining-distance calculations, in both mirrors.

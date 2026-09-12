@@ -27,7 +27,7 @@ function Router() {
     <RoutedErrorBoundary>
       <Switch>
         <Route path="/" component={Library} />
-        <Route path="/read/:id" component={Reader} />
+        <Route path="/read/:id">{params => <Reader key={params.id} />}</Route>
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>

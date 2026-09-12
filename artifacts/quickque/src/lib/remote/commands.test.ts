@@ -32,6 +32,17 @@ describe('Command Reducer', () => {
     );
   });
 
+  it('cancels countdown and pending capture through every existing toggle source', () => {
+    for (const command of [{ action: 'playPause' }, { type: 'TogglePlay' }, { detail: 'toggle' }]) {
+      for (const phase of ['countdown', 'starting']) {
+        assert.deepEqual(resolveCommandEffect(command, { ...baseContext, playbackPhase: phase }),
+          { type: 'setPlaying', playing: false });
+        assert.deepEqual(resolveCommandEffect(command, { ...baseContext, readMode: 'flow', playbackPhase: phase }),
+          { type: 'flowPause' });
+      }
+    }
+  });
+
   it('starts and pauses in flow mode', () => {
     const flowContext = { ...baseContext, readMode: 'flow' as const };
     

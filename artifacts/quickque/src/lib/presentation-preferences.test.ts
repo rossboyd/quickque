@@ -18,6 +18,11 @@ test('presentation normalization bounds fields and preserves a valid fallback', 
   const value = normalizePresentation({
     fontSize: 121,
     speed: 0,
+    countdownSeconds: 31,
+    targetDurationSeconds: 86_401,
+    showTiming: 'yes',
+    hideControlsWhilePlaying: 'no',
+    pauseOnManualScroll: 'yes',
     backgroundOpacity: -1,
     fontFamily: 'untrusted',
     textColor: '#a1b2c3',
@@ -33,6 +38,11 @@ test('presentation normalization bounds fields and preserves a valid fallback', 
   }, fallback);
   assert.equal(value.fontSize, 60);
   assert.equal(value.speed, fallback.speed);
+  assert.equal(value.countdownSeconds, DEFAULT_PRESENTATION.countdownSeconds);
+  assert.equal(value.targetDurationSeconds, DEFAULT_PRESENTATION.targetDurationSeconds);
+  assert.equal(value.showTiming, DEFAULT_PRESENTATION.showTiming);
+  assert.equal(value.hideControlsWhilePlaying, DEFAULT_PRESENTATION.hideControlsWhilePlaying);
+  assert.equal(value.pauseOnManualScroll, DEFAULT_PRESENTATION.pauseOnManualScroll);
   assert.equal(value.backgroundOpacity, fallback.backgroundOpacity);
   assert.equal(value.fontFamily, fallback.fontFamily);
   assert.equal(value.textColor, '#A1B2C3');
@@ -49,6 +59,27 @@ test('presentation normalization bounds fields and preserves a valid fallback', 
   assert.equal(isValidPresentation({ ...value, cuePosition: 81 }), false);
   assert.equal(normalizePresentation({ speed: 150 }).speed, 150);
   assert.equal(normalizePresentation({ speed: 151 }).speed, DEFAULT_PRESENTATION.speed);
+});
+
+test('timing preferences accept their bounds and nullable target duration', () => {
+  const value = normalizePresentation({
+    countdownSeconds: 30,
+    targetDurationSeconds: 86_400,
+    showTiming: false,
+    hideControlsWhilePlaying: false,
+    pauseOnManualScroll: true,
+  });
+  assert.equal(value.countdownSeconds, 30);
+  assert.equal(value.targetDurationSeconds, 86_400);
+  assert.equal(value.showTiming, false);
+  assert.equal(value.hideControlsWhilePlaying, false);
+  assert.equal(value.pauseOnManualScroll, true);
+
+  assert.equal(normalizePresentation({ countdownSeconds: 31 }).countdownSeconds, 0);
+  assert.equal(normalizePresentation({ countdownSeconds: -1 }).countdownSeconds, 0);
+  assert.equal(normalizePresentation({ targetDurationSeconds: 0 }).targetDurationSeconds, null);
+  assert.equal(normalizePresentation({ targetDurationSeconds: 86_401 }).targetDurationSeconds, null);
+  assert.equal(normalizePresentation({ targetDurationSeconds: null }).targetDurationSeconds, null);
 });
 
 test('legacy settings snapshot keeps the old theme surface at migration time', () => {

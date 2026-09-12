@@ -147,11 +147,22 @@ test('presentation defaults use their own key and normalize without changing set
     ...legacyFallback,
     lineSpacing: 2,
     cueColor: '#a1b2c3',
+    countdownSeconds: 5,
+    targetDurationSeconds: 900,
+    showTiming: false,
+    hideControlsWhilePlaying: false,
+    pauseOnManualScroll: true,
   });
   assert.equal(saved.ok, true);
   assert.equal(
     JSON.parse(storage.getItem(QUICKQUE_PRESENTATION_DEFAULTS_KEY) as string).cueColor,
     '#A1B2C3',
   );
+  const persisted = loadPresentationDefaults(storage);
+  assert.equal(persisted.countdownSeconds, 5);
+  assert.equal(persisted.targetDurationSeconds, 900);
+  assert.equal(persisted.showTiming, false);
+  assert.equal(persisted.hideControlsWhilePlaying, false);
+  assert.equal(persisted.pauseOnManualScroll, true);
   assert.equal(loadSettings(storage).fontSize, 36);
 });

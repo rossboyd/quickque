@@ -28,10 +28,16 @@ export function PresentationControls({
   value,
   onChange,
   globalDarkTheme = true,
+  readMode = undefined,
 }: {
   value: PresentationPreferences;
   onChange: (updates: Partial<PresentationPreferences>) => boolean;
   globalDarkTheme?: boolean;
+  /**
+   * Global defaults do not have an active reader mode. When a reader supplies
+   * its mode, timed scrolling is only available in Manual Scroll.
+   */
+  readMode?: 'manual' | 'flow';
 }) {
   const controlId = useId();
   
@@ -233,6 +239,110 @@ export function PresentationControls({
               <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
                 <input type="checkbox" checked={value.mirrorVertical} onChange={e => update('mirrorVertical', e.target.checked)} className="rounded border-border text-primary focus:ring-2 focus:ring-primary h-4 w-4" />
                 Mirror Vertical
+              </label>
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-2">
+              Timing & Playback
+            </h4>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-4">
+                <label htmlFor={`${controlId}-countdown`} className="font-medium text-sm">
+                  Start Countdown (seconds)
+                </label>
+                <input
+                  id={`${controlId}-countdown`}
+                  type="number"
+                  min="0"
+                  max="30"
+                  step="1"
+                  value={value.countdownSeconds}
+                  onChange={e => update('countdownSeconds', Number(e.target.value))}
+                  className="w-24 rounded-md border border-border bg-background px-2.5 py-1.5 text-right text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Wait up to 30 seconds before a fresh start. Set to 0 to start
+                immediately; pausing and resuming does not restart the countdown.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-4">
+                <label htmlFor={`${controlId}-target-duration`} className="font-medium text-sm">
+                  Target Duration (seconds)
+                </label>
+                <input
+                  id={`${controlId}-target-duration`}
+                  type="number"
+                  min="1"
+                  max="86400"
+                  step="1"
+                  value={value.targetDurationSeconds ?? ''}
+                  disabled={readMode === 'flow'}
+                  onChange={e => {
+                    const raw = e.target.value;
+                    update(
+                      'targetDurationSeconds',
+                      raw === '' ? null : Number(raw),
+                    );
+                  }}
+                  aria-describedby={`${controlId}-target-duration-help`}
+                  className="w-28 rounded-md border border-border bg-background px-2.5 py-1.5 text-right text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </div>
+              <p id={`${controlId}-target-duration-help`} className="text-xs text-muted-foreground">
+                {readMode === 'flow'
+                  ? 'Timed scrolling is available only in Manual Scroll. Voice Follow controls the reading position instead.'
+                  : 'Total active time for this session (1–86,400 seconds). Manual Scroll derives speed from the remaining rendered text and time left. Pauses extend wall-clock completion time; this is not a guarantee of spoken duration. If the target has elapsed, choose a longer duration or Start over. Leave blank to use the regular scroll speed.'}
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-1">
+              <label className="flex items-start gap-2 text-sm font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={value.showTiming}
+                  onChange={e => update('showTiming', e.target.checked)}
+                  className="mt-0.5 rounded border-border text-primary focus:ring-2 focus:ring-primary h-4 w-4"
+                />
+                <span>
+                  <span className="block">Show Timing</span>
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    Show elapsed time, estimated remaining time, and progress while presenting.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={value.hideControlsWhilePlaying}
+                  onChange={e => update('hideControlsWhilePlaying', e.target.checked)}
+                  className="mt-0.5 rounded border-border text-primary focus:ring-2 focus:ring-primary h-4 w-4"
+                />
+                <span>
+                  <span className="block">Hide Controls While Playing</span>
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    Keep the reading surface clear while playback is active; controls remain revealable.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={value.pauseOnManualScroll}
+                  onChange={e => update('pauseOnManualScroll', e.target.checked)}
+                  className="mt-0.5 rounded border-border text-primary focus:ring-2 focus:ring-primary h-4 w-4"
+                />
+                <span>
+                  <span className="block">Pause on Manual Scroll</span>
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    Pause playback when you use a real scroll gesture to find your place.
+                  </span>
+                </span>
               </label>
             </div>
           </section>

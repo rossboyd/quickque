@@ -16,6 +16,7 @@ export function resolveCommandEffect(
   context: {
     readMode: 'manual' | 'flow';
     isPlaying: boolean;
+    playbackPhase?: string;
     flowStatus: string;
     activeSectionIdx: number;
     sectionCount: number;
@@ -33,6 +34,11 @@ export function resolveCommandEffect(
   switch (action) {
     case 'playPause':
     case 'toggle':
+      if (context.playbackPhase === 'countdown' || context.playbackPhase === 'starting') {
+        return context.readMode === 'manual'
+          ? { type: 'setPlaying', playing: false }
+          : { type: 'flowPause' };
+      }
       if (context.readMode === 'manual') {
         return { type: 'setPlaying', playing: !context.isPlaying };
       } else {

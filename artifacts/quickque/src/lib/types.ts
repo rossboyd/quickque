@@ -36,6 +36,16 @@ export type CueStyle = 'hidden' | 'line' | 'arrows';
 export type PresentationPreferences = {
   fontSize: number;
   speed: number;
+  /** Seconds to wait before a fresh presentation starts. */
+  countdownSeconds: number;
+  /** Active manual-scrolling duration target, or null to use the normal speed. */
+  targetDurationSeconds: number | null;
+  /** Whether elapsed/remaining/progress timing is shown while presenting. */
+  showTiming: boolean;
+  /** Whether presentation controls fade while playback is active. */
+  hideControlsWhilePlaying: boolean;
+  /** Whether a user scroll gesture pauses manual playback. */
+  pauseOnManualScroll: boolean;
   backgroundOpacity: number;
   fontFamily: FontFamily;
   textColor: string | null;

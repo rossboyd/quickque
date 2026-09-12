@@ -4,6 +4,12 @@ import { TimerState, getElapsedMs, formatElapsed } from '@/lib/presentation-time
 import { liveAudioLevel, type AudioLevelSample } from '@/lib/flow/audio-level';
 import { PresentationScheduler } from '@/lib/presentation-scheduler';
 
+export interface PresentationTimingMetrics {
+  remainingMs: number | null;
+  progress: number;
+  timed: boolean;
+}
+
 export interface PresentationHUDProps {
   mode: string;
   status: string;
@@ -11,6 +17,12 @@ export interface PresentationHUDProps {
   audioLevelRef?: MutableRefObject<AudioLevelSample>;
   timerState: TimerState;
   onResetTimer: () => void;
+  /**
+   * Timing metrics are read by the HUD scheduler rather than rendered through
+   * React. Progress is a fraction in the range 0..1.
+   */
+  getTimingMetrics?: () => PresentationTimingMetrics;
+  showTiming?: boolean;
 }
 
 function createWavyPath(R: number, A: number, F: number, P: number): string {
@@ -34,14 +46,45 @@ export function PresentationHUD({
   audioLevelRef,
   timerState,
   onResetTimer,
+  getTimingMetrics,
+  showTiming = true,
 }: PresentationHUDProps) {
   const timeRef = useRef<HTMLSpanElement>(null);
+  const remainingLabelRef = useRef<HTMLSpanElement>(null);
+  const remainingRef = useRef<HTMLSpanElement>(null);
+  const progressRef = useRef<HTMLProgressElement>(null);
+  const progressTextRef = useRef<HTMLSpanElement>(null);
   const meterRef = useRef<HTMLDivElement>(null);
   const pathsRef = useRef<(SVGPathElement | null)[]>([]);
+
+  // Keep the scheduler stable while allowing it to consume the latest
+  // presentation state. This is what keeps the timing display off React's
+  // render path while a script is playing.
+  const modeRef = useRef(mode);
+  const statusRef = useRef(status);
+  const audioLevelRefRef = useRef(audioLevelRef);
+  const timerStateRef = useRef(timerState);
+  const getTimingMetricsRef = useRef(getTimingMetrics);
+  const showTimingRef = useRef(showTiming);
+  modeRef.current = mode;
+  statusRef.current = status;
+  audioLevelRefRef.current = audioLevelRef;
+  timerStateRef.current = timerState;
+  getTimingMetricsRef.current = getTimingMetrics;
+  showTimingRef.current = showTiming;
   
   useEffect(() => {
     // Caches to avoid identical DOM writes
     let lastTimeText = '';
+    let lastTimeElement: HTMLSpanElement | null = null;
+    let lastRemainingLabel = '';
+    let lastRemainingLabelElement: HTMLSpanElement | null = null;
+    let lastRemainingText = '';
+    let lastRemainingAriaLabel = '';
+    let lastRemainingElement: HTMLSpanElement | null = null;
+    let lastProgressText = '';
+    let lastProgressElement: HTMLProgressElement | null = null;
+    let lastProgressTextElement: HTMLSpanElement | null = null;
     let lastAriaVal = '';
     const lastD: (string | number)[] = [];
     const lastOpacity: string[] = [];
@@ -63,8 +106,12 @@ export function PresentationHUD({
       }
       
       let targetLevel = 0;
-      if (mode === 'flow' && audioLevelRef?.current) {
-        targetLevel = liveAudioLevel(audioLevelRef.current, now, status === 'listening');
+      if (modeRef.current === 'flow' && audioLevelRefRef.current?.current) {
+        targetLevel = liveAudioLevel(
+          audioLevelRefRef.current.current,
+          now,
+          statusRef.current === 'listening',
+        );
       }
       
       smoothedLevel += (targetLevel - smoothedLevel) * 0.15;
@@ -73,11 +120,91 @@ export function PresentationHUD({
       const needsRAF = !prefersReducedMotion && displayLevel > 0;
       
       // 1. Timer Update
-      const ms = getElapsedMs(timerState, now);
+      const ms = getElapsedMs(timerStateRef.current, now);
       const formattedTime = formatElapsed(ms);
-      if (formattedTime !== lastTimeText && timeRef.current) {
+      if (
+        timeRef.current &&
+        (formattedTime !== lastTimeText || timeRef.current !== lastTimeElement)
+      ) {
         timeRef.current.textContent = formattedTime;
         lastTimeText = formattedTime;
+        lastTimeElement = timeRef.current;
+      }
+
+      // Timing metrics are intentionally written imperatively. In particular,
+      // progress can change every scheduler tick without re-rendering Reader.
+      if (showTimingRef.current) {
+        const metrics = getTimingMetricsRef.current?.() ?? {
+          remainingMs: null,
+          progress: 0,
+          timed: false,
+        };
+        const remainingLabel = metrics.timed
+          ? 'Target active time left'
+          : 'Estimated remaining';
+        const remainingText = metrics.remainingMs === null
+          ? '—'
+          : formatElapsed(Math.max(0, metrics.remainingMs));
+        const boundedProgress = Number.isFinite(metrics.progress)
+          ? Math.max(0, Math.min(1, metrics.progress))
+          : 0;
+        const progressPercent = Math.round(boundedProgress * 100);
+        const progressText = `${progressPercent}%`;
+
+        if (
+          remainingLabelRef.current &&
+          (
+            remainingLabel !== lastRemainingLabel ||
+            remainingLabelRef.current !== lastRemainingLabelElement
+          )
+        ) {
+          remainingLabelRef.current.textContent = remainingLabel;
+          lastRemainingLabel = remainingLabel;
+          lastRemainingLabelElement = remainingLabelRef.current;
+        }
+        if (
+          remainingRef.current &&
+          (
+            remainingText !== lastRemainingText ||
+            `${remainingLabel} time` !== lastRemainingAriaLabel ||
+            remainingRef.current !== lastRemainingElement
+          )
+        ) {
+          remainingRef.current.textContent = remainingText;
+          remainingRef.current.setAttribute(
+            'aria-label',
+            `${remainingLabel} time`,
+          );
+          lastRemainingText = remainingText;
+          lastRemainingAriaLabel = `${remainingLabel} time`;
+          lastRemainingElement = remainingRef.current;
+        }
+        if (
+          progressTextRef.current &&
+          (
+            progressText !== lastProgressText ||
+            progressTextRef.current !== lastProgressTextElement
+          )
+        ) {
+          progressTextRef.current.textContent = progressText;
+          lastProgressText = progressText;
+          lastProgressTextElement = progressTextRef.current;
+        }
+        if (
+          progressRef.current &&
+          (
+            progressPercent !== Number(progressRef.current.value) ||
+            progressRef.current !== lastProgressElement
+          )
+        ) {
+          progressRef.current.value = progressPercent;
+          progressRef.current.setAttribute(
+            'aria-valuenow',
+            progressPercent.toString(),
+          );
+          progressRef.current.setAttribute('aria-valuetext', progressText);
+          lastProgressElement = progressRef.current;
+        }
       }
       
       // 2. ARIA Update
@@ -179,7 +306,7 @@ export function PresentationHUD({
       mediaQuery.removeEventListener('change', updateMotionPref);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [mode, status, audioLevelRef, timerState]);
+  }, []);
 
   // Determine state colours and labels
   let indicatorColor = 'bg-muted-foreground/40';
@@ -211,35 +338,85 @@ export function PresentationHUD({
   return (
     <div className="absolute top-20 right-6 z-40 flex flex-col items-end gap-3 pointer-events-none transition-all duration-300">
       
-      {/* Timer HUD */}
-      <div className="flex items-center gap-2 bg-background/70 backdrop-blur-xl px-3 py-1.5 rounded-full border border-border/50 shadow-sm pointer-events-auto select-none">
-        <span 
-          role="timer"
-          aria-live="off"
-          aria-label="Presentation elapsed time"
-          ref={timeRef} 
-          className="tabular-nums min-w-[5ch] text-center font-medium font-mono text-sm text-foreground"
+      {showTiming && (
+        /* Timing is a separate HUD so the microphone status remains visible
+           when timing is disabled. */
+        <div
+          className="flex max-w-[calc(100vw-3rem)] flex-wrap items-center justify-end gap-x-3 gap-y-1.5 rounded-2xl border border-border/50 bg-background/70 px-3 py-2 shadow-sm backdrop-blur-xl pointer-events-auto select-none"
+          aria-label="Presentation timing"
         >
-          00:00
-        </span>
-        <div className="w-px h-3 bg-border mx-0.5" />
-        <button 
-          onClick={onResetTimer}
-          onKeyDown={(e) => {
-            if (e.key === ' ' || e.key === 'Enter') {
-              e.stopPropagation();
-            }
-          }}
-          className="w-8 h-8 p-1.5 flex items-center justify-center rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          title="Reset Timer"
-          aria-label="Reset Timer"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-            <path d="M3 3v5h5"/>
-          </svg>
-        </button>
-      </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+              Elapsed
+            </span>
+            <span
+              role="timer"
+              aria-live="off"
+              aria-label="Presentation elapsed time"
+              ref={timeRef}
+              className="tabular-nums min-w-[5ch] text-center font-mono text-sm font-medium text-foreground"
+            >
+              00:00
+            </span>
+          </div>
+
+          {mode !== 'flow' && (
+            <div className="flex items-baseline gap-1.5">
+              <span
+                ref={remainingLabelRef}
+                className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground"
+              >
+                Estimated remaining
+              </span>
+              <span
+                ref={remainingRef}
+                aria-label="Estimated remaining time"
+                className="tabular-nums min-w-[5ch] text-center font-mono text-sm font-medium text-foreground"
+              >
+                —
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-1.5">
+            <progress
+              ref={progressRef}
+              max={100}
+              value={0}
+              aria-label="Presentation progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={0}
+              aria-valuetext="0%"
+              className="h-1.5 w-16 accent-primary"
+            />
+            <span
+              ref={progressTextRef}
+              className="tabular-nums min-w-[3ch] text-right font-mono text-[11px] text-muted-foreground"
+            >
+              0%
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-border" />
+          <button
+            onClick={onResetTimer}
+            onKeyDown={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') {
+                e.stopPropagation();
+              }
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-black/10 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:bg-white/10"
+            title="Start over"
+            aria-label="Start over"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Mic Visualizer HUD */}
       <div className="flex items-center gap-2 bg-background/70 backdrop-blur-xl px-3 py-1.5 rounded-full border border-border/50 shadow-sm pointer-events-auto select-none">

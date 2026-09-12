@@ -557,6 +557,44 @@ JSON download behavior remain **unverified on macOS** until those checks are
 performed. Browser tests and a successful desktop frontend build do not
 substitute for these checks.
 
+### Presentation timing: verification boundary
+
+Presentation timing uses the same transport dispatch for toolbar, keyboard,
+global shortcut and approved phone commands. The phone protocol is unchanged;
+countdown and pending Flow preparation publish `playing: false`, and elapsed
+time starts only when manual motion is enabled or Flow reports listening.
+
+The TypeScript lifecycle, countdown cancellation, timer math, timed-distance
+limits, logical resume metadata, and Flow/remote regressions are verified on
+Linux. Browser verification covers DOM scrolling and reflow separately.
+**Native smoke tests are awaiting a Mac.** No Mac installer was produced.
+Chromium checks do not establish WKWebView behavior or real microphone teardown.
+
+Before shipping the Mac build:
+
+1. With a 5-second countdown, start/cancel using toolbar, Space,
+   Command–Shift–Space and paired-phone play/pause. Exit or close the overlay
+   just before expiry. Confirm no late scrolling or microphone capture and
+   no phone snapshot claiming playback during countdown.
+2. Use a 60-second manual target, pause for 10 seconds, resume, resize/reflow,
+   jump sections and change speed from the phone. Confirm active time excludes
+   pauses, remaining distance is recalculated, and speed edits visibly leave
+   timed mode. Verify end-of-script, expired and too-fast target feedback.
+   In Flow, jump sections while listening and confirm the clock and phone
+   playing flag freeze while capture re-prepares, then resume on listening
+   without another countdown or duplicate capture start.
+3. Quit/reopen midway. Resume must restore the script-relative word paused,
+   including after layout changes, without capture. Start over resets location
+   and time. Edited copy safely opens at the beginning; completed copy offers
+   Start over. Inspect a JSON export: no resume location or session time is in
+   the script document, and no transcript/audio is added.
+4. Enable pause-on-manual-scroll in Flow, then use trackpad, touchscreen (if
+   available), scrollbar and keyboard scrolling. Capture must pause before
+   reanchoring; automatic following must not trigger this preference.
+5. Hide controls during playback, reveal them using Show controls, and reach
+   buttons/settings by keyboard. Focused controls must not toggle playback
+   through the global Space shortcut.
+
 ### Present layout: native acceptance checklist
 
 The presentation-layout changes require the following checks in the packaged

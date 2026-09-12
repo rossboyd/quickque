@@ -22,7 +22,12 @@ import {
   getReaderAnchorOffset,
 } from '@/lib/reader-position';
 import { FlowSetupWizard } from '@/components/flow-setup-wizard';
-import { usePresentationTimer } from '@/hooks/use-presentation-timer';
+import { usePresentationPlayback } from '@/hooks/use-presentation-playback';
+import { calculateTimedSpeed, getPlaybackTimingSnapshot } from '@/lib/presentation-playback';
+import {
+  readResumePosition, saveResumePosition, clearResumePosition,
+  getReaderContentFingerprint, type ReaderResumePosition,
+} from '@/lib/reader-resume-position';
 import { PresentationHUD } from '@/components/presentation-hud';
 import { getElapsedMs } from '@/lib/presentation-timer';
 import { PresentationControls } from '@/components/presentation-controls';
@@ -89,11 +94,14 @@ export default function Reader() {
     ...(script?.presentation ?? {}),
   }), [presentationDefaults, script?.presentation]);
 
-  const [isPlaying, setIsPlaying] = useState(false);
   const [readMode, setReadMode] = useState<"manual" | "flow">("flow");
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
+  const [timingMessage, setTimingMessage] = useState<string | null>(null);
+  const [resumeChoice, setResumeChoice] = useState<ReaderResumePosition | null>(null);
+  const resumePendingRef = useRef(true);
+  const saveCurrentPositionRef = useRef<() => void>(() => {});
 
   const containerRef = useRef<HTMLDivElement>(null);
   const textContentRef = useRef<HTMLDivElement>(null);
@@ -144,6 +152,8 @@ export default function Reader() {
       pendingReflowPositionRef.current = snapshot;
     }
   }, [measureReaderPosition]);
+  const measureReaderPositionRef = useRef(measureReaderPosition);
+  measureReaderPositionRef.current = measureReaderPosition;
 
   // Wheel/trackpad scrolling does not rerender. Cache the currently read word
   // on the next frame so a later ResizeObserver starts from the user's actual
@@ -176,6 +186,10 @@ export default function Reader() {
   // current script's presentation, never app-wide defaults.
   const updatePresentation = useCallback((updates: Partial<PresentationPreferences>): boolean => {
     if (!script) return false;
+    if (updates.speed !== undefined && presentation.targetDurationSeconds !== null) {
+      updates = { ...updates, targetDurationSeconds: null };
+      setTimingMessage('Timed scrolling turned off because the speed was changed.');
+    }
     if (affectsReaderLayout(updates, presentation)) {
       captureReaderPosition();
     } else {
@@ -186,6 +200,8 @@ export default function Reader() {
     const saved = updateScriptPresentation(script.id, updates);
     if (!saved) {
       pendingReflowPositionRef.current = null;
+    } else {
+      presentationRef.current = { ...presentationRef.current, ...updates };
     }
     return saved;
   }, [captureReaderPosition, presentation, script, updateScriptPresentation]);
@@ -233,6 +249,120 @@ export default function Reader() {
   );
 
   const flow = useLocalFlow({ tokens, enabled: readMode === "flow" });
+  const flowRef = useRef(flow);
+  flowRef.current = flow;
+  const readModeRef = useRef(readMode);
+  readModeRef.current = readMode;
+  const presentationRef = useRef(presentation);
+  presentationRef.current = presentation;
+
+  const readingDistance = useCallback(() => {
+    const container = containerRef.current;
+    const cue = cueRef.current;
+    // A block's trailing edge includes every wrapped inline fragment and
+    // title-only sections. Flow token count is unrelated to manual distance.
+    const tail = [...sectionRefs.current].reverse()
+      .map(section => section?.getBoundingClientRect())
+      .find(rect => rect && rect.height > 0);
+    if (!container || !cue || !tail) return { remaining: 0, total: 0 };
+    const mirror = presentationRef.current.mirrorVertical;
+    const delta = clientDeltaToLogicalScroll(
+      (mirror ? tail.top : tail.bottom) -
+      getLogicalLeadingEdge(cue.getBoundingClientRect(), mirror), mirror);
+    const total = Math.max(0, Math.min(container.scrollHeight - container.clientHeight,
+      container.scrollTop + delta));
+    return { remaining: Math.max(0, total - container.scrollTop), total };
+  }, []);
+
+  const { controller: playback, state: playbackState } = usePresentationPlayback(() => {
+    if (readModeRef.current === 'manual') playback.activate();
+    else flowRef.current.start();
+  });
+  const isPlaying = readMode === 'manual' && playbackState.phase === 'playing';
+  const timerState = playbackState.timerState;
+  const pausePlayback = useCallback(() => {
+    const wasRequested = ['starting', 'playing'].includes(playback.state.phase);
+    playback.pause();
+    if (readModeRef.current === 'flow' && (wasRequested || flowRef.current.status === 'listening')) {
+      flowRef.current.pause();
+    }
+  }, [playback]);
+  const reanchorAtPosition = useCallback(() => {
+    const anchorId = measureReaderPosition()?.anchorId;
+    if (!anchorId) return;
+    for (const section of enrichedSections) {
+      const index = section.spans.findIndex((_, i) => `${section.id}:${i}` === anchorId);
+      if (index < 0) continue;
+      const token = section.spans.slice(index).find(span => span.startTokenIdx !== undefined);
+      playback.suspendForPreparation();
+      flowRef.current.reanchor(token?.startTokenIdx ?? section.firstTokenIdx ?? 0);
+      break;
+    }
+  }, [enrichedSections, measureReaderPosition, playback]);
+  const manualGestureRef = useRef(false);
+  const completedGestureTopRef = useRef<number | null>(null);
+  const interruptForGesture = useCallback(() => {
+    completedGestureTopRef.current = playback.state.phase === 'completed'
+      ? containerRef.current?.scrollTop ?? null : null;
+    if (!presentationRef.current.pauseOnManualScroll) return;
+    manualGestureRef.current = true;
+    pausePlayback();
+  }, [pausePlayback, playback]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const wheel = (event: WheelEvent) => {
+      if (event.deltaY !== 0 || event.deltaX !== 0) interruptForGesture();
+    };
+    const touch = () => interruptForGesture();
+    const pointer = (event: PointerEvent) => {
+      const rect = container.getBoundingClientRect();
+      if (event.clientX >= rect.right - 18 || event.clientX <= rect.left + 18) interruptForGesture();
+    };
+    const key = (event: KeyboardEvent) => {
+      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.code)) interruptForGesture();
+    };
+    const scrolled = () => {
+      // A gesture at the boundary may not move anything. Only actual backward
+      // movement can turn a completed presentation into a resumable one.
+      const rewoundFromCompletion = completedGestureTopRef.current !== null &&
+        container.scrollTop < completedGestureTopRef.current - 1;
+      if ((readModeRef.current === 'manual' || rewoundFromCompletion) &&
+          playback.state.phase === 'completed' && readingDistance().remaining > 1) {
+        playback.seek();
+        completedGestureTopRef.current = null;
+      }
+      if (!manualGestureRef.current) return;
+      if (readModeRef.current === 'flow') reanchorAtPosition();
+    };
+    container.addEventListener('wheel', wheel, { passive: true });
+    container.addEventListener('touchmove', touch, { passive: true });
+    container.addEventListener('pointerdown', pointer);
+    container.addEventListener('keydown', key);
+    container.addEventListener('scroll', scrolled, { passive: true });
+    return () => {
+      container.removeEventListener('wheel', wheel);
+      container.removeEventListener('touchmove', touch);
+      container.removeEventListener('pointerdown', pointer);
+      container.removeEventListener('keydown', key);
+      container.removeEventListener('scroll', scrolled);
+    };
+  }, [interruptForGesture, reanchorAtPosition, playback, readingDistance]);
+  const completePlayback = useCallback(() => {
+    playback.complete();
+    if (readModeRef.current === 'flow') flowRef.current.pause();
+    setTimingMessage('End of script. Choose Start over to begin a new presentation.');
+  }, [playback]);
+
+  useEffect(() => {
+    if (readMode !== 'flow') return;
+    if (flow.status !== 'listening' && playback.state.phase === 'playing') playback.suspendForPreparation();
+    if (flow.status === 'listening' && playback.state.phase === 'starting') playback.activate();
+    if (['error', 'silence-stopped', 'paused', 'stopped', 'unsupported', 'needs-model', 'ready', 'downloading'].includes(flow.status) &&
+        ['starting', 'playing'].includes(playback.state.phase)) playback.pause();
+    if (flow.status === 'listening' && tokens.length > 0 && flow.anchor >= tokens.length) completePlayback();
+  }, [flow.status, flow.anchor, readMode, tokens.length, playback, completePlayback]);
 
   useEffect(() => {
     const initDesktop = async () => {
@@ -299,7 +429,8 @@ export default function Reader() {
   }, [settings.compactMode, updateAppSettings]);
 
   const exitReader = useCallback(async () => {
-    setIsPlaying(false);
+    saveCurrentPositionRef.current();
+    playback.pause();
     flow.stop();
     try {
       if (isDesktop()) {
@@ -312,7 +443,7 @@ export default function Reader() {
     }
     document.documentElement.classList.remove('is-overlay');
     setLocation('/');
-  }, [setLocation, flow]);
+  }, [setLocation, flow, playback]);
 
   // Restore the pre-update word measurement after the new font has reflowed.
   useLayoutEffect(() => {
@@ -416,15 +547,33 @@ export default function Reader() {
       lastTimeRef.current = time;
 
       if (containerRef.current && textContentRef.current) {
-        const pxPerSecond = (presentation.speed / 50) * (presentation.fontSize * 1.5);
+        if (playback.state.phase !== 'playing') return;
+        const distance = readingDistance();
+        if (distance.remaining <= 1) {
+          completePlayback();
+          return;
+        }
+        let pxPerSecond = (presentation.speed / 50) * (presentation.fontSize * 1.5);
+        if (presentation.targetDurationSeconds !== null) {
+          const remainingMs = presentation.targetDurationSeconds * 1000 -
+            getElapsedMs(playback.state.timerState, performance.now());
+          const timed = calculateTimedSpeed(distance.remaining, remainingMs);
+          if (timed.error) {
+            pausePlayback();
+            setTimingMessage(timed.error);
+            return;
+          }
+          pxPerSecond = timed.speed;
+        }
         const pxPerFrame = (pxPerSecond * deltaTime) / 1000;
         
-        const maxScroll = containerRef.current.scrollHeight - containerRef.current.clientHeight;
+        const maxScroll = distance.total;
         if (containerRef.current.scrollTop < maxScroll) {
-          exactScrollTopRef.current += pxPerFrame;
+          exactScrollTopRef.current = Math.min(maxScroll, exactScrollTopRef.current + pxPerFrame);
           containerRef.current.scrollTop = exactScrollTopRef.current;
         } else {
-          setIsPlaying(false);
+          completePlayback();
+          return;
         }
       }
       reqRef.current = requestAnimationFrame(scrollLoop);
@@ -435,7 +584,8 @@ export default function Reader() {
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       lastTimeRef.current = 0;
     };
-  }, [isPlaying, readMode, presentation.speed, presentation.fontSize]);
+  }, [isPlaying, readMode, presentation.speed, presentation.fontSize, presentation.targetDurationSeconds,
+    playback, readingDistance, completePlayback, pausePlayback]);
 
   // Flow Smooth scroll following active token ONLY on confident matching
   useEffect(() => {
@@ -445,6 +595,7 @@ export default function Reader() {
 
     let req: number;
     const loop = () => {
+      if (playback.state.phase !== 'playing') return;
       if (activeTokenSpanRef.current && containerRef.current) {
         const span = activeTokenSpanRef.current;
         const container = containerRef.current;
@@ -480,6 +631,8 @@ export default function Reader() {
     presentation.fontSize,
     presentation.cuePosition,
     presentation.mirrorVertical,
+    playback,
+    playbackState.phase,
   ]);
 
   // Section tracking during scroll (only in manual mode or paused)
@@ -596,35 +749,23 @@ export default function Reader() {
       if (readMode === "flow" && enrichedSections[idx]) {
         const firstToken = enrichedSections[idx].firstTokenIdx;
         if (firstToken !== null) {
+          playback.suspendForPreparation();
           reanchorRef.current(firstToken);
         }
       }
     }
-  }, [script, readMode, enrichedSections, presentation.mirrorVertical]);
+  }, [script, readMode, enrichedSections, presentation.mirrorVertical, playback]);
 
-  const flowRef = useRef(flow);
-  flowRef.current = flow;
-  const readModeRef = useRef(readMode);
-  readModeRef.current = readMode;
-  const isPlayingRef = useRef(isPlaying);
-  isPlayingRef.current = isPlaying;
   const activeSectionIdxRef = useRef(activeSectionIdx);
   activeSectionIdxRef.current = activeSectionIdx;
-  const presentationRef = useRef(presentation);
-  presentationRef.current = presentation;
-
-  // Single authoritative presentation timer hook replacing independent elapsedRef accumulation
-  const isTimerActive = readMode === 'manual' ? isPlaying : flow.status === 'listening';
-  const { timerState, reset: resetTimer } = usePresentationTimer(isTimerActive, script?.id || '');
-  const timerStateRef = useRef(timerState);
-  timerStateRef.current = timerState;
 
   const dispatchCommand = useCallback((cmd: any) => {
-    if (!script) return;
+    if (!script || resumePendingRef.current) return;
 
     const effect = resolveCommandEffect(cmd, {
       readMode: readModeRef.current,
-      isPlaying: isPlayingRef.current,
+      isPlaying: ['countdown', 'starting', 'playing'].includes(playback.state.phase),
+      playbackPhase: playback.state.phase,
       flowStatus: flowRef.current.status,
       activeSectionIdx: activeSectionIdxRef.current,
       sectionCount: script.sections.length,
@@ -636,18 +777,36 @@ export default function Reader() {
 
     switch (effect.type) {
       case 'setPlaying':
-        isPlayingRef.current = effect.playing;
-        setIsPlaying(effect.playing);
-        break;
       case 'flowStart':
-        flowRef.current.start();
+        if (effect.type === 'setPlaying' && !effect.playing) {
+          pausePlayback();
+        } else {
+          if (playback.state.phase === 'completed') {
+            setTimingMessage('End of script. Choose Start over, or move to an earlier section.');
+            break;
+          }
+          if (readModeRef.current === 'manual') {
+            const distance = readingDistance();
+            if (distance.remaining <= 1) { completePlayback(); break; }
+            if (presentationRef.current.targetDurationSeconds !== null) {
+              const timed = calculateTimedSpeed(distance.remaining,
+                presentationRef.current.targetDurationSeconds * 1000 - getElapsedMs(playback.state.timerState, performance.now()));
+              if (timed.error) { setTimingMessage(timed.error); break; }
+            }
+          }
+          setTimingMessage(null);
+          manualGestureRef.current = false;
+          if (readModeRef.current === 'flow') reanchorAtPosition();
+          playback.requestStart(presentationRef.current.countdownSeconds);
+        }
         break;
       case 'flowPause':
-        flowRef.current.pause();
+        pausePlayback();
         break;
       case 'jumpToSection':
         activeSectionIdxRef.current = effect.index;
         jumpToSection(effect.index);
+        playback.seek();
         break;
       case 'setSpeed':
         if (updatePresentation({ speed: effect.speed })) {
@@ -664,14 +823,15 @@ export default function Reader() {
           const max = Math.max(0, containerRef.current.scrollHeight - containerRef.current.clientHeight);
           exactScrollTopRef.current = Math.max(0, Math.min(max, exactScrollTopRef.current + effect.delta));
           containerRef.current.scrollTop = exactScrollTopRef.current;
+          playback.seek();
         }
         break;
       case 'setReadMode':
+        if (effect.mode === readModeRef.current) break;
+        pausePlayback();
         readModeRef.current = effect.mode;
         setReadMode(effect.mode);
         if (effect.mode === 'flow') {
-          isPlayingRef.current = false;
-          setIsPlaying(false);
           const targetAnchor = enrichedSections[activeSectionIdxRef.current]?.firstTokenIdx ?? 0;
           flowRef.current.reanchor(targetAnchor);
         } else {
@@ -679,7 +839,7 @@ export default function Reader() {
         }
         break;
     }
-  }, [script, jumpToSection, updatePresentation, enrichedSections]);
+  }, [script, jumpToSection, updatePresentation, enrichedSections, playback, pausePlayback, completePlayback, readingDistance, reanchorAtPosition]);
 
   useReaderCommands(dispatchCommand);
 
@@ -692,14 +852,13 @@ export default function Reader() {
       mode: readModeRef.current,
       section: activeSectionIdx,
       sectionCount: script.sections.length,
-      elapsedMs: getElapsedMs(timerStateRef.current, performance.now()),
-      playing: readModeRef.current === 'manual' ? isPlaying : flowRef.current.status === 'listening',
+      ...getPlaybackTimingSnapshot(playback.state, performance.now()),
       fontSize: presentation.fontSize,
       scrollSpeed: presentation.speed,
       position: exactScrollTopRef.current
     };
     invoke('remote_publish_state', { snapshot }).catch(() => {});
-  }, [script, isRunning, isApproved, activeSectionIdx, isPlaying, presentation.fontSize, presentation.speed]);
+  }, [script, isRunning, isApproved, activeSectionIdx, isPlaying, presentation.fontSize, presentation.speed, playback, playbackState.phase]);
 
   useEffect(() => {
     publishSnapshot();
@@ -718,6 +877,7 @@ export default function Reader() {
       // must not also exit the reader and tear down the local session.
       if (e.defaultPrevented ||
           (e.target instanceof Element && e.target.closest('[role="dialog"]'))) return;
+      if (e.target instanceof Element && e.target.closest('button, a, [role="button"], [role="slider"]')) return;
       if (
         e.target instanceof HTMLInputElement || 
         e.target instanceof HTMLTextAreaElement || 
@@ -762,12 +922,13 @@ export default function Reader() {
     const resetHide = () => {
       setShowControls(true);
       clearTimeout(timeout);
-      if (isActivelyPlaying) {
+      if (isActivelyPlaying && presentation.hideControlsWhilePlaying) {
         timeout = window.setTimeout(() => setShowControls(false), 3000);
       }
     };
     
     window.addEventListener('mousemove', resetHide);
+    window.addEventListener('focusin', resetHide);
     if (isActivelyPlaying) {
       resetHide();
     } else {
@@ -776,9 +937,109 @@ export default function Reader() {
     
     return () => {
       window.removeEventListener('mousemove', resetHide);
+      window.removeEventListener('focusin', resetHide);
       clearTimeout(timeout);
     };
-  }, [isPlaying, readMode, flow.status]);
+  }, [isPlaying, readMode, flow.status, presentation.hideControlsWhilePlaying]);
+
+  const startOver = useCallback(() => {
+    pausePlayback();
+    playback.reset();
+    manualGestureRef.current = false;
+    if (containerRef.current) containerRef.current.scrollTop = 0;
+    exactScrollTopRef.current = 0;
+    stableReaderPositionRef.current = null;
+    pendingReflowPositionRef.current = null;
+    setActiveSectionIdx(0);
+    flowRef.current.reanchor(0);
+    setTimingMessage(null);
+    setResumeChoice(null);
+    resumePendingRef.current = false;
+    if (script) {
+      const cleared = clearResumePosition(script.id);
+      if (!cleared.ok) setTimingMessage(cleared.error);
+    }
+  }, [pausePlayback, playback, script]);
+
+  // This metadata lives outside the script/export envelope. Content changes
+  // invalidate it; appearance changes deliberately do not.
+  const contentFingerprint = script ? getReaderContentFingerprint(script) : '';
+  useEffect(() => {
+    playback.reset();
+    if (containerRef.current) containerRef.current.scrollTop = 0;
+    exactScrollTopRef.current = 0;
+    stableReaderPositionRef.current = null;
+    pendingReflowPositionRef.current = null;
+    if (!script) { resumePendingRef.current = true; return; }
+    const saved = readResumePosition(script);
+    if (!saved.ok) {
+      setTimingMessage(saved.error);
+      resumePendingRef.current = false;
+      return;
+    }
+    const position = saved.position;
+    setResumeChoice(position);
+    resumePendingRef.current = position !== null;
+    // Immutable script snapshot is intentional: old pagehide/cleanup must
+    // never save the previous location under a newly navigated script ID.
+    const checkpoint = () => {
+      if (resumePendingRef.current) return;
+      if (exactScrollTopRef.current <= 1 && playback.state.phase !== 'completed') {
+        const cleared = clearResumePosition(script.id);
+        if (!cleared.ok) setTimingMessage(cleared.error);
+        return;
+      }
+      const anchor = measureReaderPositionRef.current()?.anchorId;
+      if (!anchor) return;
+      const atEnd = readModeRef.current === 'flow'
+        ? flowRef.current.anchor >= tokens.length
+        : readingDistance().remaining <= 1;
+      const result = saveResumePosition(script, anchor, playback.state.phase === 'completed' && atEnd);
+      if (!result.ok) setTimingMessage(result.error);
+    };
+    saveCurrentPositionRef.current = checkpoint;
+    const interval = window.setInterval(checkpoint, 1000);
+    const leavingPage = () => { checkpoint(); pausePlayback(); };
+    window.addEventListener('pagehide', leavingPage);
+    return () => {
+      checkpoint();
+      saveCurrentPositionRef.current = () => {};
+      window.clearInterval(interval);
+      window.removeEventListener('pagehide', leavingPage);
+    };
+    // Presentation commits clone script objects but must not reopen a session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [script?.id, contentFingerprint, playback]);
+
+  const resumeReading = useCallback(() => {
+    if (!resumeChoice?.anchorId) { startOver(); return; }
+    playback.resumePaused();
+    pendingReflowPositionRef.current = {
+      anchorId: resumeChoice.anchorId, anchorOffset: 0, fallbackScrollTop: 0,
+      verticalMirror: presentation.mirrorVertical,
+    };
+    resumePendingRef.current = false;
+    setResumeChoice(null);
+    setReflowRevision(revision => revision + 1);
+    setTimingMessage('Position restored. Press Play when ready; session time starts from zero.');
+  }, [resumeChoice, startOver, playback, presentation.mirrorVertical]);
+
+  const getTimingMetrics = useCallback(() => {
+    const elapsed = getElapsedMs(playback.state.timerState, performance.now());
+    const target = presentationRef.current.targetDurationSeconds;
+    if (readModeRef.current === 'flow') {
+      return { remainingMs: null, progress: tokens.length ? flowRef.current.anchor / tokens.length : 0, timed: false };
+    }
+    const distance = readingDistance();
+    if (target !== null) return {
+      remainingMs: Math.max(0, target * 1000 - elapsed),
+      progress: playback.state.phase === 'completed' ? 1 : Math.min(1, elapsed / (target * 1000)),
+      timed: true,
+    };
+    const speed = (presentationRef.current.speed / 50) * (presentationRef.current.fontSize * 1.5);
+    return { remainingMs: distance.remaining / speed * 1000,
+      progress: distance.total > 0 ? 1 - distance.remaining / distance.total : 0, timed: false };
+  }, [playback, readingDistance, tokens.length]);
 
   if (!script) {
     return (
@@ -892,6 +1153,7 @@ export default function Reader() {
                    )}
                    <PresentationControls
                      value={presentation}
+                     readMode={readMode}
                      onChange={updates => updatePresentation(updates as Partial<PresentationPreferences>)}
                      globalDarkTheme={settings.darkTheme}
                    />
@@ -982,8 +1244,43 @@ export default function Reader() {
         isFollowing={flow.isFollowing}
         audioLevelRef={flow.audioLevelRef}
         timerState={timerState}
-        onResetTimer={resetTimer}
+        onResetTimer={startOver}
+        showTiming={presentation.showTiming}
+        getTimingMetrics={getTimingMetrics}
       />
+      <Dialog open={resumeChoice !== null} onOpenChange={open => { if (!open) void exitReader(); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{resumeChoice?.completed ? 'Script completed' : 'Continue this script?'}</DialogTitle>
+            <DialogDescription>
+              {resumeChoice?.completed
+                ? 'You reached the end last time. Start over for a new presentation.'
+                : 'Resume your saved reading position, or start from the beginning. Both open paused with a fresh session clock. No microphone capture starts automatically.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3">
+            <button className="rounded-md border px-4 py-2" onClick={startOver}>Start over</button>
+            {resumeChoice?.anchorId && <button className="rounded-md bg-primary text-primary-foreground px-4 py-2" onClick={resumeReading}>Resume</button>}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {playbackState.phase === 'countdown' && (
+        <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-5 bg-background/90" role="status" aria-live="polite">
+          <p className="text-lg">Starting in</p>
+          <strong className="text-7xl tabular-nums">{playbackState.countdownSeconds}</strong>
+          <button className="rounded-full border px-6 py-3" onClick={pausePlayback}>Cancel countdown</button>
+        </div>
+      )}
+      {timingMessage && (
+        <div role="status" className="relative z-50 flex items-center justify-between gap-3 bg-background border-b px-4 py-2 text-sm">
+          <span>{timingMessage}</span>
+          <button onClick={() => setTimingMessage(null)} className="underline">Dismiss</button>
+        </div>
+      )}
+      {!showControls && (
+        <button className="absolute left-3 bottom-3 z-[60] rounded-full bg-background/90 border px-4 py-2 text-sm"
+          onClick={() => setShowControls(true)}>Show controls</button>
+      )}
 
       {error && (
         <div role="alert" className="relative z-50 shrink-0 border-b border-destructive/30 bg-background px-4 py-2 text-sm text-destructive">
@@ -1027,6 +1324,8 @@ export default function Reader() {
               coordinate even while its painted viewport is mirrored. */}
           <div
             ref={containerRef}
+            tabIndex={0}
+            aria-label="Script reading area"
             className="absolute inset-0 overflow-y-auto"
             style={{
               paddingLeft: `${presentation.horizontalMargin}%`,
@@ -1123,15 +1422,15 @@ export default function Reader() {
 
       {readMode === 'flow' && !showWizard && (
         <FlowStatusPanel 
-          flow={flow} 
-          onCancelMode={() => setReadMode('manual')} 
+          flow={{ ...flow, start: () => dispatchCommand({ action: 'playPause' }) }}
+          onCancelMode={() => dispatchCommand({ action: 'setReadMode', mode: 'manual' })}
           onOpenWizard={() => setShowWizard(true)}
         />
       )}
 
       {showWizard && (
         <FlowSetupWizard
-          flow={flow}
+          flow={{ ...flow, start: () => dispatchCommand({ action: 'playPause' }) }}
           onComplete={() => {
             localStorage.setItem('quickque-flow-setup-done', 'true');
             setShowWizard(false);
@@ -1139,8 +1438,7 @@ export default function Reader() {
           onCancel={() => {
             const isSetupDone = localStorage.getItem('quickque-flow-setup-done') === 'true';
             if (!isSetupDone) {
-              setReadMode('manual');
-              flow.stop();
+              dispatchCommand({ action: 'setReadMode', mode: 'manual' });
             }
             setShowWizard(false);
           }}
@@ -1184,17 +1482,19 @@ export default function Reader() {
         
         <button
           onClick={() => dispatchCommand({ action: 'playPause' })}
+          aria-label={['countdown', 'starting', 'playing'].includes(playbackState.phase) ? 'Pause presentation' : 'Play presentation'}
           disabled={readMode === 'flow' && !['ready', 'listening', 'paused', 'silence-stopped', 'stopped', 'loading', 'error'].includes(flow.status)}
           className="w-14 h-14 flex items-center justify-center bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 hover:scale-105 transition-all focus:outline-none focus:ring-4 focus:ring-primary/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
         >
           {readMode === 'flow' && flow.status === 'loading' ? (
             <Loader2 className="w-6 h-6 animate-spin" />
           ) : (
-            (readMode === 'manual' ? isPlaying : flow.status === 'listening') ? 
+            ['countdown', 'starting', 'playing'].includes(playbackState.phase) ?
               <Pause className="w-6 h-6 fill-current" /> : 
               <Play className="w-6 h-6 fill-current ml-1" />
           )}
         </button>
+        <button onClick={startOver} className="px-3 text-xs underline whitespace-nowrap">Start over</button>
       </div>
 
     </div>

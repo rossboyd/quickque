@@ -42,6 +42,25 @@ A local-first personal teleprompter for live meetings, with an interruption-frie
 
 ## Product
 
+### Reader timing and local resume
+
+- Countdown is 0–30 seconds on a fresh start. Cancelled starts do not capture or
+  scroll; ordinary pause/resume does not repeat countdown. All existing
+  toolbar, keyboard, native and phone inputs share the presentation lifecycle.
+- Manual target duration means total **active session** time, not spoken or
+  wall-clock duration. Remaining rendered distance is recalculated against the
+  time left after reflow/seek. Targets requiring over 3,000 px/s pause with an
+  explicit error rather than silently changing the target. Editing speed turns
+  timed mode off. Flow never shows a fixed completion estimate.
+- Local resume metadata is separate from all library/native exports. It holds
+  only bounded script-relative location, completion and a content fingerprint;
+  no transcript, audio, microphone state or elapsed time. Content edits reset
+  the saved location rather than guessing a potentially wrong word. Resume
+  opens paused with zero session time; Start over resets both time and position.
+- Browser/unit verification is not native evidence. The Mac smoke checklist in
+  `artifacts/quickque/DESKTOP.md` remains required for WKWebView, actual speech
+  capture, global shortcuts, and a physical paired phone.
+
 Create and edit sectioned scripts, navigate sections while reading, pause without losing position, and adjust reading speed and appearance. The Mac reader is designed to float above meeting windows. Optional Flow follows locally transcribed English speech; browser preview keeps manual reading and explains the native requirement.
 
 ## User preferences

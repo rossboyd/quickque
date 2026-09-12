@@ -9,6 +9,13 @@ import {
 export const DEFAULT_PRESENTATION: PresentationPreferences = {
   fontSize: 48,
   speed: 50,
+  countdownSeconds: 0,
+  targetDurationSeconds: null,
+  showTiming: true,
+  // Keep the reader's existing playback behaviour when this preference is
+  // first introduced.
+  hideControlsWhilePlaying: true,
+  pauseOnManualScroll: false,
   backgroundOpacity: 85,
   fontFamily: 'system',
   textColor: null,
@@ -47,6 +54,19 @@ function booleanOrFallback(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function nullableNumberInRange(
+  value: unknown,
+  fallback: number | null,
+  minimum: number,
+  maximum: number,
+): number | null {
+  if (value === null) return null;
+  return typeof value === 'number' && Number.isFinite(value) &&
+    value >= minimum && value <= maximum
+    ? value
+    : fallback;
+}
+
 function cueStyleOrFallback(
   value: unknown,
   fallback: PresentationPreferences['cueStyle'],
@@ -75,6 +95,27 @@ export function normalizePresentation(
   return {
     fontSize: numberInRange(source.fontSize, base.fontSize, 16, 120),
     speed: numberInRange(source.speed, base.speed, 1, 150),
+    countdownSeconds: numberInRange(
+      source.countdownSeconds,
+      base.countdownSeconds,
+      0,
+      30,
+    ),
+    targetDurationSeconds: nullableNumberInRange(
+      source.targetDurationSeconds,
+      base.targetDurationSeconds,
+      1,
+      86_400,
+    ),
+    showTiming: booleanOrFallback(source.showTiming, base.showTiming),
+    hideControlsWhilePlaying: booleanOrFallback(
+      source.hideControlsWhilePlaying,
+      base.hideControlsWhilePlaying,
+    ),
+    pauseOnManualScroll: booleanOrFallback(
+      source.pauseOnManualScroll,
+      base.pauseOnManualScroll,
+    ),
     backgroundOpacity: numberInRange(
       source.backgroundOpacity,
       base.backgroundOpacity,

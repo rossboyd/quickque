@@ -16,6 +16,7 @@ import {
   PresentationPreferences,
 } from './types';
 import { generateId } from './utils';
+import { pruneResumePositions } from './reader-resume-position';
 import {
   collectScriptIds,
   createLibraryEnvelope,
@@ -838,7 +839,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       sortMode: sortModeRef.current,
       activeScriptId: activeScriptIdRef.current,
     }, ids, Date.now());
-    return next ? commitLibrary(next).ok : false;
+    const saved = next ? commitLibrary(next).ok : false;
+    if (saved && next) {
+      const cleanup = pruneResumePositions(next.scripts.map(script => script.id));
+      if (!cleanup.ok) setError(cleanup.error);
+    }
+    return saved;
   }, [commitLibrary]);
 
   const deleteScript = useCallback((id: string) => {
@@ -864,7 +870,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       sortMode: sortModeRef.current,
       activeScriptId: activeScriptIdRef.current,
     }, ids);
-    return next ? commitLibrary(next).ok : false;
+    const saved = next ? commitLibrary(next).ok : false;
+    if (saved && next) {
+      const cleanup = pruneResumePositions(next.scripts.map(script => script.id));
+      if (!cleanup.ok) setError(cleanup.error);
+    }
+    return saved;
   }, [commitLibrary]);
 
   const duplicateScript = useCallback((id: string) => {
