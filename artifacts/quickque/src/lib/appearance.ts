@@ -35,11 +35,11 @@ const FONT_FAMILY_VALUES = new Set<FontFamily>(
   FONT_FAMILY_OPTIONS.map(option => option.value),
 );
 
-export const THEME_DEFAULT_DARK_PICKER_COLOR = '#FAFAFA';
-export const THEME_DEFAULT_LIGHT_PICKER_COLOR = '#171717';
+export const THEME_DEFAULT_DARK_PICKER_COLOR = '#F4F5FA';
+export const THEME_DEFAULT_LIGHT_PICKER_COLOR = '#14182E';
 
-const THEME_DARK_SURFACE_COLOR = '#111827';
-const THEME_LIGHT_SURFACE_COLOR = '#F9FAFB';
+const THEME_DARK_SURFACE_COLOR = '#0B111E';
+const THEME_LIGHT_SURFACE_COLOR = '#F8F9FC';
 
 export function isValidTextColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);

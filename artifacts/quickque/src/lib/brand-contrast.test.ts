@@ -4,6 +4,14 @@ import { readFileSync } from 'node:fs';
 
 const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
 
+test('dark theme retains the midnight navy and periwinkle reference palette', () => {
+  const block = css.split('.dark {')[1].split('}')[0];
+  assert.match(block, /--background: 222 47% 8%/);
+  assert.match(block, /--card: 222 38% 12%/);
+  assert.match(block, /--sidebar: 222 52% 7%/);
+  assert.match(block, /--primary: 234 78% 70%/);
+});
+
 function luminance(block: string, token: string): number {
   const values = block.match(new RegExp(`--${token}: ([\\d.]+) ([\\d.]+)% ([\\d.]+)%`));
   assert.ok(values, `Missing HSL token ${token}`);

@@ -44,10 +44,11 @@ test('appearance defaults preserve the existing presentation settings', () => {
   assert.equal(DEFAULT_SETTINGS.fontFamily, 'system');
   assert.equal(FONT_FAMILY_OPTIONS.length, 4);
   assert.match(getFontFamilyCss(DEFAULT_SETTINGS.fontFamily), /system-ui/);
-  assert.equal(getThemeDefaultPickerColor(true), '#FAFAFA');
-  assert.equal(getThemeDefaultPickerColor(false), '#171717');
+  assert.equal(DEFAULT_SETTINGS.darkTheme, true);
+  assert.equal(getThemeDefaultPickerColor(true), '#F4F5FA');
+  assert.equal(getThemeDefaultPickerColor(false), '#14182E');
   assert.ok((getTextContrastRatio('#000000', true) ?? 0) < 4.5);
-  assert.ok((getTextContrastRatio('#FAFAFA', true) ?? 0) >= 4.5);
+  assert.ok((getTextContrastRatio('#F4F5FA', true) ?? 0) >= 4.5);
 });
 
 test('legacy settings load safely and invalid appearance values use defaults', () => {
