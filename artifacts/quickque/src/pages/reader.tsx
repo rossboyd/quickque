@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { useStore } from '@/lib/store';
+import type { Settings } from '@/lib/types';
 import { useLocation, useParams } from 'wouter';
 import { 
-  Play, Pause, X, Minus, Plus, Settings2, Maximize2, Minimize2, ChevronLeft, ChevronRight, Droplets, Loader2, Smartphone
+  Play, Pause, X, Minus, Plus, Settings2, Maximize2, Minimize2, ChevronLeft, ChevronRight, Droplets, Loader2, Smartphone, Palette
 } from 'lucide-react';
 import { isDesktop, setOverlayMode, setAlwaysOnTop, startDragging } from '@/lib/desktop';
 import { useLocalFlow } from '@/hooks/use-local-flow';
@@ -15,13 +16,34 @@ import { resolveCommandEffect } from '@/lib/remote/reducer';
 import type { RemoteSnapshot } from '@/lib/remote/types';
 import { invoke } from '@tauri-apps/api/core';
 import { getReaderSurfacePresentation } from '@/lib/reader-surface';
+import { getFontFamilyCss, getTextColorCss } from '@/lib/appearance';
+import {
+  findNearestReaderAnchor,
+  getReaderAnchorOffset,
+  restoreReaderScrollTop,
+} from '@/lib/reader-position';
 import { FlowSetupWizard } from '@/components/flow-setup-wizard';
 import { usePresentationTimer } from '@/hooks/use-presentation-timer';
 import { PresentationHUD } from '@/components/presentation-hud';
 import { getElapsedMs } from '@/lib/presentation-timer';
+import { AppearanceControls } from '@/components/appearance-controls';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+
+type ReaderPositionSnapshot = {
+  anchorId: string;
+  anchorOffset: number;
+  fallbackScrollTop: number;
+};
 
 export default function Reader() {
-  const { scripts, settings, updateSettings } = useStore();
+  const { scripts, settings, updateSettings: persistReaderSettings } = useStore();
   const params = useParams();
   const [_, setLocation] = useLocation();
   const script = scripts.find(s => s.id === params.id);
@@ -35,6 +57,34 @@ export default function Reader() {
   const containerRef = useRef<HTMLDivElement>(null);
   const textContentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const pendingReflowPositionRef = useRef<ReaderPositionSnapshot | null>(null);
+
+  // All reader settings changes, including phone font-size commands, pass here.
+  // Measure BEFORE requesting a React update: parent layout-effect cleanup can
+  // already see descendant host mutations and therefore cannot capture old text.
+  const updateSettings = useCallback((updates: Partial<Settings>) => {
+    const fontChanges =
+      (updates.fontFamily !== undefined && updates.fontFamily !== settings.fontFamily) ||
+      (updates.fontSize !== undefined && updates.fontSize !== settings.fontSize);
+    const container = containerRef.current;
+    const content = textContentRef.current;
+    if (fontChanges && container && content) {
+      const guideTop = container.getBoundingClientRect().top + container.clientHeight * 0.3;
+      const anchors = Array.from(
+        content.querySelectorAll<HTMLElement>('[data-reader-anchor]'),
+      ).map(element => ({
+        id: element.dataset.readerAnchor ?? '',
+        top: element.getBoundingClientRect().top,
+      }));
+      const nearest = findNearestReaderAnchor(anchors, guideTop);
+      pendingReflowPositionRef.current = {
+        anchorId: nearest?.id ?? '',
+        anchorOffset: nearest ? getReaderAnchorOffset(nearest.top, guideTop) : 0,
+        fallbackScrollTop: container.scrollTop,
+      };
+    }
+    persistReaderSettings(updates);
+  }, [persistReaderSettings, settings.fontFamily, settings.fontSize]);
 
   useEffect(() => {
     if (readMode === 'flow') {
@@ -183,6 +233,33 @@ export default function Reader() {
 
   const exactScrollTopRef = useRef<number>(0);
   const activeTokenSpanRef = useRef<HTMLSpanElement>(null);
+  // Restore the pre-update word measurement after the new font has reflowed.
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const pending = pendingReflowPositionRef.current;
+    if (container && pending) {
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+      let targetScrollTop = Math.min(pending.fallbackScrollTop, maxScrollTop);
+      const anchor = Array.from(
+        textContentRef.current?.querySelectorAll<HTMLElement>('[data-reader-anchor]') ?? [],
+      ).find(element => element.dataset.readerAnchor === pending.anchorId);
+      if (anchor) {
+        const containerRect = container.getBoundingClientRect();
+        const guideTop = containerRect.top + container.clientHeight * 0.3;
+        targetScrollTop = restoreReaderScrollTop(
+          container.scrollTop,
+          anchor.getBoundingClientRect().top,
+          guideTop,
+          pending.anchorOffset,
+          maxScrollTop,
+        );
+      }
+      container.scrollTop = targetScrollTop;
+      exactScrollTopRef.current = targetScrollTop;
+      pendingReflowPositionRef.current = null;
+    }
+
+  }, [settings.fontFamily, settings.fontSize]);
 
   // Manual Scrolling logic
   useEffect(() => {
@@ -250,7 +327,14 @@ export default function Reader() {
     };
     req = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(req);
-  }, [readMode, flow.status, flow.isFollowing, flow.anchor]);
+  }, [
+    readMode,
+    flow.status,
+    flow.isFollowing,
+    flow.anchor,
+    settings.fontFamily,
+    settings.fontSize,
+  ]);
 
   // Section tracking during scroll (only in manual mode or paused)
   useEffect(() => {
@@ -590,6 +674,52 @@ export default function Reader() {
                   }
                 />
               </div>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button
+                    type="button"
+                    className="p-2 rounded-full transition-colors backdrop-blur-md hover:bg-black/10 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    title="Script appearance"
+                    aria-label="Open script appearance settings"
+                  >
+                    <Palette className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="max-w-[min(92vw,32rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto p-4 sm:p-6">
+                  <DialogHeader>
+                    <DialogTitle>Script appearance</DialogTitle>
+                    <DialogDescription>
+                      Choose the font and text colour for script copy in the
+                      editor and reader.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex items-center justify-between gap-3" role="group" aria-label="Script text size">
+                    <span className="font-medium">Text size</span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        aria-label="Decrease script text size"
+                        disabled={settings.fontSize <= 16}
+                        onClick={() => dispatchCommand({ action: 'fontSize', value: -4 })}
+                        className="rounded-md border border-border p-2 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Minus className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                      <output className="min-w-[4ch] text-center font-mono text-sm">{settings.fontSize}px</output>
+                      <button
+                        type="button"
+                        aria-label="Increase script text size"
+                        disabled={settings.fontSize >= 120}
+                        onClick={() => dispatchCommand({ action: 'fontSize', value: 4 })}
+                        className="rounded-md border border-border p-2 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Plus className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                  <AppearanceControls settings={settings} updateSettings={updateSettings} />
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
 
@@ -672,8 +802,8 @@ export default function Reader() {
       {/* Reader Content Area */}
       <div className="flex-1 relative overflow-hidden">
         {/* Read Marker (Resume here marker) */}
-        <div className="absolute left-0 right-0 top-[30%] h-[2px] bg-gradient-to-r from-primary/80 via-primary/20 to-transparent z-30 pointer-events-none flex items-center">
-          <div className="w-3 h-3 bg-primary rounded-full ml-4 shadow-[0_0_10px_rgba(var(--primary),0.8)]" />
+        <div className="absolute left-0 right-0 top-[30%] h-[2px] bg-primary/70 z-30 pointer-events-none flex items-center">
+          <div className="w-3 h-3 bg-primary rounded-full ml-4" />
           {readMode === 'manual' && !isPlaying && (
             <div className="ml-3 px-2 py-0.5 rounded text-xs font-bold bg-primary text-primary-foreground shadow-sm uppercase tracking-wider animate-in fade-in zoom-in duration-200">
               Paused - Space to resume
@@ -702,12 +832,18 @@ export default function Reader() {
           className="absolute inset-0 overflow-y-auto px-6 md:px-24 pb-[80vh]"
           style={{ 
             paddingTop: '30vh',
-            fontFamily: 'var(--font-sans)',
             fontSize: `${settings.fontSize}px`,
             lineHeight: 1.5
           }}
         >
-          <div ref={textContentRef} className="max-w-4xl mx-auto space-y-[10vh]">
+          <div
+            ref={textContentRef}
+            className="max-w-4xl mx-auto space-y-[10vh]"
+            style={{
+              fontFamily: getFontFamilyCss(settings.fontFamily),
+              color: getTextColorCss(settings.textColor),
+            }}
+          >
             {enrichedSections.map((section, idx) => (
               <div 
                 key={section.id} 
@@ -726,11 +862,18 @@ export default function Reader() {
                   </h3>
                 )}
                 <div 
-                  className="whitespace-pre-wrap font-medium tracking-tight text-foreground"
+                  className="whitespace-pre-wrap font-medium tracking-tight"
                 >
                   {section.spans.map((span, i) => {
-                    if (span.type === 'text') {
-                      return <span key={i}>{span.text}</span>;
+                     if (span.type === 'text') {
+                       return (
+                         <span
+                           key={i}
+                           data-reader-anchor={`${section.id}:${i}`}
+                         >
+                           {span.text}
+                         </span>
+                       );
                     } else {
                       const isRead = flow.anchor > span.endTokenIdx!;
                       const isActive = flow.anchor >= span.startTokenIdx! && flow.anchor <= span.endTokenIdx!;
@@ -747,6 +890,7 @@ export default function Reader() {
                       return (
                         <span 
                           key={i} 
+                          data-reader-anchor={`${section.id}:${i}`}
                           className={className}
                           ref={isActive ? activeTokenSpanRef : null}
                         >

@@ -1,18 +1,21 @@
 import { calculateWordCount, estimateTime, formatTime, generateId } from '@/lib/utils';
 import { Play, Plus, Trash, ChevronUp, ChevronDown, ChevronLeft } from 'lucide-react';
-import { Script, ScriptSection } from '@/lib/types';
+import { Script, ScriptSection, Settings, DEFAULT_SETTINGS } from '@/lib/types';
 import { MAX_SECTIONS } from '@/lib/store-persistence';
+import { getFontFamilyCss, getTextColorCss } from '@/lib/appearance';
 
 export function Editor({ 
   script, 
   onChange, 
   onPresent, 
-  onCloseMobile 
+  onCloseMobile,
+  settings = DEFAULT_SETTINGS,
 }: { 
   script: Script; 
   onChange: (u: Partial<Script>) => void; 
   onPresent: () => void; 
   onCloseMobile: () => void;
+  settings?: Settings;
 }) {
   const totalWords = script.sections.reduce((acc, sec) => acc + calculateWordCount(sec.content), 0);
   const timeSec = estimateTime(totalWords);
@@ -77,7 +80,7 @@ export function Editor({
           </div>
           <button 
             onClick={onPresent}
-            className="flex-shrink-0 flex items-center gap-2 px-4 md:px-6 py-2.5 md:py-3 bg-primary text-primary-foreground font-medium rounded-full shadow-lg shadow-primary/20 hover:bg-primary/90 hover:-translate-y-0.5 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            className="flex-shrink-0 flex items-center gap-2 px-4 md:px-6 py-2.5 md:py-3 bg-primary text-primary-foreground font-medium rounded-full shadow-lg shadow-black/10 dark:shadow-black/30 hover:bg-primary/90 hover:-translate-y-0.5 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
           >
             <Play className="w-4 h-4 md:w-5 md:h-5 fill-current" />
             Present
@@ -142,7 +145,11 @@ export function Editor({
                 className="w-full bg-transparent text-foreground p-4 min-h-[160px] resize-y focus:outline-none leading-relaxed"
                 placeholder="Type your script here..."
                 aria-label={`Section content for "${section.title}"`}
-                style={{ fontSize: '1.05rem' }}
+                style={{
+                  fontSize: '1.05rem',
+                  fontFamily: getFontFamilyCss(settings.fontFamily),
+                  color: getTextColorCss(settings.textColor),
+                }}
               />
             </div>
           ))}

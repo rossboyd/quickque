@@ -37,6 +37,10 @@ import {
   mergeNativeHydration,
   canWriteNativeLibrary,
 } from './library-data';
+import {
+  loadSettings,
+  persistSettings,
+} from './settings-persistence';
 
 const SEED_SCRIPTS: Script[] = createInitialScripts();
 type StoreContextType = {
@@ -287,15 +291,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const storage = storageRef.current;
     if (storage) {
       try {
-        const storedSettings = storage.getItem('quickque_settings');
-        if (storedSettings) {
-          const parsedSettings = JSON.parse(storedSettings);
-          if (parsedSettings && typeof parsedSettings === 'object') {
-            const loadedSettings = { ...DEFAULT_SETTINGS, ...parsedSettings };
-            settingsRef.current = loadedSettings;
-            setSettings(loadedSettings);
-          }
-        }
+        const loadedSettings = loadSettings(storage);
+        settingsRef.current = loadedSettings;
+        setSettings(loadedSettings);
       } catch {
         setError('Failed to load settings.');
       }
@@ -589,16 +587,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setError('Failed to save settings.');
       return;
     }
-    const nextSettings = { ...settingsRef.current, ...newSettings };
-    try {
-      storage.setItem('quickque_settings', JSON.stringify(nextSettings));
-    } catch {
+    const persisted = persistSettings(storage, {
+      ...settingsRef.current,
+      ...newSettings,
+    });
+    if (!persisted.ok) {
       // Do not publish a setting that did not reach durable storage.
       setError('Failed to save settings.');
       return;
     }
-    settingsRef.current = nextSettings;
-    setSettings(nextSettings);
+    settingsRef.current = persisted.settings;
+    setSettings(persisted.settings);
     setError(current => (
       current === 'Failed to save settings.' || current === 'Failed to load settings.'
         ? null
@@ -1888,13 +1887,7 @@ function readBootstrapData(): BootstrapData {
   let settings = DEFAULT_SETTINGS;
   if (storage) {
     try {
-      const storedSettings = storage.getItem(SETTINGS_STORAGE_KEY);
-      if (storedSettings !== null) {
-        const parsedSettings: unknown = JSON.parse(storedSettings);
-        if (isRecord(parsedSettings)) {
-          settings = { ...DEFAULT_SETTINGS, ...parsedSettings };
-        }
-      }
+      settings = loadSettings(storage);
     } catch {
       // Defaults are safe for settings. Scripts and profile errors remain
       // explicit because silently replacing those can hide data loss.

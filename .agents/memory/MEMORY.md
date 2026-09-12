@@ -6,3 +6,4 @@
 - [Native library compatibility](native-library-compatibility.md) — reconcile chosen-folder scripts with browser metadata; recovery must block queued autosaves.
 - [React SSR router compatibility](react-ssr-router.md) — Wouter's memory-location hook can fail React 19 SSR despite passing typechecks; verify actual HTML responses.
 - [Stripe bootstrap compatibility](stripe-bootstrap-compatibility.md) — credential aliases, awaited catalogue sync, and managed webhook secret selection differ from generic templates.
+- [Reader reflow anchoring](reader-reflow-anchoring.md) — capture the reading word before requesting font changes; parent layout cleanup can already see the new DOM.

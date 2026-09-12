@@ -51,6 +51,7 @@ export default function Library() {
   const store = useStore();
   const { 
     scripts, activeScriptId, setActiveScriptId,
+    settings,
     createScript, updateScript, duplicateScript,
     error, clearError, profile,
     trash, sortMode, customOrder,
@@ -622,6 +623,7 @@ export default function Library() {
         {activeScript ? (
           <Editor 
             script={activeScript} 
+            settings={settings}
             onChange={(updates) => updateScript(activeScript.id, updates)} 
             onPresent={handlePresent}
             onCloseMobile={() => setIsMobileEditorOpen(false)}

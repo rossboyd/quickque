@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { MAX_BACKUP_BYTES } from '@/lib/store-persistence';
 import { downloadFile } from '@/lib/library-management';
 import { isDesktop } from '@/lib/desktop';
+import { AppearanceControls } from '@/components/appearance-controls';
 
 export function SettingsDialog() {
   const {
@@ -206,6 +207,8 @@ export function SettingsDialog() {
                 />
               </div>
             </div>
+
+            <AppearanceControls settings={settings} updateSettings={updateSettings} />
           </div>
           
           <hr className="border-border" />

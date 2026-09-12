@@ -28,6 +28,12 @@ are saved, and level updates are excluded from diagnostic history.
 
 ## Prerequisites
 
+For the supplied app icon, script font/colour preferences, exact resource checks
+and installed-app offline verification, see
+[`BRANDING_VALIDATION.md`](BRANDING_VALIDATION.md). The normal build command
+retains the existing native build/test sequence and additionally checks the icon
+inputs and the generated `.app` icon reference/resource.
+
 - An Apple Silicon Mac running macOS Tahoe 26 or newer. Intel Macs and older
   macOS releases are unsupported for local Flow and fail closed; there is no
   browser or cloud fallback.

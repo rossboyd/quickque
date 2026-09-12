@@ -18,7 +18,13 @@ export type Settings = {
   backgroundOpacity: number; // 0 to 100
   darkTheme: boolean;
   compactMode: boolean; // Overlay mode
+  /** null follows the active theme's foreground colour. */
+  textColor: string | null;
+  /** A curated, locally available font stack for script copy. */
+  fontFamily: FontFamily;
 };
+
+export type FontFamily = 'system' | 'arial' | 'georgia' | 'monospace';
 
 export const DEFAULT_SETTINGS: Settings = {
   fontSize: 48,
@@ -26,6 +32,8 @@ export const DEFAULT_SETTINGS: Settings = {
   backgroundOpacity: 85,
   darkTheme: true, // Default to dark for prompter
   compactMode: false,
+  textColor: null,
+  fontFamily: 'system',
 };
 
 export type SortMode = 'newest' | 'oldest' | 'az' | 'za' | 'custom';

@@ -339,33 +339,35 @@ export function RemoteControlDialog({ trigger }: { trigger?: ReactNode }) {
 
                   {canShowQr && (
                     <div className="space-y-4 pt-2 border-t border-border">
-                      <div className="flex flex-col items-center p-6 bg-white rounded-xl shadow-inner border border-gray-200">
-                        <QRCodeSVG
-                          value={pairingUrl}
-                          size={180}
-                          level="M"
-                          includeMargin={false}
-                          aria-label="Phone remote pairing QR code"
-                        />
+                      <div className="flex flex-col items-center p-6 bg-card rounded-xl shadow-inner border border-border">
+                        <div className="bg-white p-3 rounded-lg">
+                          <QRCodeSVG
+                            value={pairingUrl}
+                            size={180}
+                            level="M"
+                            includeMargin={false}
+                            aria-label="Phone remote pairing QR code"
+                          />
+                        </div>
 
-                        <div className="mt-5 text-center text-sm font-medium text-gray-700">
+                        <div className="mt-5 text-center text-sm font-medium text-foreground">
                           Scan with your phone camera, then approve the request
                           on your Mac.
                         </div>
 
-                        <details className="mt-4 w-full border-t border-gray-100 pt-3 text-center">
-                          <summary className="cursor-pointer text-xs font-medium text-gray-500 hover:text-gray-800">
+                        <details className="mt-4 w-full border-t border-border pt-3 text-center">
+                          <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">
                             Can&apos;t scan? Use URL and code manually
                           </summary>
                           <div className="mt-3 space-y-2">
-                            <div className="flex items-center justify-center gap-1.5 text-xs font-mono text-gray-600 bg-gray-50 px-2 py-1 rounded break-all">
+                            <div className="flex items-center justify-center gap-1.5 text-xs font-mono text-muted-foreground bg-muted px-2 py-1 rounded break-all">
                               <LinkIcon
                                 className="w-3 h-3 opacity-50 shrink-0"
                                 aria-hidden="true"
                               />
                               {sessionInfo.url}
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               Enter code{' '}
                               <strong className="font-mono">
                                 {sessionInfo.code}
@@ -375,7 +377,7 @@ export function RemoteControlDialog({ trigger }: { trigger?: ReactNode }) {
                           </div>
                         </details>
 
-                        <div className="mt-3 text-xs text-gray-500">
+                        <div className="mt-3 text-xs text-muted-foreground">
                           Code expires in {sessionInfo.expiresInSeconds}s
                         </div>
                       </div>

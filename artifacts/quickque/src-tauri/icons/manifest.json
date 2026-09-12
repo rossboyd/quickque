@@ -1,0 +1,25 @@
+{
+  "source": "attached_assets/0_quickque_1789167367786.png",
+  "sourceSha256": "9622500798332a60c752f2afe4ba8c204edfa2334ee75d4a7940e3bcda5505d4",
+  "cropBounds": [
+    93,
+    90,
+    1162,
+    1148
+  ],
+  "files": {
+    "src-tauri/icons/16x16.png": "07b21dc87222e7c3845ef054b98fcd9cf302912f6e1d0dc7815eb35bbcacb53e",
+    "src-tauri/icons/32x32.png": "e08dc2f564d00aacb6a9460ff12647d97d1a118cb15d727167dc128033a91f41",
+    "src-tauri/icons/64x64.png": "00df5a21ec13d8f954eba19b1defdbe120be41f3d86ff41f4794544d99abf4ed",
+    "src-tauri/icons/128x128.png": "5d143674718e344572ebc1f8bd149437bfe4c7e51fcf692a139ba43d2860b8a1",
+    "src-tauri/icons/256x256.png": "ea8fffd9a55778e17839f7512887eb28a466f677087b48085d19a9027d654f0c",
+    "src-tauri/icons/512x512.png": "4ef5f6b88eea6d8cef60f332985f03ea5916c78614a073dfe128d2f65e77a177",
+    "src-tauri/icons/1024x1024.png": "f653076fde1850762ad3859fa4c507ab9eecafacdae94fa961486cb8b9fb20ac",
+    "src-tauri/icons/128x128@2x.png": "ea8fffd9a55778e17839f7512887eb28a466f677087b48085d19a9027d654f0c",
+    "src-tauri/icons/icon.png": "f653076fde1850762ad3859fa4c507ab9eecafacdae94fa961486cb8b9fb20ac",
+    "src-tauri/icons/icon.icns": "b87610bb12845d44cb939eb1aff7ce61593427ece4b6fd3ffc61322e7fee8959",
+    "src-tauri/icons/icon.ico": "bf8abf1c935b494747715ced9fecdbfa885c254f6f5807d869551b7e31e83107",
+    "public/favicon.png": "19298f11c8e4e1bcb49df6f15062a37d766a1b88781222116e29c0231a37838e",
+    "public/apple-touch-icon.png": "f92447cf16d8029c23ed565e41169a7dbb2d90135c12e6cf23c834c527460f41"
+  }
+}
