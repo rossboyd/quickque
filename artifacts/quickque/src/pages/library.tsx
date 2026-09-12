@@ -16,7 +16,7 @@ import {
   Plus, Search, MoreVertical, 
   Trash2, Copy, FileText, 
   Trash, AlertTriangle, MonitorPlay,
-  FileUp, Download, ArrowUpDown, Edit2, Code, ArrowUp, ArrowDown, ChevronDown,
+  FileUp, ArrowUpDown, Edit2, Code, ArrowUp, ArrowDown, ChevronDown,
   RotateCcw, X,
 } from 'lucide-react';
 import {
@@ -96,7 +96,6 @@ export default function Library() {
   const setupFlow = useLocalFlow({ tokens: setupTokens, enabled: showWizard });
 
   const [viewMode, setViewMode] = useState<'library' | 'trash'>('library');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{type: 'trash' | 'restore' | 'permanent', ids: string[]} | null>(null);
   const [isMobileEditorOpen, setIsMobileEditorOpen] = useState(false);
@@ -315,7 +314,7 @@ export default function Library() {
                 viewMode === 'library' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               aria-current={viewMode === 'library' ? 'page' : undefined}
-              onClick={() => { setViewMode('library'); setSelectedIds([]); setSearch(''); }}
+              onClick={() => { setViewMode('library'); setSearch(''); }}
             >
               <FileText className="h-4 w-4" />
               Library
@@ -327,7 +326,7 @@ export default function Library() {
                 viewMode === 'trash' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               aria-current={viewMode === 'trash' ? 'page' : undefined}
-              onClick={() => { setViewMode('trash'); setSelectedIds([]); setSearch(''); }}
+              onClick={() => { setViewMode('trash'); setSearch(''); }}
             >
               <Trash2 className="h-4 w-4" />
               Trash
@@ -396,54 +395,6 @@ export default function Library() {
         )}
 
         {viewMode === 'trash' && <p className="px-5 pb-3 text-[11px] text-muted-foreground">Kept on this device until you permanently delete them.</p>}
-        {selectedIds.length > 0 && (
-          <div className="flex flex-wrap gap-2 items-center justify-between px-5 py-2 text-xs border-y border-sidebar-border min-h-11 bg-primary/5">
-            <span className="text-muted-foreground">{selectedIds.length} selected</span>
-            <div className="flex items-center gap-1">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Actions for ${selectedIds.length} selected scripts`}>
-                    Actions <ChevronDown className="h-3.5 w-3.5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  {viewMode === 'library' ? (
-                    <>
-                      <DropdownMenuItem onSelect={() => downloadFile('quickque-export.txt', exportScripts(selectedIds, 'txt'), 'text/plain')}>
-                        <FileText /> Export as TXT
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => downloadFile('quickque-export.json', exportScripts(selectedIds, 'json'))}>
-                        <Download /> Export as JSON
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConfirmAction({ type: 'trash', ids: [...selectedIds] })}>
-                        <Trash2 /> Move to Trash
-                      </DropdownMenuItem>
-                    </>
-                  ) : (
-                    <>
-                      <DropdownMenuItem onSelect={() => setConfirmAction({ type: 'restore', ids: [...selectedIds] })}>
-                        <RotateCcw /> Restore to library
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConfirmAction({ type: 'permanent', ids: [...selectedIds] })}>
-                        <Trash /> Delete permanently
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <button
-                onClick={() => setSelectedIds([])}
-                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                aria-label="Clear selection"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
-
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {visibleItems.length === 0 ? (
             <div className="p-4 text-center text-muted-foreground text-sm mt-4">
@@ -458,7 +409,6 @@ export default function Library() {
               const totalWords = script.sections.reduce((acc, sec) => acc + calculateWordCount(sec.content), 0);
               const timeSec = estimateTime(totalWords);
               const isActive = script.id === activeScriptId;
-              const isSelected = selectedIds.includes(script.id);
               const itemInTrash = viewMode === 'trash' ? trash.find(t => t.script.id === script.id) : null;
               const isDraggable = sortMode === 'custom' && !search && viewMode === 'library';
               
@@ -479,19 +429,6 @@ export default function Library() {
                   )}
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0 pr-2">
-                    <div className="flex items-center justify-center p-1">
-                      <input 
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(e) => {
-                          if (e.target.checked) setSelectedIds([...selectedIds, script.id]);
-                          else setSelectedIds(selectedIds.filter(id => id !== script.id));
-                        }}
-                        className="w-4 h-4 rounded border-border accent-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        aria-label={`Select ${script.title || 'Untitled Script'}`}
-                      />
-                    </div>
-                    
                     <div className="flex-1 min-w-0 flex flex-col items-start">
                       {editingId === script.id ? (
                         <input 
@@ -624,7 +561,6 @@ export default function Library() {
           onOpenChange={setIsImportOpen} 
           onSuccess={() => {
             setViewMode('library');
-            setSelectedIds([]);
             setSearch('');
             setIsMobileEditorOpen(true);
           }}
@@ -721,7 +657,6 @@ export default function Library() {
                 }
                 
                 if (success) {
-                  setSelectedIds([]);
                   setConfirmAction(null);
                 }
               }}
