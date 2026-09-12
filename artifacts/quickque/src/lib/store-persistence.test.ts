@@ -3,7 +3,9 @@ import test from 'node:test';
 import {
   createDocumentScript,
   loadLibrary,
+  parseLibraryData,
   persistLibrary,
+  MAX_BACKUP_BYTES,
   QUICKQUE_SCRIPTS_KEY,
   QUICKQUE_ACTIVE_SCRIPT_KEY,
   storageErrors,
@@ -57,10 +59,131 @@ test('loads the legacy array and active key, then produces an envelope on migrat
   assert.equal(persisted.ok, true);
   const envelope = JSON.parse(storage.getItem(QUICKQUE_SCRIPTS_KEY) as string);
   assert.deepEqual(envelope, {
-    version: 1,
+    version: 2,
     scripts,
     activeScriptId: 'legacy-b',
+    trash: [],
+    customOrder: ['legacy-a', 'legacy-b'],
+    sortMode: 'custom',
   });
+});
+
+test('loads a legacy v1 envelope and migrates it to v2 on persistence', () => {
+  const storage = new MemoryStorage();
+  const scripts = [script('v1')];
+  storage.put(QUICKQUE_SCRIPTS_KEY, JSON.stringify({
+    version: 1,
+    scripts,
+    activeScriptId: 'v1',
+  }));
+  const loaded = loadLibrary(storage, []);
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) return;
+  assert.equal(loaded.needsMigration, true);
+  const migrated = persistLibrary(storage, loaded.scripts, loaded.activeScriptId, {
+    trash: loaded.trash,
+    customOrder: loaded.customOrder,
+    sortMode: loaded.sortMode,
+  });
+  assert.equal(migrated.ok, true);
+  assert.equal(JSON.parse(storage.getItem(QUICKQUE_SCRIPTS_KEY) as string).version, 2);
+});
+
+test('repairs repeated section identities in a legacy v1 envelope before migration', () => {
+  const storage = new MemoryStorage();
+  const first = script('first');
+  const second = script('second');
+  first.sections[0].id = 'repeated-section';
+  second.sections[0].id = 'repeated-section';
+  storage.put(QUICKQUE_SCRIPTS_KEY, JSON.stringify({
+    version: 1,
+    scripts: [first, second],
+    activeScriptId: 'first',
+  }));
+  const loaded = loadLibrary(storage, []);
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) return;
+  assert.notEqual(loaded.scripts[0].sections[0].id, loaded.scripts[1].sections[0].id);
+  assert.equal(loaded.needsMigration, true);
+});
+
+test('rejects malformed fields and metadata as an all-or-nothing table', () => {
+  const valid = script('valid');
+  const malformed: unknown[] = [
+    null,
+    { version: 3, scripts: [valid], activeScriptId: 'valid' },
+    [{ ...valid, id: '' }],
+    [{ ...valid, title: 4 }],
+    [{ ...valid, createdAt: null }],
+    [{ ...valid, updatedAt: 'now' }],
+    [{ ...valid, sections: null }],
+    [{ ...valid, sections: [{ ...valid.sections[0], id: '' }] }],
+    [{ ...valid, sections: [{ ...valid.sections[0], title: 4 }] }],
+    [{ ...valid, sections: [{ ...valid.sections[0], content: 4 }] }],
+    [{ ...valid, sections: [{ ...valid.sections[0] }, { ...valid.sections[0] }] }],
+    [{ ...valid, title: 'x'.repeat(201) }],
+    [{ ...valid, sections: [{ ...valid.sections[0], content: 'x'.repeat(500_001) }] }],
+    [{
+      ...valid,
+      sections: Array.from({ length: 501 }, (_, index) => ({
+        id: `section-${index}`,
+        title: 'Section',
+        content: '',
+      })),
+    }],
+    {
+      version: 2,
+      scripts: [valid],
+      activeScriptId: 'valid',
+      trash: [],
+      customOrder: ['missing'],
+      sortMode: 'custom',
+    },
+    {
+      version: 2,
+      scripts: [valid],
+      activeScriptId: 'valid',
+      trash: [],
+      customOrder: ['valid'],
+      sortMode: 'invalid',
+    },
+    {
+      version: 2,
+      scripts: [valid],
+      activeScriptId: 'valid',
+      trash: [{ script: valid, deletedAt: 'never' }],
+      customOrder: ['valid'],
+      sortMode: 'custom',
+    },
+  ];
+  for (const value of malformed) {
+    assert.equal(parseLibraryData(JSON.stringify(value)).ok, false);
+  }
+  assert.equal(parseLibraryData('x'.repeat(MAX_BACKUP_BYTES + 1)).ok, false);
+});
+
+test('round-trips portable scripts and full backup metadata', () => {
+  const storage = new MemoryStorage();
+  const scripts = [script('portable')];
+  const trash = [{ script: script('deleted'), deletedAt: 99 }];
+  const persisted = persistLibrary(storage, scripts, 'portable', {
+    trash,
+    customOrder: ['portable'],
+    sortMode: 'oldest',
+  });
+  assert.equal(persisted.ok, true);
+  const full = parseLibraryData(storage.getItem(QUICKQUE_SCRIPTS_KEY) as string);
+  assert.equal(full.ok, true);
+  if (!full.ok) return;
+  assert.deepEqual(full.library.scripts, scripts);
+  assert.deepEqual(full.library.trash, trash);
+  assert.equal(full.library.sortMode, 'oldest');
+
+  const portable = parseLibraryData(JSON.stringify(scripts));
+  assert.equal(portable.ok, true);
+  if (!portable.ok) return;
+  assert.deepEqual(portable.library.scripts, scripts);
+  assert.deepEqual(portable.library.trash, []);
 });
 
 test('does not write over malformed library bytes', () => {
@@ -119,4 +242,56 @@ test('document title and text validation enforces nonblank and size limits', () 
   assert.equal(createDocumentScript('title', ' \n\t', ids).ok, false);
   assert.equal(createDocumentScript('title', 'a'.repeat(500_001), ids).ok, false);
   assert.equal(createDocumentScript('a'.repeat(200), 'a'.repeat(500_000), ids).ok, true);
+});
+
+test('persists and reloads trash, custom order, and sort metadata', () => {
+  const storage = new MemoryStorage();
+  const scripts = [script('a'), script('b')];
+  const trash = [{
+    script: script('deleted'),
+    deletedAt: 42,
+  }];
+  const result = persistLibrary(storage, scripts, 'b', {
+    trash,
+    customOrder: ['b', 'a'],
+    sortMode: 'az',
+  });
+  assert.equal(result.ok, true);
+
+  const loaded = loadLibrary(storage, []);
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) return;
+  assert.deepEqual(loaded.trash, trash);
+  assert.deepEqual(loaded.customOrder, ['b', 'a']);
+  assert.equal(loaded.sortMode, 'az');
+  assert.equal(loaded.activeScriptId, 'b');
+});
+
+test('legacy arrays tolerate a stale active selection key', () => {
+  const storage = new MemoryStorage();
+  storage.put(QUICKQUE_SCRIPTS_KEY, JSON.stringify([script('a'), script('b')]));
+  storage.put(QUICKQUE_ACTIVE_SCRIPT_KEY, 'deleted');
+  const loaded = loadLibrary(storage, []);
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) return;
+  assert.equal(loaded.activeScriptId, 'a');
+});
+
+test('rejects malformed metadata without writing', () => {
+  const storage = new MemoryStorage();
+  const original = JSON.stringify({
+    version: 1,
+    scripts: [script('a')],
+    activeScriptId: 'a',
+    trash: [],
+    customOrder: ['missing'],
+    sortMode: 'custom',
+  });
+  storage.put(QUICKQUE_SCRIPTS_KEY, original);
+  const loaded = loadLibrary(storage, []);
+  assert.deepEqual(loaded, {
+    ok: false,
+    error: storageErrors.malformedLibrary,
+  });
+  assert.equal(storage.getItem(QUICKQUE_SCRIPTS_KEY), original);
 });

@@ -1,47 +1,55 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { 
   Settings as SettingsIcon, 
   Download, Upload, 
   Moon, Sun, MonitorUp
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { MAX_BACKUP_BYTES } from '@/lib/store-persistence';
+import { downloadFile } from '@/lib/library-management';
 
 export function SettingsDialog() {
-  const { settings, updateSettings, exportScripts, importScripts } = useStore();
+  const { settings, updateSettings, exportScripts, importScripts, error, recoveryRequired } = useStore();
   const [open, setOpen] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importFailed, setImportFailed] = useState(false);
+  const [reading, setReading] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+    e.target.value = '';
+    setImportStatus(null);
+    setImportFailed(false);
+    if (file.size > MAX_BACKUP_BYTES) {
+      setImportStatus('Backup is too large. The maximum size is 20 MB.');
+      return;
+    }
+    setReading(true);
     const reader = new FileReader();
     reader.onload = (event) => {
+      setReading(false);
       const content = event.target?.result as string;
       const success = importScripts(content);
       if (success) {
-        setImportStatus('Successfully imported scripts!');
-        setTimeout(() => setImportStatus(null), 3000);
+        setImportStatus('Successfully imported backup. Existing scripts were kept.');
       } else {
-        setImportStatus('Failed to import. Invalid format.');
+        setImportFailed(true);
+        setImportStatus('Backup was not imported. No scripts were changed.');
       }
     };
+    reader.onerror = () => {
+      setReading(false);
+      setImportStatus('Could not read this file. Please choose it again.');
+    };
     reader.readAsText(file);
-    e.target.value = '';
   };
 
   const handleExport = () => {
     const data = exportScripts();
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `quickque-backup-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadFile(`quickque-backup-${new Date().toISOString().split('T')[0]}.json`, data);
   };
 
   return (
@@ -49,15 +57,19 @@ export function SettingsDialog() {
       <DialogTrigger asChild>
         <button className="w-full flex items-center gap-2 p-2 hover:bg-sidebar-accent rounded-md text-sidebar-foreground transition-colors font-medium">
           <SettingsIcon className="w-5 h-5 opacity-70" />
-          Settings
+          Settings & backups
         </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px] bg-background border-border">
         <DialogHeader>
           <DialogTitle className="text-xl">Settings & Help</DialogTitle>
+          <DialogDescription>Device preferences, library backups and presentation shortcuts.</DialogDescription>
         </DialogHeader>
         
         <div className="space-y-6 py-4">
+          {error && !importFailed && (
+            <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
+          )}
           
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Appearance</h3>
@@ -73,6 +85,7 @@ export function SettingsDialog() {
               <label className="relative inline-flex items-center cursor-pointer">
                 <input 
                   type="checkbox" 
+                  aria-label="Dark Theme"
                   className="sr-only peer" 
                   checked={settings.darkTheme}
                   onChange={(e) => updateSettings({ darkTheme: e.target.checked })}
@@ -90,6 +103,7 @@ export function SettingsDialog() {
                 <span className="text-sm font-mono w-8 text-right">{settings.backgroundOpacity}%</span>
                 <input 
                   type="range"
+                  aria-label="Overlay Opacity"
                   min="0"
                   max="100"
                   value={settings.backgroundOpacity}
@@ -104,29 +118,38 @@ export function SettingsDialog() {
           
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Data</h3>
+            <p className="text-sm text-muted-foreground">
+              Full backups include scripts, Trash, custom order and sorting preference, but not presentation settings.
+              Import Backup adds scripts and Trash without replacing existing items or changing your current sort.
+              For TXT, PDF, DOCX or RTF files, use Import Document in the library.
+            </p>
             
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch justify-between gap-3">
               <button 
                 onClick={handleExport}
+                disabled={recoveryRequired}
                 className="flex-1 flex items-center justify-center gap-2 py-2 px-4 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors"
               >
                 <Download className="w-4 h-4" />
-                Backup JSON
+                Export Full Backup
               </button>
-              <label className="flex-1 flex items-center justify-center gap-2 py-2 px-4 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors cursor-pointer">
+              <button type="button" disabled={reading || recoveryRequired} onClick={() => fileInput.current?.click()} className="flex-1 flex items-center justify-center gap-2 py-2 px-4 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors disabled:opacity-50">
                 <Upload className="w-4 h-4" />
-                Restore JSON
+                {reading ? 'Reading…' : 'Import Backup JSON'}
+              </button>
                 <input 
+                  ref={fileInput}
                   type="file" 
-                  accept=".json" 
+                  accept=".json,application/json"
+                  aria-label="Choose Quickque backup JSON"
                   className="hidden" 
                   onChange={handleImport}
                 />
-              </label>
             </div>
             {importStatus && (
-              <div className={`text-sm p-2 rounded ${importStatus.includes('Success') ? 'bg-green-500/10 text-green-600 dark:text-green-400' : 'bg-destructive/10 text-destructive'}`}>
+              <div role="status" className={`text-sm p-2 rounded ${importStatus.includes('Success') ? 'bg-green-500/10 text-green-600 dark:text-green-400' : 'bg-destructive/10 text-destructive'}`}>
                 {importStatus}
+                {importFailed && error && <p className="mt-1">{error}</p>}
               </div>
             )}
           </div>

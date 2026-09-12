@@ -1,38 +1,68 @@
-import type { Script } from './types.ts';
+import type { DeletedScript, Script, SortMode } from './types.ts';
 import { generateId } from './utils.ts';
 
 export const QUICKQUE_SCRIPTS_KEY = 'quickque_scripts';
 export const QUICKQUE_ACTIVE_SCRIPT_KEY = 'quickque_active_script';
-export const QUICKQUE_STORAGE_VERSION = 1 as const;
+// v1 envelopes and pre-envelope arrays remain readable. New writes use v2 so
+// older clients cannot silently overwrite trash/order metadata.
+export const QUICKQUE_STORAGE_VERSION = 2 as const;
+export const LEGACY_STORAGE_VERSION = 1 as const;
 
 export const MAX_DOCUMENT_TITLE_LENGTH = 200;
 export const MAX_DOCUMENT_TEXT_LENGTH = 500_000;
+export const MAX_BACKUP_BYTES = 20 * 1024 * 1024;
+export const MAX_SCRIPTS = 10_000;
+export const MAX_TRASH = 10_000;
+export const MAX_SECTIONS = 500;
+export const MAX_ID_LENGTH = 200;
+export const MAX_TITLE_LENGTH = 200;
+export const MAX_CONTENT_LENGTH = 500_000;
 
 export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 }
 
+export type LibraryMetadata = {
+  trash: DeletedScript[];
+  customOrder: string[];
+  sortMode: SortMode;
+};
+
 export type LibraryEnvelope = {
   version: typeof QUICKQUE_STORAGE_VERSION;
   scripts: Script[];
   activeScriptId: string | null;
+  // Optional makes this envelope source-compatible with the original v1
+  // format. Newly persisted libraries always include all three fields.
+  trash?: DeletedScript[];
+  customOrder?: string[];
+  sortMode?: SortMode;
 };
 
-export type LoadedLibrary =
-  | {
-      ok: true;
-      scripts: Script[];
-      activeScriptId: string | null;
-      /** True when the value came from the pre-envelope array format. */
-      needsMigration: boolean;
-      /** True when quickque_scripts did not exist and the caller used its seed. */
-      wasMissing: boolean;
-    }
-  | {
-      ok: false;
-      error: string;
-    };
+export type LoadedLibrary = {
+  ok: true;
+  scripts: Script[];
+  activeScriptId: string | null;
+  trash: DeletedScript[];
+  customOrder: string[];
+  sortMode: SortMode;
+  /** True when the value needs migration to the current v2 envelope. */
+  needsMigration: boolean;
+  /** True when quickque_scripts did not exist and the caller used its seed. */
+  wasMissing: boolean;
+} | {
+  ok: false;
+  error: string;
+};
+
+export type ParsedLibrary = {
+  scripts: Script[];
+  activeScriptId: string | null;
+  trash: DeletedScript[];
+  customOrder: string[];
+  sortMode: SortMode;
+};
 
 export type DocumentImportResult =
   | { ok: true; script: Script }
@@ -44,9 +74,28 @@ const STORAGE_READ_ERROR =
   'Failed to load your scripts. Your existing data was left untouched.';
 const STORAGE_WRITE_ERROR =
   'Could not save to this device. Your library and selection are unchanged. Free up browser storage or allow site storage, then retry; keep this review open to retain your text.';
+const BACKUP_TOO_LARGE_ERROR =
+  `This backup is too large. Backups must be ${MAX_BACKUP_BYTES} bytes or smaller.`;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isBoundedString(value: unknown, maxLength: number): value is string {
+  return typeof value === 'string' && value.length <= maxLength;
+}
+
+function isValidId(value: unknown): value is string {
+  return isBoundedString(value, MAX_ID_LENGTH) && value.trim().length > 0;
+}
+
+function isValidTimestamp(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= 8_640_000_000_000_000
+  );
 }
 
 /**
@@ -56,39 +105,93 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function isValidScript(value: unknown): value is Script {
   if (!isRecord(value)) return false;
-  if (typeof value.id !== 'string' || value.id.length === 0) return false;
-  if (typeof value.title !== 'string') return false;
-  if (
-    typeof value.createdAt !== 'number' ||
-    typeof value.updatedAt !== 'number' ||
-    !Number.isFinite(value.createdAt) ||
-    !Number.isFinite(value.updatedAt)
-  ) {
+  if (!isValidId(value.id)) return false;
+  if (!isBoundedString(value.title, MAX_TITLE_LENGTH)) return false;
+  if (!isValidTimestamp(value.createdAt) || !isValidTimestamp(value.updatedAt)) {
     return false;
   }
-  if (!Array.isArray(value.sections)) return false;
+  if (!Array.isArray(value.sections) || value.sections.length > MAX_SECTIONS) return false;
 
   const sectionIds = new Set<string>();
   return value.sections.every(section => {
     if (!isRecord(section)) return false;
-    if (typeof section.id !== 'string' || section.id.length === 0) return false;
+    if (!isValidId(section.id)) return false;
     if (sectionIds.has(section.id)) return false;
     sectionIds.add(section.id);
     return (
-      typeof section.title === 'string' &&
-      typeof section.content === 'string'
+      isBoundedString(section.title, MAX_TITLE_LENGTH) &&
+      isBoundedString(section.content, MAX_CONTENT_LENGTH)
     );
   });
 }
 
 function isValidScripts(value: unknown): value is Script[] {
-  if (!Array.isArray(value)) return false;
-  const scriptIds = new Set<string>();
+  if (!Array.isArray(value) || value.length > MAX_SCRIPTS) return false;
+  const ids = new Set<string>();
   return value.every(script => {
-    if (!isValidScript(script) || scriptIds.has(script.id)) return false;
-    scriptIds.add(script.id);
+    if (!isValidScript(script) || ids.has(script.id)) return false;
+    ids.add(script.id);
     return true;
   });
+}
+
+function isValidTrash(value: unknown): value is DeletedScript[] {
+  if (!Array.isArray(value) || value.length > MAX_TRASH) return false;
+  return value.every(entry => (
+    isRecord(entry) &&
+    isValidScript(entry.script) &&
+    isValidTimestamp(entry.deletedAt)
+  ));
+}
+
+function isSortMode(value: unknown): value is SortMode {
+  return value === 'newest' || value === 'oldest' || value === 'az' ||
+    value === 'za' || value === 'custom';
+}
+
+function sameStringSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const bSet = new Set(b);
+  return a.every(id => bSet.has(id)) && new Set(a).size === a.length;
+}
+
+function validateState(
+  scripts: unknown,
+  trash: unknown,
+  customOrder: unknown,
+  sortMode: unknown,
+  activeScriptId: unknown,
+): scripts is Script[] {
+  if (!isValidScripts(scripts) || !isValidTrash(trash)) return false;
+  if (!Array.isArray(customOrder) || customOrder.some(id => (
+    !isValidId(id)
+  ))) return false;
+  if (!isSortMode(sortMode) || !sameStringSet(customOrder, scripts.map(script => script.id))) {
+    return false;
+  }
+  if (activeScriptId !== null && (
+    typeof activeScriptId !== 'string' ||
+    !scripts.some(script => script.id === activeScriptId)
+  )) return false;
+
+  const ids = new Set<string>();
+  for (const script of scripts) {
+    if (ids.has(script.id)) return false;
+    ids.add(script.id);
+    for (const section of script.sections) {
+      if (ids.has(section.id)) return false;
+      ids.add(section.id);
+    }
+  }
+  for (const entry of trash) {
+    if (ids.has(entry.script.id)) return false;
+    ids.add(entry.script.id);
+    for (const section of entry.script.sections) {
+      if (ids.has(section.id)) return false;
+      ids.add(section.id);
+    }
+  }
+  return true;
 }
 
 function activeIdForScripts(
@@ -108,6 +211,168 @@ function activeIdForScripts(
     : undefined;
 }
 
+function defaultMetadata(scripts: Script[]): LibraryMetadata {
+  return {
+    trash: [],
+    customOrder: scripts.map(script => script.id),
+    sortMode: 'custom',
+  };
+}
+
+/**
+ * Old array backups were written before section IDs were required to be
+ * globally unique. Keep those backups recoverable while ensuring anything
+ * returned to the store can be written and loaded safely.
+ */
+function repairIdentityCollisions(
+  scripts: Script[],
+  trash: DeletedScript[],
+): { scripts: Script[]; trash: DeletedScript[] } | null {
+  // Reserve every active script ID before sections are visited. This keeps
+  // script IDs (and therefore active/custom-order references) authoritative
+  // while colliding section IDs are regenerated.
+  const used = new Set(scripts.map(script => script.id));
+  const repair = (source: Script, preserveScriptId: boolean): Script | null => {
+    let scriptId = source.id;
+    if (!preserveScriptId && used.has(scriptId)) {
+      const freshScriptId = freshId(used, generateId);
+      if (!freshScriptId) return null;
+      scriptId = freshScriptId;
+    }
+    used.add(scriptId);
+    const sections: Array<Script['sections'][number] | null> = source.sections.map(section => {
+      const sectionId = used.has(section.id) ? freshId(used, generateId) : section.id;
+      if (!sectionId) return null;
+      used.add(sectionId);
+      return { ...section, id: sectionId };
+    });
+    if (sections.some(section => section === null)) return null;
+    const repairedSections = sections.filter(
+      (section): section is Script['sections'][number] => section !== null,
+    );
+    return { ...source, id: scriptId, sections: repairedSections };
+  };
+
+  // Active script IDs are authoritative for active selection and customOrder.
+  const repairedScripts = scripts.map(script => repair(script, true));
+  if (repairedScripts.some(script => script === null)) return null;
+  const repairedTrash = trash.map(entry => ({
+    deletedAt: entry.deletedAt,
+    script: repair(entry.script, false),
+  }));
+  if (repairedTrash.some(entry => entry.script === null)) return null;
+  return {
+    scripts: repairedScripts as Script[],
+    trash: repairedTrash as DeletedScript[],
+  };
+}
+
+function hasUniqueIdentities(scripts: Script[], trash: DeletedScript[]): boolean {
+  const ids = new Set<string>();
+  for (const script of scripts) {
+    if (ids.has(script.id)) return false;
+    ids.add(script.id);
+    for (const section of script.sections) {
+      if (ids.has(section.id)) return false;
+      ids.add(section.id);
+    }
+  }
+  for (const entry of trash) {
+    if (ids.has(entry.script.id)) return false;
+    ids.add(entry.script.id);
+    for (const section of entry.script.sections) {
+      if (ids.has(section.id)) return false;
+      ids.add(section.id);
+    }
+  }
+  return true;
+}
+
+function parseLibraryValue(
+  parsed: unknown,
+  legacyActiveId?: unknown,
+  repairCollisions = true,
+): ParsedLibrary | null {
+  let scripts: Script[];
+  let activeScriptId: string | null | undefined;
+  let trash: DeletedScript[] = [];
+  let customOrder: string[] | undefined;
+  let sortMode: SortMode = 'custom';
+
+  if (Array.isArray(parsed)) {
+    scripts = parsed;
+    if (!isValidScripts(scripts)) return null;
+    const legacySelection = activeIdForScripts(
+      legacyActiveId,
+      scripts,
+      true,
+    );
+    // Older releases left a stale selection key after deletion. The array
+    // itself is still recoverable, so select its first script on migration.
+    activeScriptId = legacySelection ?? scripts[0]?.id ?? null;
+    customOrder = scripts.map(script => script.id);
+  } else {
+    if (!isRecord(parsed) ||
+      (parsed.version !== QUICKQUE_STORAGE_VERSION && parsed.version !== LEGACY_STORAGE_VERSION)
+    ) return null;
+    scripts = parsed.scripts as Script[];
+    if (!isValidScripts(scripts)) return null;
+    activeScriptId = activeIdForScripts(parsed.activeScriptId, scripts, false);
+    if (parsed.trash !== undefined) trash = parsed.trash as DeletedScript[];
+    if (parsed.customOrder !== undefined) customOrder = parsed.customOrder as string[];
+    if (parsed.sortMode !== undefined) sortMode = parsed.sortMode as SortMode;
+  }
+
+  if (activeScriptId === undefined || !isValidTrash(trash)) {
+    return null;
+  }
+  if (!hasUniqueIdentities(scripts, trash)) {
+    if (!repairCollisions) return null;
+    const repaired = repairIdentityCollisions(scripts, trash);
+    if (!repaired) return null;
+    scripts = repaired.scripts;
+    trash = repaired.trash;
+  }
+  const metadata = defaultMetadata(scripts);
+  const finalOrder = customOrder ?? metadata.customOrder;
+  if (!validateState(scripts, trash, finalOrder, sortMode, activeScriptId)) return null;
+  return {
+    scripts,
+    activeScriptId,
+    trash,
+    customOrder: finalOrder,
+    sortMode,
+  };
+}
+
+function byteLength(value: string): number {
+  if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(value).byteLength;
+  return unescape(encodeURIComponent(value)).length;
+}
+
+/**
+ * Parse a backup without touching storage. Both legacy arrays and v1
+ * envelopes are accepted, while malformed metadata is rejected as a whole.
+ */
+export function parseLibraryData(data: string): { ok: true; library: ParsedLibrary } | {
+  ok: false;
+  error: string;
+} {
+  if (typeof data !== 'string' || byteLength(data) > MAX_BACKUP_BYTES) {
+    return { ok: false, error: BACKUP_TOO_LARGE_ERROR };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data);
+  } catch {
+    return { ok: false, error: MALFORMED_LIBRARY_ERROR };
+  }
+  const library = parseLibraryValue(parsed);
+  return library
+    ? { ok: true, library }
+    : { ok: false, error: MALFORMED_LIBRARY_ERROR };
+}
+
 /**
  * Read the current envelope, or the two keys written by older Quickque
  * versions. This function never writes, which lets callers fail closed when
@@ -125,10 +390,21 @@ export function loadLibrary(
   }
 
   if (storedScripts === null) {
+    const metadata = defaultMetadata(seedScripts);
+    if (!validateState(
+      seedScripts,
+      metadata.trash,
+      metadata.customOrder,
+      metadata.sortMode,
+      seedScripts[0]?.id ?? null,
+    )) {
+      return { ok: false, error: MALFORMED_LIBRARY_ERROR };
+    }
     return {
       ok: true,
       scripts: seedScripts,
       activeScriptId: seedScripts[0]?.id ?? null,
+      ...metadata,
       needsMigration: false,
       wasMissing: true,
     };
@@ -136,77 +412,63 @@ export function loadLibrary(
 
   let parsed: unknown;
   try {
+    if (byteLength(storedScripts) > MAX_BACKUP_BYTES) {
+      return { ok: false, error: BACKUP_TOO_LARGE_ERROR };
+    }
     parsed = JSON.parse(storedScripts);
   } catch {
     return { ok: false, error: MALFORMED_LIBRARY_ERROR };
   }
 
+  let storedActiveId: string | null = null;
   if (Array.isArray(parsed)) {
-    if (!isValidScripts(parsed)) {
-      return { ok: false, error: MALFORMED_LIBRARY_ERROR };
-    }
-
-    let storedActiveId: string | null;
     try {
       storedActiveId = storage.getItem(QUICKQUE_ACTIVE_SCRIPT_KEY);
     } catch {
       return { ok: false, error: STORAGE_READ_ERROR };
     }
-
-    const activeScriptId = activeIdForScripts(
-      storedActiveId === null ? undefined : storedActiveId,
-      parsed,
-      true,
-    );
-    return {
-      ok: true,
-      scripts: parsed,
-      // Older versions could leave a stale selection key after deletion.
-      // This is not corruption of the script library.
-      activeScriptId: activeScriptId ?? parsed[0]?.id ?? null,
-      needsMigration: true,
-      wasMissing: false,
-    };
   }
-
-  if (!isRecord(parsed)) {
-    return { ok: false, error: MALFORMED_LIBRARY_ERROR };
-  }
-
-  if (parsed.version !== QUICKQUE_STORAGE_VERSION) {
-    return { ok: false, error: MALFORMED_LIBRARY_ERROR };
-  }
-  if (!isValidScripts(parsed.scripts)) {
-    return { ok: false, error: MALFORMED_LIBRARY_ERROR };
-  }
-
-  const activeScriptId = activeIdForScripts(
-    parsed.activeScriptId,
-    parsed.scripts,
-    false,
+  const library = parseLibraryValue(
+    parsed,
+    Array.isArray(parsed) ? (storedActiveId === null ? undefined : storedActiveId) : undefined,
+    Array.isArray(parsed) ||
+      (isRecord(parsed) && parsed.version === LEGACY_STORAGE_VERSION),
   );
-  if (activeScriptId === undefined) {
-    return { ok: false, error: MALFORMED_LIBRARY_ERROR };
-  }
-
+  if (!library) return { ok: false, error: MALFORMED_LIBRARY_ERROR };
   return {
     ok: true,
-    scripts: parsed.scripts,
-    activeScriptId,
-    needsMigration: false,
+    ...library,
+    // Array data and envelopes without metadata should be rewritten once.
+    needsMigration: Array.isArray(parsed) ||
+      !isRecord(parsed) ||
+      parsed.version === LEGACY_STORAGE_VERSION ||
+      parsed.trash === undefined ||
+      parsed.customOrder === undefined ||
+      parsed.sortMode === undefined ||
+      !hasUniqueIdentities(
+        Array.isArray(parsed) ? parsed : (parsed.scripts as Script[]),
+        Array.isArray(parsed) ? [] : ((parsed.trash as DeletedScript[] | undefined) ?? []),
+      ),
     wasMissing: false,
   };
 }
 
+export type PersistOptions = Partial<LibraryMetadata>;
+
 export function createLibraryEnvelope(
   scripts: Script[],
   activeScriptId: string | null,
+  options?: PersistOptions,
 ): LibraryEnvelope {
-  return {
+  const envelope: LibraryEnvelope = {
     version: QUICKQUE_STORAGE_VERSION,
     scripts,
     activeScriptId,
   };
+  envelope.trash = options?.trash ?? [];
+  envelope.customOrder = options?.customOrder ?? scripts.map(script => script.id);
+  envelope.sortMode = options?.sortMode ?? 'custom';
+  return envelope;
 }
 
 /**
@@ -217,10 +479,24 @@ export function persistLibrary(
   storage: StorageLike,
   scripts: Script[],
   activeScriptId: string | null,
+  options?: PersistOptions,
 ): { ok: true; bytes: string } | { ok: false; error: string } {
+  const scriptList = Array.isArray(scripts) ? scripts : [];
+  const metadata: LibraryMetadata = {
+    trash: options?.trash ?? [],
+    customOrder: options?.customOrder ?? scriptList.map(script => script.id),
+    sortMode: options?.sortMode ?? 'custom',
+  };
+  if (!validateState(scripts, metadata.trash, metadata.customOrder, metadata.sortMode, activeScriptId)) {
+    return { ok: false, error: MALFORMED_LIBRARY_ERROR };
+  }
+
   let bytes: string;
   try {
-    bytes = JSON.stringify(createLibraryEnvelope(scripts, activeScriptId));
+    bytes = JSON.stringify(createLibraryEnvelope(scripts, activeScriptId, { ...metadata }));
+    if (byteLength(bytes) > MAX_BACKUP_BYTES) {
+      return { ok: false, error: BACKUP_TOO_LARGE_ERROR };
+    }
     storage.setItem(QUICKQUE_SCRIPTS_KEY, bytes);
   } catch {
     return { ok: false, error: STORAGE_WRITE_ERROR };
@@ -228,12 +504,17 @@ export function persistLibrary(
   return { ok: true, bytes };
 }
 
-export function collectScriptIds(scripts: Script[]): Set<string> {
+export function collectScriptIds(
+  scripts: Script[],
+  trash: DeletedScript[] = [],
+): Set<string> {
   const ids = new Set<string>();
-  for (const script of scripts) {
+  const addScript = (script: Script) => {
     ids.add(script.id);
     for (const section of script.sections) ids.add(section.id);
-  }
+  };
+  for (const script of scripts) addScript(script);
+  for (const entry of trash) addScript(entry.script);
   return ids;
 }
 
@@ -243,7 +524,7 @@ function freshId(usedIds: Set<string>, idFactory: () => string): string | null {
   // operation.
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const id = idFactory();
-    if (typeof id === 'string' && id.length > 0 && !usedIds.has(id)) {
+    if (typeof id === 'string' && id.length > 0 && id.length <= MAX_ID_LENGTH && !usedIds.has(id)) {
       usedIds.add(id);
       return id;
     }
@@ -288,7 +569,7 @@ export function createDocumentScript(
   idFactory: () => string = generateId,
 ): DocumentImportResult {
   const validation = validateDocumentImport(title, text);
-  if (!validation.ok) return validation;
+  if ('error' in validation) return validation;
 
   const scriptId = freshId(usedIds, idFactory);
   const sectionId = freshId(usedIds, idFactory);
@@ -319,4 +600,5 @@ export const storageErrors = {
   malformedLibrary: MALFORMED_LIBRARY_ERROR,
   readLibrary: STORAGE_READ_ERROR,
   writeLibrary: STORAGE_WRITE_ERROR,
+  backupTooLarge: BACKUP_TOO_LARGE_ERROR,
 } as const;

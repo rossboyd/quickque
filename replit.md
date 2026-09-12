@@ -34,7 +34,9 @@ A local-first personal teleprompter for live meetings, with an interruption-frie
 - The native helper owns speech-inactivity timing: 30 seconds without detected speech stops capture. Off-script speech counts, and webview timer throttling must not delay shutdown.
 - Distinguish browser preview from native capabilities. Browser transparency cannot reveal another application's window, and browser code cannot reliably pin a window above Zoom or Meet.
 - Document import is on-device plain-text extraction only. Keep parsers and worker assets bundled locally; never render imported HTML or fetch embedded resources. See `src/lib/document-import/PARSERS.md` under the Quickque artifact for limits and supported subsets.
-- Library and active selection must persist in one atomic record before import success is shown. This avoids partial two-key saves on quota failures. Continue accepting legacy storage; JSON backups remain a bare scripts array.
+- Library, active selection, Trash and ordering metadata must persist in one atomic record before any mutation is shown as successful. This avoids partial saves on quota failures. Continue accepting legacy arrays and v1 envelopes; new full backups use a versioned envelope, while selected-script JSON remains a portable scripts array.
+- Trash stays on the device without automatic expiry. Full backups include Trash and library ordering, but not presentation settings; selected-script exports exclude Trash. Normal backup import merges instead of replacing. Replacement is reserved for explicit, confirmed recovery of unreadable storage.
+- New, duplicated, document-imported and restored scripts go to the start of Custom order. Backup imports prepend their saved relative order without changing the destination sort preference. Newest/Oldest refer to creation time, not last edit. Custom reordering is disabled while searching.
 
 ## Product
 

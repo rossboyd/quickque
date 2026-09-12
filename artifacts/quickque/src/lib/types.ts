@@ -27,3 +27,10 @@ export const DEFAULT_SETTINGS: Settings = {
   darkTheme: true, // Default to dark for prompter
   compactMode: false,
 };
+
+export type SortMode = 'newest' | 'oldest' | 'az' | 'za' | 'custom';
+
+export type DeletedScript = {
+  script: Script;
+  deletedAt: number;
+};
