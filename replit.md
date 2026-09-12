@@ -79,3 +79,5 @@ The requested product name is Quickque. The user wants a lightweight personal Ma
 - The separate public website lives in `artifacts/quickque-website` at `/website/`; it must not move the app or access its local storage.
 - Website authoring, source-only release readiness, indexing configuration, and verification commands are documented in `artifacts/quickque-website/README.md`.
 - Quickque-owned code and docs use the root MIT license. Third-party/model terms remain separate; see `THIRD_PARTY_NOTICES.md`.
+- Optional actor mode stays within Quickque. External-camera use, turn controls and privacy are described in `artifacts/quickque/SCENE_PARTNER.md`.
+- Turbo is deliberately unavailable pending a reproducible arm64 runtime, rights-cleared voice assets and real Apple Silicon measurements. See `artifacts/quickque/TURBO_EVALUATION.md`; do not enable upstream convenience downloads as a fallback.

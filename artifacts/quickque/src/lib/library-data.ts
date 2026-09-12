@@ -4,6 +4,14 @@ import type {
   ScriptSection,
 } from './types';
 import {
+  cloneActor,
+  cloneScriptData,
+  isValidActor,
+  MAX_ACTOR_ID_LENGTH,
+  MAX_SECTION_NOTES_LENGTH,
+  normalizeActorSectionReferences,
+} from './actor-model.ts';
+import {
   DEFAULT_PRESENTATION,
   normalizePresentation,
 } from './presentation-preferences.ts';
@@ -55,13 +63,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isValidScriptSection(value: unknown): value is ScriptSection {
-  return (
-    isRecord(value) &&
-    typeof value.id === 'string' &&
-    value.id.length > 0 &&
-    typeof value.title === 'string' &&
-    typeof value.content === 'string'
-  );
+  if (!isRecord(value)) return false;
+  if (
+    typeof value.id !== 'string' ||
+    value.id.length === 0 ||
+    typeof value.title !== 'string' ||
+    typeof value.content !== 'string'
+  ) {
+    return false;
+  }
+  if (
+    value.notes !== undefined &&
+    (typeof value.notes !== 'string' || value.notes.length > MAX_SECTION_NOTES_LENGTH)
+  ) {
+    return false;
+  }
+  if (
+    value.characterId !== undefined &&
+    value.characterId !== null &&
+    (typeof value.characterId !== 'string' ||
+      value.characterId.length === 0 ||
+      value.characterId.length > MAX_ACTOR_ID_LENGTH)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export function isValidScript(value: unknown): value is Script {
@@ -73,6 +99,7 @@ export function isValidScript(value: unknown): value is Script {
     value.title.length > 0 &&
     Array.isArray(value.sections) &&
     value.sections.every(isValidScriptSection) &&
+    (value.actor === undefined || isValidActor(value.actor)) &&
     typeof value.createdAt === 'number' &&
     Number.isFinite(value.createdAt) &&
     typeof value.updatedAt === 'number' &&
@@ -92,11 +119,15 @@ function stampPresentation(
   scripts: Script[],
   fallback: PresentationPreferences,
 ): Script[] {
-  return scripts.map(script => ({
-    ...script,
-    sections: script.sections.map(section => ({ ...section })),
-    presentation: normalizePresentation(script.presentation, fallback),
-  }));
+  return scripts.map(script => {
+    const cloned = cloneScriptData(script);
+    return {
+      ...cloned,
+      sections: normalizeActorSectionReferences(script.actor, cloned.sections),
+      ...(script.actor ? { actor: cloneActor(script.actor) } : {}),
+      presentation: normalizePresentation(script.presentation, fallback),
+    };
+  });
 }
 
 export function parseScriptsJson(
@@ -118,6 +149,8 @@ export type ImportableScriptSection = {
   id: string;
   title: string;
   content: string;
+  notes?: string;
+  characterId?: string | null;
 };
 
 export type ImportableScript = {
@@ -126,6 +159,7 @@ export type ImportableScript = {
   sections: ImportableScriptSection[];
   createdAt?: number;
   updatedAt?: number;
+  actor?: Script['actor'];
 };
 
 /**
@@ -143,7 +177,8 @@ export function isImportableScripts(value: unknown): value is ImportableScript[]
         typeof script.title !== 'string' ||
         script.title.length === 0 ||
         !Array.isArray(script.sections) ||
-        !script.sections.every(isValidScriptSection)
+        !script.sections.every(isValidScriptSection) ||
+        (script.actor !== undefined && !isValidActor(script.actor))
       ) {
         return false;
       }

@@ -10,6 +10,14 @@ import {
   isValidPresentation,
   normalizePresentation,
 } from './presentation-preferences.ts';
+import {
+  cloneActor,
+  cloneScriptData,
+  isValidActor,
+  MAX_ACTOR_ID_LENGTH,
+  MAX_SECTION_NOTES_LENGTH,
+  normalizeActorSectionReferences,
+} from './actor-model.ts';
 
 export const QUICKQUE_SCRIPTS_KEY = 'quickque_scripts';
 export const QUICKQUE_ACTIVE_SCRIPT_KEY = 'quickque_active_script';
@@ -119,6 +127,7 @@ function isValidScriptFields(value: unknown): value is Omit<Script, 'presentatio
   if (!isRecord(value)) return false;
   if (!isValidId(value.id)) return false;
   if (!isBoundedString(value.title, MAX_TITLE_LENGTH)) return false;
+  if (value.actor !== undefined && !isValidActor(value.actor)) return false;
   if (!isValidTimestamp(value.createdAt) || !isValidTimestamp(value.updatedAt)) {
     return false;
   }
@@ -132,7 +141,15 @@ function isValidScriptFields(value: unknown): value is Omit<Script, 'presentatio
     sectionIds.add(section.id);
     return (
       isBoundedString(section.title, MAX_TITLE_LENGTH) &&
-      isBoundedString(section.content, MAX_CONTENT_LENGTH)
+      isBoundedString(section.content, MAX_CONTENT_LENGTH) &&
+      (section.notes === undefined ||
+        isBoundedString(section.notes, MAX_SECTION_NOTES_LENGTH)) &&
+      (section.characterId === undefined ||
+        section.characterId === null ||
+        (
+          isBoundedString(section.characterId, MAX_ACTOR_ID_LENGTH) &&
+          section.characterId.trim().length > 0
+        ))
     );
   });
 }
@@ -157,9 +174,11 @@ function normalizeScriptPresentation(
   fallback: PresentationPreferences,
 ): Script | null {
   if (!isValidScriptFields(value)) return null;
+  const cloned = cloneScriptData(value as Script);
   return {
-    ...value,
-    sections: value.sections.map(section => ({ ...section })),
+    ...cloned,
+    sections: normalizeActorSectionReferences(value.actor, cloned.sections),
+    ...(value.actor ? { actor: cloneActor(value.actor) } : {}),
     presentation: normalizePresentation(value.presentation, fallback),
   };
 }
@@ -308,7 +327,16 @@ function repairIdentityCollisions(
     const repairedSections = sections.filter(
       (section): section is Script['sections'][number] => section !== null,
     );
-    return { ...source, id: scriptId, sections: repairedSections };
+    const clonedSource = cloneScriptData(source);
+    return {
+      ...clonedSource,
+      id: scriptId,
+      sections: repairedSections.map((section, index) => ({
+        ...clonedSource.sections[index],
+        id: section.id,
+      })),
+      ...(source.actor ? { actor: cloneActor(source.actor) } : {}),
+    };
   };
 
   // Active script IDs are authoritative for active selection and customOrder.
@@ -558,13 +586,30 @@ export function createLibraryEnvelope(
   activeScriptId: string | null,
   options?: PersistOptions,
 ): LibraryEnvelope {
+  const safeScripts = scripts.map(script => {
+    const cloned = cloneScriptData(script);
+    return {
+      ...cloned,
+      sections: normalizeActorSectionReferences(script.actor, cloned.sections),
+    };
+  });
+  const safeTrash = (options?.trash ?? []).map(entry => {
+    const script = (() => {
+      const cloned = cloneScriptData(entry.script);
+      return {
+        ...cloned,
+        sections: normalizeActorSectionReferences(entry.script.actor, cloned.sections),
+      };
+    })();
+    return { deletedAt: entry.deletedAt, script };
+  });
   const envelope: LibraryEnvelope = {
     version: QUICKQUE_STORAGE_VERSION,
-    scripts,
+    scripts: safeScripts,
     activeScriptId,
   };
-  envelope.trash = options?.trash ?? [];
-  envelope.customOrder = options?.customOrder ?? scripts.map(script => script.id);
+  envelope.trash = safeTrash;
+  envelope.customOrder = options?.customOrder ?? safeScripts.map(script => script.id);
   envelope.sortMode = options?.sortMode ?? 'custom';
   return envelope;
 }
@@ -579,19 +624,59 @@ export function persistLibrary(
   activeScriptId: string | null,
   options?: PersistOptions,
 ): { ok: true; bytes: string } | { ok: false; error: string } {
-  const scriptList = Array.isArray(scripts) ? scripts : [];
+  // Guard the cloning pass itself. Validation normally rejects these shapes,
+  // but it must do so as a user-facing failure rather than throwing while
+  // trying to inspect an untrusted import.
+  if (
+    !Array.isArray(scripts) ||
+    scripts.some(script => !isRecord(script) || !Array.isArray(script.sections)) ||
+    (options?.trash !== undefined && (
+      !Array.isArray(options.trash) ||
+      options.trash.some(entry => (
+        !isRecord(entry) ||
+        !isRecord(entry.script) ||
+        !Array.isArray(entry.script.sections)
+      ))
+    ))
+  ) {
+    return { ok: false, error: MALFORMED_LIBRARY_ERROR };
+  }
+  const scriptList = Array.isArray(scripts)
+    ? scripts.map(script => {
+      const cloned = cloneScriptData(script);
+      return {
+        ...cloned,
+        sections: normalizeActorSectionReferences(script.actor, cloned.sections),
+      };
+    })
+    : [];
   const metadata: LibraryMetadata = {
-    trash: options?.trash ?? [],
+    trash: (options?.trash ?? []).map(entry => {
+      const cloned = cloneScriptData(entry.script);
+      return {
+        deletedAt: entry.deletedAt,
+        script: {
+          ...cloned,
+          sections: normalizeActorSectionReferences(entry.script.actor, cloned.sections),
+        },
+      };
+    }),
     customOrder: options?.customOrder ?? scriptList.map(script => script.id),
     sortMode: options?.sortMode ?? 'custom',
   };
-  if (!validateState(scripts, metadata.trash, metadata.customOrder, metadata.sortMode, activeScriptId)) {
+  if (!validateState(
+    scriptList,
+    metadata.trash,
+    metadata.customOrder,
+    metadata.sortMode,
+    activeScriptId,
+  )) {
     return { ok: false, error: MALFORMED_LIBRARY_ERROR };
   }
 
   let bytes: string;
   try {
-    bytes = JSON.stringify(createLibraryEnvelope(scripts, activeScriptId, { ...metadata }));
+    bytes = JSON.stringify(createLibraryEnvelope(scriptList, activeScriptId, { ...metadata }));
     if (byteLength(bytes) > MAX_BACKUP_BYTES) {
       return { ok: false, error: BACKUP_TOO_LARGE_ERROR };
     }

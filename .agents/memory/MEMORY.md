@@ -1,4 +1,4 @@
-- [Native audio integration](native-audio-integration.md) — executor-safe callbacks, AVFoundation buffer views, and live resampler test contracts.
+- [Native audio integration](native-audio-integration.md) — safe callbacks, buffer views, resampler tests and acknowledged microphone/speaker handoffs.
 - [Native Rust validation on Linux](native-rust-validation-linux.md) — isolate platform-neutral Rust modules when full Tauri checks are blocked by Linux UI libraries.
 - [PDF extraction failures](pdf-extraction-failures.md) — PDF.js can resolve text extraction after catching decoder failures; completion alone does not prove a complete import.
 - [Flow diagnostic evidence](flow-diagnostic-evidence.md) — a frontend timeout does not prove a model-check stall; distinguish bridge, helper startup, input receipt, and model execution.

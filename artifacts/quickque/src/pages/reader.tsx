@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
+import './reader-scene.css';
 import { useStore } from '@/lib/store';
 import type { PresentationPreferences, Settings } from '@/lib/types';
 import { useLocation, useParams } from 'wouter';
@@ -7,7 +8,10 @@ import {
 } from 'lucide-react';
 import { isDesktop, setOverlayMode, setAlwaysOnTop, startDragging } from '@/lib/desktop';
 import { useLocalFlow } from '@/hooks/use-local-flow';
+import { useScenePartner } from '@/hooks/use-scene-partner';
 import { ReaderTokenizationCache } from '@/lib/reader-tokenization';
+import { tokenize } from '@/lib/flow/tokenize';
+import type { SceneVoice } from '@/lib/scene-lifecycle';
 import { FlowStatusPanel } from '@/components/flow-status-panel';
 import { RemoteControlDialog } from '@/components/remote-control-dialog';
 import { useReaderCommands } from '@/lib/remote/use-reader-commands';
@@ -98,6 +102,7 @@ export default function Reader() {
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
+  const [showSceneNotes, setShowSceneNotes] = useState(true);
   const [timingMessage, setTimingMessage] = useState<string | null>(null);
   const [resumeChoice, setResumeChoice] = useState<ReaderResumePosition | null>(null);
   const resumePendingRef = useRef(true);
@@ -223,17 +228,6 @@ export default function Reader() {
     persistAppSettings(updates);
   }, [captureReaderPosition, persistAppSettings, settings.compactMode]);
 
-  useEffect(() => {
-    if (readMode === 'flow') {
-      const isSetupDone = localStorage.getItem('quickque-flow-setup-done') === 'true';
-      if (!isSetupDone) {
-        setShowWizard(true);
-      }
-    } else {
-      setShowWizard(false);
-    }
-  }, [readMode]);
-  
   const lastTimeRef = useRef<number>(0);
   const reqRef = useRef<number>(0);
 
@@ -248,13 +242,83 @@ export default function Reader() {
     script?.sections ?? [],
   );
 
-  const flow = useLocalFlow({ tokens, enabled: readMode === "flow" });
+  // Keep the scene feature additive: old documents still use the exact reader
+  // tokenisation and Flow lifecycle.
+  const actor = script?.actor;
+  const sceneEnabled = actor?.enabled === true;
+  const characters = actor?.characters ?? [];
+  const characterIds = useMemo(() => new Set(characters.map(character => character.id)), [characters]);
+  const sceneTurns = useMemo(() => (script?.sections ?? []).map(section => ({
+    id: section.id,
+    content: section.content,
+    characterId: (() => {
+      const characterId = section.characterId ?? null;
+      return characterId && characterIds.has(characterId) ? characterId : null;
+    })(),
+  })), [script?.sections, characterIds]);
+  const sceneMyRoleIds = actor?.myRoleIds ?? [];
+  const voiceForCharacter = useCallback((characterId: string): SceneVoice | null => {
+    const saved = characters.find(character => character.id === characterId)?.voice;
+    return saved?.voiceId ? saved : null;
+  }, [characters]);
+  const sceneVoiceSignature = useMemo(
+    () => JSON.stringify(characters.map(character => [
+      character.id,
+      character.voice.engine,
+      character.voice.voiceId,
+      character.voice.rate,
+    ])),
+    [characters],
+  );
+  const stopFlowBeforePartnerRef = useRef<() => Promise<void>>(async () => {});
+  const [sceneFlowEnabled, setSceneFlowEnabled] = useState(false);
+  const [sceneSilentManual, setSceneSilentManual] = useState(false);
+  const effectiveSceneMyRoleIds = sceneSilentManual
+    ? characters.map(character => character.id)
+    : sceneMyRoleIds;
+  const scene = useScenePartner({
+    enabled: sceneEnabled,
+    turns: sceneTurns,
+    myRoleIds: effectiveSceneMyRoleIds,
+    voiceForCharacter,
+    voiceSignature: sceneVoiceSignature,
+    beforePartnerSpeak: () => stopFlowBeforePartnerRef.current(),
+  });
+  const sceneFlowTokens = useMemo(
+    () => tokenize(scene.currentTurn?.content ?? ''),
+    [scene.currentTurn?.id, scene.currentTurn?.content],
+  );
+  const flow = useLocalFlow({
+    tokens: sceneEnabled ? sceneFlowTokens : tokens,
+    enabled: sceneEnabled
+      ? sceneFlowEnabled && scene.phase === 'waiting'
+      : readMode === "flow",
+    sceneCompletion: sceneEnabled,
+  });
+  stopFlowBeforePartnerRef.current = async () => {
+    // `flow_command` reaps the helper before its promise resolves. Awaiting
+    // this bridge acknowledgement is required before system speech handoff.
+    await flow.stopAndWait();
+  };
   const flowRef = useRef(flow);
   flowRef.current = flow;
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
   const readModeRef = useRef(readMode);
   readModeRef.current = readMode;
   const presentationRef = useRef(presentation);
   presentationRef.current = presentation;
+
+  useEffect(() => {
+    if (readMode === 'flow' && !sceneEnabled) {
+      const isSetupDone = localStorage.getItem('quickque-flow-setup-done') === 'true';
+      if (!isSetupDone) {
+        setShowWizard(true);
+      }
+    } else {
+      setShowWizard(false);
+    }
+  }, [readMode, sceneEnabled]);
 
   const readingDistance = useCallback(() => {
     const container = containerRef.current;
@@ -275,15 +339,20 @@ export default function Reader() {
   }, []);
 
   const { controller: playback, state: playbackState } = usePresentationPlayback(() => {
-    if (readModeRef.current === 'manual') playback.activate();
+    if (sceneRef.current.enabled) {
+      void sceneRef.current.start();
+    } else if (readModeRef.current === 'manual') playback.activate();
     else flowRef.current.start();
   });
-  const isPlaying = readMode === 'manual' && playbackState.phase === 'playing';
+  const isPlaying = !sceneEnabled && readMode === 'manual' && playbackState.phase === 'playing';
   const timerState = playbackState.timerState;
   const pausePlayback = useCallback(() => {
     const wasRequested = ['starting', 'playing'].includes(playback.state.phase);
     playback.pause();
-    if (readModeRef.current === 'flow' && (wasRequested || flowRef.current.status === 'listening')) {
+    if (sceneRef.current.enabled) {
+      void sceneRef.current.pause();
+      flowRef.current.pause();
+    } else if (readModeRef.current === 'flow' && (wasRequested || flowRef.current.status === 'listening')) {
       flowRef.current.pause();
     }
   }, [playback]);
@@ -328,13 +397,13 @@ export default function Reader() {
       // movement can turn a completed presentation into a resumable one.
       const rewoundFromCompletion = completedGestureTopRef.current !== null &&
         container.scrollTop < completedGestureTopRef.current - 1;
-      if ((readModeRef.current === 'manual' || rewoundFromCompletion) &&
+      if (!sceneRef.current.enabled && (readModeRef.current === 'manual' || rewoundFromCompletion) &&
           playback.state.phase === 'completed' && readingDistance().remaining > 1) {
         playback.seek();
         completedGestureTopRef.current = null;
       }
       if (!manualGestureRef.current) return;
-      if (readModeRef.current === 'flow') reanchorAtPosition();
+      if (!sceneRef.current.enabled && readModeRef.current === 'flow') reanchorAtPosition();
     };
     container.addEventListener('wheel', wheel, { passive: true });
     container.addEventListener('touchmove', touch, { passive: true });
@@ -351,18 +420,89 @@ export default function Reader() {
   }, [interruptForGesture, reanchorAtPosition, playback, readingDistance]);
   const completePlayback = useCallback(() => {
     playback.complete();
-    if (readModeRef.current === 'flow') flowRef.current.pause();
+    if (!sceneRef.current.enabled && readModeRef.current === 'flow') flowRef.current.pause();
     setTimingMessage('End of script. Choose Start over to begin a new presentation.');
   }, [playback]);
 
   useEffect(() => {
-    if (readMode !== 'flow') return;
+    if (sceneEnabled || readMode !== 'flow') return;
     if (flow.status !== 'listening' && playback.state.phase === 'playing') playback.suspendForPreparation();
     if (flow.status === 'listening' && playback.state.phase === 'starting') playback.activate();
     if (['error', 'silence-stopped', 'paused', 'stopped', 'unsupported', 'needs-model', 'ready', 'downloading'].includes(flow.status) &&
         ['starting', 'playing'].includes(playback.state.phase)) playback.pause();
     if (flow.status === 'listening' && tokens.length > 0 && flow.anchor >= tokens.length) completePlayback();
-  }, [flow.status, flow.anchor, readMode, tokens.length, playback, completePlayback]);
+  }, [sceneEnabled, flow.status, flow.anchor, readMode, tokens.length, playback, completePlayback]);
+
+  // Scene turns reuse the presentation lifecycle/clock. A partner preparing
+  // line freezes active time, and the clock starts again only when playback or
+  // a visible actor turn is actually ready. Flow is intentionally scoped to
+  // the current actor turn; a stale transcript can never complete another one.
+  const sceneFlowCompletionRef = useRef<number | null>(null);
+  const sceneFlowStartedGenerationRef = useRef<number | null>(null);
+  if (sceneFlowStartedGenerationRef.current !== null &&
+    sceneFlowStartedGenerationRef.current !== scene.generation) {
+    // This synchronous generation fence closes the render/effect gap where a
+    // prior turn's `listening` state is still visible while a new actor turn
+    // commits. Only an explicit Flow start for this exact turn may advance it.
+    sceneFlowStartedGenerationRef.current = null;
+  }
+  useEffect(() => {
+    if (!sceneEnabled) return;
+    if (scene.phase === 'preparing' && playback.state.phase === 'playing') {
+      playback.suspendForPreparation();
+    } else if (['speaking', 'waiting'].includes(scene.phase) &&
+      playback.state.phase === 'starting') {
+      playback.activate();
+    } else if (scene.phase === 'blocked' &&
+      ['starting', 'playing'].includes(playback.state.phase)) {
+      playback.pause();
+    } else if (scene.phase === 'completed') {
+      completePlayback();
+    }
+
+    if (scene.phase !== 'waiting' || !sceneFlowEnabled) {
+      sceneFlowCompletionRef.current = null;
+      return;
+    }
+    if (playback.state.phase === 'playing' && flow.status === 'ready' &&
+      sceneFlowStartedGenerationRef.current !== scene.generation) {
+      sceneFlowStartedGenerationRef.current = scene.generation;
+      flow.start();
+    }
+    if (flow.status === 'listening' && sceneFlowTokens.length > 0 &&
+      flow.sceneCompletion.completed &&
+      sceneFlowStartedGenerationRef.current === scene.generation &&
+      sceneFlowCompletionRef.current !== scene.generation) {
+      sceneFlowCompletionRef.current = scene.generation;
+      void scene.next();
+    }
+    // A `silence-stopped` status is deliberately not restarted or advanced.
+    // Resuming must remain an explicit user action.
+  }, [
+    sceneEnabled, scene.phase, scene.generation, sceneFlowEnabled,
+    sceneFlowTokens.length, flow.status, flow.anchor, flow.sceneCompletion, playback,
+    completePlayback,
+  ]);
+
+  useEffect(() => {
+    if (!sceneEnabled || scene.turnIndex >= enrichedSections.length) return;
+    setActiveSectionIdx(scene.turnIndex);
+    const section = sectionRefs.current[scene.turnIndex];
+    const container = containerRef.current;
+    const cue = cueRef.current;
+    if (!section || !container || !cue) return;
+    const delta = getLogicalLeadingEdge(
+      section.getBoundingClientRect(),
+      presentation.mirrorVertical,
+    ) - getLogicalLeadingEdge(cue.getBoundingClientRect(), presentation.mirrorVertical);
+    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    const targetTop = Math.max(0, Math.min(
+      maxScrollTop,
+      container.scrollTop + clientDeltaToLogicalScroll(delta, presentation.mirrorVertical),
+    ));
+    exactScrollTopRef.current = targetTop;
+    container.scrollTo({ top: targetTop, behavior: 'auto' });
+  }, [sceneEnabled, scene.turnIndex, enrichedSections.length, presentation.mirrorVertical]);
 
   useEffect(() => {
     const initDesktop = async () => {
@@ -431,7 +571,8 @@ export default function Reader() {
   const exitReader = useCallback(async () => {
     saveCurrentPositionRef.current();
     playback.pause();
-    flow.stop();
+    await sceneRef.current.pause();
+    await flowRef.current.stopAndWait();
     try {
       if (isDesktop()) {
         await useRemoteStore.getState().stopServer();
@@ -443,7 +584,7 @@ export default function Reader() {
     }
     document.documentElement.classList.remove('is-overlay');
     setLocation('/');
-  }, [setLocation, flow, playback]);
+  }, [setLocation, playback]);
 
   // Restore the pre-update word measurement after the new font has reflowed.
   useLayoutEffect(() => {
@@ -532,7 +673,7 @@ export default function Reader() {
 
   // Manual Scrolling logic
   useEffect(() => {
-    if (readMode !== "manual" || !isPlaying) {
+    if (sceneEnabled || readMode !== "manual" || !isPlaying) {
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       return;
     }
@@ -584,12 +725,12 @@ export default function Reader() {
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       lastTimeRef.current = 0;
     };
-  }, [isPlaying, readMode, presentation.speed, presentation.fontSize, presentation.targetDurationSeconds,
+  }, [sceneEnabled, isPlaying, readMode, presentation.speed, presentation.fontSize, presentation.targetDurationSeconds,
     playback, readingDistance, completePlayback, pausePlayback]);
 
   // Flow Smooth scroll following active token ONLY on confident matching
   useEffect(() => {
-    if (readMode !== "flow" || flow.status !== 'listening' || !flow.isFollowing) {
+    if (sceneEnabled || readMode !== "flow" || flow.status !== 'listening' || !flow.isFollowing) {
       return;
     }
 
@@ -623,6 +764,7 @@ export default function Reader() {
     req = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(req);
   }, [
+    sceneEnabled,
     readMode,
     flow.status,
     flow.isFollowing,
@@ -641,7 +783,7 @@ export default function Reader() {
       if (!containerRef.current) return;
       exactScrollTopRef.current = containerRef.current.scrollTop;
       queueStableReaderPosition();
-      if (readMode === 'flow' && ['listening', 'loading'].includes(flow.status)) return;
+      if (sceneEnabled || (readMode === 'flow' && ['listening', 'loading'].includes(flow.status))) return;
       const cue = cueRef.current;
       if (!cue) return;
       const container = containerRef.current;
@@ -680,6 +822,7 @@ export default function Reader() {
     return undefined;
   }, [
     activeSectionIdx,
+    sceneEnabled,
     readMode,
     flow.status,
     presentation.cuePosition,
@@ -689,7 +832,7 @@ export default function Reader() {
 
   // Auto-advance section tracking in Flow mode
   useEffect(() => {
-    if (readMode !== "flow") return;
+    if (sceneEnabled || readMode !== "flow") return;
     const currentAnchor = flow.anchor;
     let targetSecIdx = activeSectionIdx;
     
@@ -714,7 +857,7 @@ export default function Reader() {
     if (targetSecIdx !== activeSectionIdx) {
       setActiveSectionIdx(targetSecIdx);
     }
-  }, [flow.anchor, readMode, enrichedSections, activeSectionIdx]);
+  }, [sceneEnabled, flow.anchor, readMode, enrichedSections, activeSectionIdx]);
 
   const reanchorRef = useRef(flow.reanchor);
   reanchorRef.current = flow.reanchor;
@@ -722,6 +865,11 @@ export default function Reader() {
   const jumpToSection = useCallback((idx: number) => {
     if (!script) return;
     if (idx < 0 || idx >= script.sections.length) return;
+    if (sceneEnabled) {
+      setActiveSectionIdx(idx);
+      void sceneRef.current.goTo(idx);
+      return;
+    }
     
     const el = sectionRefs.current[idx];
     if (el && containerRef.current) {
@@ -754,16 +902,29 @@ export default function Reader() {
         }
       }
     }
-  }, [script, readMode, enrichedSections, presentation.mirrorVertical, playback]);
+  }, [script, sceneEnabled, readMode, enrichedSections, presentation.mirrorVertical, playback]);
 
   const activeSectionIdxRef = useRef(activeSectionIdx);
   activeSectionIdxRef.current = activeSectionIdx;
 
   const dispatchCommand = useCallback((cmd: any) => {
     if (!script || resumePendingRef.current) return;
+    const requestedAction = cmd.action || cmd.detail || ({
+      NextSection: 'next',
+      PreviousSection: 'previous',
+    } as Record<string, string>)[cmd.type || ''];
+    // The legacy reducer intentionally clamps Next at the final section. In a
+    // scene that final section can be the actor's last line, where advancing
+    // once more is how the lifecycle reaches its completed state.
+    if (sceneRef.current.enabled && requestedAction === 'next' &&
+      activeSectionIdxRef.current >= script.sections.length - 1) {
+      void sceneRef.current.next();
+      return;
+    }
 
     const effect = resolveCommandEffect(cmd, {
       readMode: readModeRef.current,
+      sceneEnabled: sceneRef.current.enabled,
       isPlaying: ['countdown', 'starting', 'playing'].includes(playback.state.phase),
       playbackPhase: playback.state.phase,
       flowStatus: flowRef.current.status,
@@ -785,7 +946,7 @@ export default function Reader() {
             setTimingMessage('End of script. Choose Start over, or move to an earlier section.');
             break;
           }
-          if (readModeRef.current === 'manual') {
+          if (!sceneRef.current.enabled && readModeRef.current === 'manual') {
             const distance = readingDistance();
             if (distance.remaining <= 1) { completePlayback(); break; }
             if (presentationRef.current.targetDurationSeconds !== null) {
@@ -796,7 +957,7 @@ export default function Reader() {
           }
           setTimingMessage(null);
           manualGestureRef.current = false;
-          if (readModeRef.current === 'flow') reanchorAtPosition();
+           if (!sceneRef.current.enabled && readModeRef.current === 'flow') reanchorAtPosition();
           playback.requestStart(presentationRef.current.countdownSeconds);
         }
         break;
@@ -827,6 +988,9 @@ export default function Reader() {
         }
         break;
       case 'setReadMode':
+        // Scene turn-taking owns motion. Keep the existing remote protocol but
+        // do not let an old mode command restart all-script Flow mid-scene.
+        if (sceneRef.current.enabled) break;
         if (effect.mode === readModeRef.current) break;
         pausePlayback();
         readModeRef.current = effect.mode;
@@ -877,7 +1041,13 @@ export default function Reader() {
       // must not also exit the reader and tear down the local session.
       if (e.defaultPrevented ||
           (e.target instanceof Element && e.target.closest('[role="dialog"]'))) return;
-      if (e.target instanceof Element && e.target.closest('button, a, [role="button"], [role="slider"]')) return;
+      if (e.target instanceof Element) {
+        if (e.target.closest('[role="slider"]')) return;
+        // Space/Enter belong to the focused button, but horizontal arrows
+        // remain turn navigation after a toolbar click.
+        if (e.target.closest('button, a, [role="button"]') &&
+          e.code !== 'ArrowRight' && e.code !== 'ArrowLeft') return;
+      }
       if (
         e.target instanceof HTMLInputElement || 
         e.target instanceof HTMLTextAreaElement || 
@@ -918,7 +1088,9 @@ export default function Reader() {
   // Auto-hide controls
   useEffect(() => {
     let timeout: number;
-    const isActivelyPlaying = readMode === 'manual' ? isPlaying : flow.status === 'listening';
+    const isActivelyPlaying = sceneEnabled
+      ? ['preparing', 'speaking', 'waiting'].includes(scene.phase)
+      : readMode === 'manual' ? isPlaying : flow.status === 'listening';
     const resetHide = () => {
       setShowControls(true);
       clearTimeout(timeout);
@@ -940,10 +1112,17 @@ export default function Reader() {
       window.removeEventListener('focusin', resetHide);
       clearTimeout(timeout);
     };
-  }, [isPlaying, readMode, flow.status, presentation.hideControlsWhilePlaying]);
+  }, [sceneEnabled, scene.phase, isPlaying, readMode, flow.status, presentation.hideControlsWhilePlaying]);
 
-  const startOver = useCallback(() => {
-    pausePlayback();
+  const startOver = useCallback(async () => {
+    const restartingScene = sceneRef.current.enabled;
+    if (restartingScene) {
+      playback.pause();
+      await sceneRef.current.reset();
+      await flowRef.current.stopAndWait().catch(() => {});
+    } else {
+      pausePlayback();
+    }
     playback.reset();
     manualGestureRef.current = false;
     if (containerRef.current) containerRef.current.scrollTop = 0;
@@ -951,13 +1130,18 @@ export default function Reader() {
     stableReaderPositionRef.current = null;
     pendingReflowPositionRef.current = null;
     setActiveSectionIdx(0);
-    flowRef.current.reanchor(0);
+    if (!restartingScene) flowRef.current.reanchor(0);
     setTimingMessage(null);
     setResumeChoice(null);
     resumePendingRef.current = false;
     if (script) {
       const cleared = clearResumePosition(script.id);
       if (!cleared.ok) setTimingMessage(cleared.error);
+    }
+    // Start over is itself an explicit start action. It uses the established
+    // countdown controller rather than allowing SceneLifecycle to bypass it.
+    if (restartingScene) {
+      playback.requestStart(presentationRef.current.countdownSeconds);
     }
   }, [pausePlayback, playback, script]);
 
@@ -991,7 +1175,9 @@ export default function Reader() {
       }
       const anchor = measureReaderPositionRef.current()?.anchorId;
       if (!anchor) return;
-      const atEnd = readModeRef.current === 'flow'
+      const atEnd = sceneRef.current.enabled
+        ? sceneRef.current.turnIndex >= script.sections.length
+        : readModeRef.current === 'flow'
         ? flowRef.current.anchor >= tokens.length
         : readingDistance().remaining <= 1;
       const result = saveResumePosition(script, anchor, playback.state.phase === 'completed' && atEnd);
@@ -1013,7 +1199,14 @@ export default function Reader() {
 
   const resumeReading = useCallback(() => {
     if (!resumeChoice?.anchorId) { startOver(); return; }
+    const anchorId = resumeChoice.anchorId;
     playback.resumePaused();
+    if (sceneEnabled && script) {
+      const turnIndex = script.sections.findIndex(section =>
+        anchorId.startsWith(`${section.id}:`),
+      );
+      if (turnIndex >= 0) void scene.goTo(turnIndex);
+    }
     pendingReflowPositionRef.current = {
       anchorId: resumeChoice.anchorId, anchorOffset: 0, fallbackScrollTop: 0,
       verticalMirror: presentation.mirrorVertical,
@@ -1022,11 +1215,19 @@ export default function Reader() {
     setResumeChoice(null);
     setReflowRevision(revision => revision + 1);
     setTimingMessage('Position restored. Press Play when ready; session time starts from zero.');
-  }, [resumeChoice, startOver, playback, presentation.mirrorVertical]);
+  }, [resumeChoice, startOver, playback, presentation.mirrorVertical, sceneEnabled, scene, script]);
 
   const getTimingMetrics = useCallback(() => {
     const elapsed = getElapsedMs(playback.state.timerState, performance.now());
     const target = presentationRef.current.targetDurationSeconds;
+    if (sceneRef.current.enabled) {
+      const count = enrichedSections.length;
+      return {
+        remainingMs: null,
+        progress: count ? Math.min(1, sceneRef.current.turnIndex / count) : 0,
+        timed: false,
+      };
+    }
     if (readModeRef.current === 'flow') {
       return { remainingMs: null, progress: tokens.length ? flowRef.current.anchor / tokens.length : 0, timed: false };
     }
@@ -1039,7 +1240,7 @@ export default function Reader() {
     const speed = (presentationRef.current.speed / 50) * (presentationRef.current.fontSize * 1.5);
     return { remainingMs: distance.remaining / speed * 1000,
       progress: distance.total > 0 ? 1 - distance.remaining / distance.total : 0, timed: false };
-  }, [playback, readingDistance, tokens.length]);
+  }, [playback, readingDistance, tokens.length, enrichedSections.length]);
 
   if (!script) {
     return (
@@ -1068,12 +1269,12 @@ export default function Reader() {
 
   return (
     <div 
-      className={`flex flex-col transition-all duration-300 ${readerSurface.className}`}
+      className={`flex flex-col transition-all duration-300 ${readerSurface.className} ${sceneEnabled ? 'scene-reader' : ''}`}
       style={readerSurface.style}
     >
       {/* Title Bar (Draggable in compact mode) */}
       <div 
-        className={`flex flex-col z-50 transition-opacity duration-300 ${showControls || (readMode === 'manual' ? !isPlaying : flow.status !== 'listening') ? 'opacity-100' : 'opacity-0'}`}
+        className={`flex flex-col z-50 transition-opacity duration-300 ${showControls || (sceneEnabled ? !['preparing', 'speaking', 'waiting'].includes(scene.phase) : readMode === 'manual' ? !isPlaying : flow.status !== 'listening') ? 'opacity-100' : 'opacity-0'}`}
         onMouseDown={async (e) => {
           if (settings.compactMode && !(e.target as HTMLElement).closest('button, input, select')) {
             try {
@@ -1092,7 +1293,7 @@ export default function Reader() {
             <button onClick={() => setDesktopError(null)}>Dismiss</button>
           </div>
         )}
-        <div className="flex items-center justify-between p-3">
+        <div className="scene-titlebar flex items-center justify-between p-3">
           <div className="flex items-center gap-4">
             <button 
               onClick={exitReader}
@@ -1151,9 +1352,25 @@ export default function Reader() {
                        {error}
                      </p>
                    )}
+                   {sceneEnabled && (
+                     <fieldset className="space-y-3 rounded-lg border border-border p-3 text-sm">
+                       <legend className="px-1 font-semibold">Scene options</legend>
+                       <label className="flex items-center gap-2">
+                         <input type="checkbox" checked={sceneFlowEnabled}
+                           onChange={event => setSceneFlowEnabled(event.target.checked)} />
+                         Follow my turn with local Mac Flow
+                       </label>
+                       {!isDesktop() && <label className="flex items-center gap-2">
+                         <input type="checkbox" checked={sceneSilentManual}
+                           onChange={event => setSceneSilentManual(event.target.checked)} />
+                         Silent cues — no audio in browser preview
+                       </label>}
+                       <p className="text-xs text-muted-foreground">Voices are selected in the cast editor. Scene mode never uses timed scrolling.</p>
+                     </fieldset>
+                   )}
                    <PresentationControls
                      value={presentation}
-                     readMode={readMode}
+                      readMode={sceneEnabled ? 'flow' : readMode}
                      onChange={updates => updatePresentation(updates as Partial<PresentationPreferences>)}
                      globalDarkTheme={settings.darkTheme}
                    />
@@ -1171,18 +1388,50 @@ export default function Reader() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 bg-background/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-border/50 overflow-hidden text-sm max-w-full">
-            <div className="flex items-center gap-1.5 flex-1 min-w-[80px]">
-              <select
-                value={readMode}
-                onChange={e => {
-                  dispatchCommand({ action: 'setReadMode', mode: e.target.value as "manual" | "flow" });
-                }}
-                className="bg-transparent border-none outline-none text-foreground font-semibold text-xs cursor-pointer"
-              >
-                <option value="manual">Manual Scroll</option>
-                <option value="flow">Voice Follow</option>
-              </select>
+          <div className={`scene-options-bar flex items-center gap-2 bg-background/50 backdrop-blur-md px-3 py-1.5 border border-border/50 text-sm max-w-full ${sceneEnabled ? 'flex-wrap rounded-xl' : 'rounded-full overflow-hidden'}`}>
+            <div className={`flex items-center gap-1.5 ${sceneEnabled ? 'basis-full min-w-0' : 'flex-1 min-w-[80px]'}`}>
+               {sceneEnabled ? (
+                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+                   <span className="font-semibold whitespace-nowrap">
+                     {sceneSilentManual
+                       ? 'Scene: silent manual cues'
+                       : sceneMyRoleIds.length === 0
+                       ? 'Scene: full read-through'
+                       : characters.length > 0 && characters.every(character => sceneMyRoleIds.includes(character.id))
+                         ? 'Scene: silent cue reader'
+                         : 'Scene partner'}
+                   </span>
+                   <label className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
+                     <input
+                       type="checkbox"
+                       checked={sceneFlowEnabled}
+                       onChange={event => setSceneFlowEnabled(event.target.checked)}
+                     />
+                     Follow my turn
+                   </label>
+                   {!isDesktop() && (
+                     <label className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
+                       <input
+                         type="checkbox"
+                         checked={sceneSilentManual}
+                         onChange={event => setSceneSilentManual(event.target.checked)}
+                       />
+                       Silent cues
+                     </label>
+                   )}
+                 </div>
+               ) : (
+                 <select
+                   value={readMode}
+                   onChange={e => {
+                     dispatchCommand({ action: 'setReadMode', mode: e.target.value as "manual" | "flow" });
+                   }}
+                   className="bg-transparent border-none outline-none text-foreground font-semibold text-xs cursor-pointer"
+                 >
+                   <option value="manual">Manual Scroll</option>
+                   <option value="flow">Voice Follow</option>
+                 </select>
+               )}
             </div>
 
             <div className="w-px h-4 bg-border mx-1" />
@@ -1215,8 +1464,8 @@ export default function Reader() {
                 title="Scroll Speed"
                  onChange={e => dispatchCommand({ action: 'scrollSpeed', value: parseInt(e.target.value) - presentation.speed })}
                 className="w-12 md:w-20 accent-primary"
-                disabled={readMode === 'flow'}
-                style={{ opacity: readMode === 'flow' ? 0.5 : 1 }}
+                 disabled={sceneEnabled || readMode === 'flow'}
+                 style={{ opacity: sceneEnabled || readMode === 'flow' ? 0.5 : 1 }}
               />
             </div>
 
@@ -1238,8 +1487,9 @@ export default function Reader() {
         </div>
       </div>
 
+      <div className="contents scene-hud">
       <PresentationHUD
-        mode={readMode}
+        mode={sceneEnabled ? 'manual' : readMode}
         status={flow.status}
         isFollowing={flow.isFollowing}
         audioLevelRef={flow.audioLevelRef}
@@ -1248,6 +1498,7 @@ export default function Reader() {
         showTiming={presentation.showTiming}
         getTimingMetrics={getTimingMetrics}
       />
+      </div>
       <Dialog open={resumeChoice !== null} onOpenChange={open => { if (!open) void exitReader(); }}>
         <DialogContent>
           <DialogHeader>
@@ -1361,13 +1612,99 @@ export default function Reader() {
                 {enrichedSections.length > 1 && (
                   <h3
                     className="font-bold mb-6 flex items-center gap-4"
-                     style={{ fontSize: `${presentation.fontSize * 0.75}px` }}
+                      data-scene-section-heading
+                      style={{ fontSize: `${presentation.fontSize * 0.75}px` }}
                   >
                     <span className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-mono tracking-tighter">
                       {idx + 1}
                     </span>
                     {section.title}
                   </h3>
+                )}
+                {sceneEnabled && idx === scene.turnIndex && (() => {
+                  // Tokenisation deliberately ignores scene metadata so Flow's
+                  // token array remains stable on notes/assignment edits. Read
+                  // visible metadata from the live section instead.
+                  const raw = script.sections[idx] ?? section;
+                  const character = characters.find(item => item.id === raw.characterId);
+                  const mine = !!character && effectiveSceneMyRoleIds.includes(character.id);
+                  const ownership = !character
+                    ? 'Unassigned turn'
+                    : mine ? 'Your turn' : scene.phase === 'speaking' ? 'Partner speaking' : 'Partner turn';
+                  return (
+                    <aside
+                      className="mb-4 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 shadow-sm"
+                      aria-live="polite"
+                      aria-label="Current scene turn"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-bold text-base leading-snug">
+                          {character?.name ?? 'Unassigned'} <span className="font-normal text-muted-foreground">— {ownership}</span>
+                        </p>
+                        <button
+                          type="button"
+                          className="text-xs underline"
+                          onClick={() => setShowSceneNotes(value => !value)}
+                        >
+                          {showSceneNotes ? 'Hide notes' : 'Show notes'}
+                        </button>
+                      </div>
+                      {character && [character.age, character.gender, character.style]
+                        .filter(value => value.trim()).length > 0 && (
+                        <p className="mt-1 text-xs font-normal text-muted-foreground">
+                          {[character.age, character.gender, character.style]
+                            .filter(value => value.trim())
+                            .join(' · ')}
+                        </p>
+                      )}
+                      {showSceneNotes && raw.notes?.trim() && (
+                        <p className="scene-notes mt-2 whitespace-pre-wrap text-sm font-normal opacity-90">
+                          <span className="font-semibold">Notes: </span>{raw.notes}
+                        </p>
+                      )}
+                      {mine && sceneFlowEnabled && (
+                        <p className="mt-2 text-xs font-normal text-muted-foreground">
+                          {flow.status === 'listening'
+                            ? 'Following your current turn locally. Use Next if matching is uncertain.'
+                            : flow.status === 'silence-stopped'
+                              ? <>
+                                  Flow stopped for inactivity; this turn was not advanced.{' '}
+                                  <button
+                                    type="button"
+                                    className="font-semibold underline"
+                                    onClick={() => flow.start()}
+                                  >
+                                    Resume Flow
+                                  </button>
+                                </>
+                              : `Flow for your turn: ${flow.error ?? flow.status}.`}
+                        </p>
+                      )}
+                      {scene.message && (
+                        <p role="alert" className="mt-2 text-sm font-normal text-destructive">{scene.message}</p>
+                      )}
+                    </aside>
+                  );
+                })()}
+                {!sceneEnabled && idx === activeSectionIdx && (script.sections[idx]?.notes?.trim()) && (
+                  <aside
+                    className="mb-4 rounded-lg border border-border bg-muted/50 px-4 py-3"
+                    aria-label="Section notes"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes</p>
+                      <button
+                        type="button"
+                        className="text-xs underline"
+                        onClick={() => setShowSceneNotes(value => !value)}
+                      >
+                        {showSceneNotes ? 'Hide notes' : 'Show notes'}
+                      </button>
+                    </div>
+                    {showSceneNotes && (
+                      <p className="mt-2 whitespace-pre-wrap text-sm font-normal">{script.sections[idx].notes}</p>
+                    )}
+                  </aside>
                 )}
                 <div 
                   className="whitespace-pre-wrap font-medium tracking-tight"
@@ -1387,7 +1724,7 @@ export default function Reader() {
                       const isActive = flow.anchor >= span.startTokenIdx! && flow.anchor <= span.endTokenIdx!;
                       
                        let className = "transition-colors duration-200 ";
-                      if (readMode === "flow") {
+                       if (!sceneEnabled && readMode === "flow") {
                         if (isActive) {
                            // This is an explicit contrast pair, independent of
                            // a user's reader background or foreground colour.
@@ -1420,7 +1757,7 @@ export default function Reader() {
         </div>
       </div>
 
-      {readMode === 'flow' && !showWizard && (
+      {readMode === 'flow' && !sceneEnabled && !showWizard && (
         <FlowStatusPanel 
           flow={{ ...flow, start: () => dispatchCommand({ action: 'playPause' }) }}
           onCancelMode={() => dispatchCommand({ action: 'setReadMode', mode: 'manual' })}
@@ -1428,7 +1765,7 @@ export default function Reader() {
         />
       )}
 
-      {showWizard && (
+      {showWizard && !sceneEnabled && (
         <FlowSetupWizard
           flow={{ ...flow, start: () => dispatchCommand({ action: 'playPause' }) }}
           onComplete={() => {
@@ -1446,7 +1783,7 @@ export default function Reader() {
       )}
 
       {/* Bottom Controls / Section Navigation */}
-      <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-4 p-2 md:p-3 rounded-full bg-background/80 backdrop-blur-xl border border-border shadow-2xl z-50 transition-all duration-300 ${showControls || (readMode === 'manual' ? !isPlaying : flow.status !== 'listening') ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+      <div className={`scene-transport absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-4 p-2 md:p-3 rounded-full bg-background/80 backdrop-blur-xl border border-border shadow-2xl z-50 transition-all duration-300 ${showControls || (sceneEnabled ? !['preparing', 'speaking', 'waiting'].includes(scene.phase) : readMode === 'manual' ? !isPlaying : flow.status !== 'listening') ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
         
         <button
           onClick={() => dispatchCommand({ action: 'previous' })}
@@ -1456,6 +1793,23 @@ export default function Reader() {
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
+
+        {sceneEnabled && (
+          <button
+            type="button"
+            onClick={() => {
+              // A paused replay is a new active playback interval, not speech
+              // running behind a paused presentation clock.
+              if (playback.state.phase === 'playing') void scene.replay();
+              else playback.requestStart(0);
+            }}
+            disabled={scene.phase === 'completed' || ['countdown', 'starting'].includes(playbackState.phase)}
+            className="px-2 text-xs underline whitespace-nowrap"
+            title="Replay current turn"
+          >
+            Replay
+          </button>
+        )}
 
         <select
           value={activeSectionIdx}
@@ -1471,7 +1825,7 @@ export default function Reader() {
 
         <button
           onClick={() => dispatchCommand({ action: 'next' })}
-          disabled={activeSectionIdx === enrichedSections.length - 1}
+          disabled={!sceneEnabled && activeSectionIdx === enrichedSections.length - 1}
           className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
           title="Next Section (Right Arrow)"
         >
@@ -1482,11 +1836,11 @@ export default function Reader() {
         
         <button
           onClick={() => dispatchCommand({ action: 'playPause' })}
-          aria-label={['countdown', 'starting', 'playing'].includes(playbackState.phase) ? 'Pause presentation' : 'Play presentation'}
-          disabled={readMode === 'flow' && !['ready', 'listening', 'paused', 'silence-stopped', 'stopped', 'loading', 'error'].includes(flow.status)}
+          aria-label={['countdown', 'starting', 'playing'].includes(playbackState.phase) ? 'Pause presentation' : sceneEnabled ? 'Start or resume scene' : 'Play presentation'}
+          disabled={!sceneEnabled && readMode === 'flow' && !['ready', 'listening', 'paused', 'silence-stopped', 'stopped', 'loading', 'error'].includes(flow.status)}
           className="w-14 h-14 flex items-center justify-center bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 hover:scale-105 transition-all focus:outline-none focus:ring-4 focus:ring-primary/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
         >
-          {readMode === 'flow' && flow.status === 'loading' ? (
+          {!sceneEnabled && readMode === 'flow' && flow.status === 'loading' ? (
             <Loader2 className="w-6 h-6 animate-spin" />
           ) : (
             ['countdown', 'starting', 'playing'].includes(playbackState.phase) ?

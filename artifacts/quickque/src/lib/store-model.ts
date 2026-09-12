@@ -1,6 +1,10 @@
 import type { DeletedScript, Script, SortMode } from './types.ts';
 import { generateId } from './utils.ts';
 import { normalizePresentation } from './presentation-preferences.ts';
+import {
+  cloneActorWithFreshCharacterIds,
+  cloneScriptData,
+} from './actor-model.ts';
 
 export type LibraryState = {
   scripts: Script[];
@@ -62,20 +66,38 @@ export function mergeImportedLibrary(
     if (!scriptId) return null;
     usedIds.add(scriptId);
     identityMap.set(source.id, scriptId);
-    const sections: Array<Script['sections'][number] | null> = source.sections.map(section => {
+    const clonedSource = cloneScriptData(source);
+    const sections: Array<Script['sections'][number] | null> = clonedSource.sections.map(section => {
       const sectionId = usedIds.has(section.id) ? freshId(usedIds, idFactory) : section.id;
       if (!sectionId) return null;
       usedIds.add(sectionId);
       return { ...section, id: sectionId };
     });
     if (sections.some(section => section === null)) return null;
+    const remappedActor = clonedSource.actor
+      ? cloneActorWithFreshCharacterIds(
+        clonedSource.actor,
+        idFactory,
+        usedIds,
+      )
+      : null;
+    if (clonedSource.actor && !remappedActor) return null;
+    remappedActor?.actor.characters.forEach(character => usedIds.add(character.id));
+    const remappedSections = sections.filter(
+      (section): section is Script['sections'][number] => section !== null,
+    ).map(section => {
+      if (!clonedSource.actor) return { ...section };
+      const characterId = typeof section.characterId === 'string'
+        ? remappedActor?.characterIdMap.get(section.characterId) ?? null
+        : section.characterId;
+      return { ...section, characterId };
+    });
     return {
-      ...source,
+      ...clonedSource,
       id: scriptId,
       presentation: normalizePresentation(source.presentation),
-      sections: sections.filter(
-        (section): section is Script['sections'][number] => section !== null,
-      ),
+      sections: remappedSections,
+      ...(remappedActor ? { actor: remappedActor.actor } : {}),
     };
   };
 

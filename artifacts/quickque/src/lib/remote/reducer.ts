@@ -15,6 +15,8 @@ export function resolveCommandEffect(
   cmd: { action?: string, detail?: string, type?: string, value?: number, mode?: 'manual' | 'flow' }, 
   context: {
     readMode: 'manual' | 'flow';
+    /** Scene transport is independent of optional recognition readiness. */
+    sceneEnabled?: boolean;
     isPlaying: boolean;
     playbackPhase?: string;
     flowStatus: string;
@@ -34,6 +36,9 @@ export function resolveCommandEffect(
   switch (action) {
     case 'playPause':
     case 'toggle':
+      if (context.sceneEnabled) {
+        return { type: 'setPlaying', playing: !context.isPlaying };
+      }
       if (context.playbackPhase === 'countdown' || context.playbackPhase === 'starting') {
         return context.readMode === 'manual'
           ? { type: 'setPlaying', playing: false }
@@ -60,6 +65,7 @@ export function resolveCommandEffect(
       }
       break;
     case 'scrollSpeed':
+      if (context.sceneEnabled) break;
       if (context.readMode === 'manual' && typeof value === 'number') {
         return { type: 'setSpeed', speed: Math.max(10, Math.min(150, context.speed + value)) };
       }
@@ -70,6 +76,7 @@ export function resolveCommandEffect(
       }
       break;
     case 'position':
+      if (context.sceneEnabled) break;
       if (context.readMode === 'manual' && typeof value === 'number') {
         return { type: 'adjustPosition', delta: value };
       }

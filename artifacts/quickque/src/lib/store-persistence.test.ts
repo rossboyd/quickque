@@ -12,6 +12,7 @@ import {
 } from './store-persistence.ts';
 import type { Script } from './types.ts';
 import { DEFAULT_PRESENTATION } from './presentation-preferences.ts';
+import { isValidActor } from './actor-model.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -125,6 +126,7 @@ test('rejects malformed fields and metadata as an all-or-nothing table', () => {
     [{ ...valid, sections: [{ ...valid.sections[0] }, { ...valid.sections[0] }] }],
     [{ ...valid, title: 'x'.repeat(201) }],
     [{ ...valid, sections: [{ ...valid.sections[0], content: 'x'.repeat(500_001) }] }],
+    [{ ...valid, sections: [{ ...valid.sections[0], notes: 'x'.repeat(500_001) }] }],
     [{
       ...valid,
       sections: Array.from({ length: 501 }, (_, index) => ({
@@ -358,4 +360,122 @@ test('rejects malformed metadata without writing', () => {
     error: storageErrors.malformedLibrary,
   });
   assert.equal(storage.getItem(QUICKQUE_SCRIPTS_KEY), original);
+});
+
+test('round-trips actor metadata, notes, roles, and turbo provenance', () => {
+  const storage = new MemoryStorage();
+  const actorScript = script('actor');
+  actorScript.actor = {
+    enabled: true,
+    characters: [{
+      id: 'partner',
+      name: 'Partner',
+      age: '30s',
+      gender: 'non-binary',
+      style: 'restrained',
+      voice: { engine: 'turbo', voiceId: 'rights-cleared-1', rate: 1.15 },
+    }],
+    myRoleIds: [],
+  };
+  actorScript.sections[0].notes = 'Pause before the last line.';
+  actorScript.sections[0].characterId = 'partner';
+  assert.equal(persistLibrary(storage, [actorScript], 'actor').ok, true);
+  const loaded = loadLibrary(storage, []);
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) return;
+  assert.ok(loaded.scripts[0].actor);
+  assert.ok(isValidActor(loaded.scripts[0].actor));
+  assert.equal(loaded.scripts[0].actor.characters[0].voice.engine, 'turbo');
+  assert.equal(loaded.scripts[0].sections[0].notes, actorScript.sections[0].notes);
+  assert.equal(loaded.scripts[0].sections[0].characterId, 'partner');
+});
+
+test('invalid actor fields and selected roles fail closed without overwriting storage', () => {
+  const storage = new MemoryStorage();
+  const valid = script('valid');
+  storage.put(QUICKQUE_SCRIPTS_KEY, JSON.stringify([valid]));
+  const malformed = {
+    ...valid,
+    actor: {
+      enabled: true,
+      characters: [{
+        id: 'partner',
+        name: 'x'.repeat(201),
+        age: '',
+        gender: '',
+        style: '',
+        voice: { engine: 'system', voiceId: '', rate: 1 },
+      }],
+      myRoleIds: ['missing'],
+    },
+  };
+  assert.equal(parseLibraryData(JSON.stringify([malformed])).ok, false);
+  assert.equal(loadLibrary(storage, []).ok, true);
+});
+
+test('dangling actor assignments are explicitly unassigned before persistence', () => {
+  const storage = new MemoryStorage();
+  const actorScript = script('dangling');
+  actorScript.actor = {
+    enabled: true,
+    characters: [{
+      id: 'partner',
+      name: 'Partner',
+      age: '',
+      gender: '',
+      style: '',
+      voice: { engine: 'system', voiceId: '', rate: 1 },
+    }],
+    myRoleIds: [],
+  };
+  actorScript.sections[0].characterId = 'removed-character';
+  assert.equal(persistLibrary(storage, [actorScript], 'dangling').ok, true);
+  const parsed = parseLibraryData(storage.getItem(QUICKQUE_SCRIPTS_KEY) as string);
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  assert.equal(parsed.library.scripts[0].sections[0].characterId, null);
+});
+
+test('imports retain actor metadata but drop unknown audio/model payloads', () => {
+  const source = script('safe-import') as Script & Record<string, unknown>;
+  source.audioBlob = 'generated audio must not persist';
+  source.modelWeights = { bytes: [1, 2, 3] };
+  source.sections[0] = {
+    ...source.sections[0],
+    generatedAudio: 'discard',
+  };
+  source.actor = {
+    enabled: true,
+    characters: [{
+      id: 'partner',
+      name: 'Partner',
+      age: '',
+      gender: '',
+      style: 'quiet',
+      voice: {
+        engine: 'turbo',
+        voiceId: 'rights-cleared-1',
+        rate: 1,
+        model: 'discard',
+      },
+      referenceAudio: 'discard',
+      model: 'discard',
+    },
+    ],
+    myRoleIds: [],
+  };
+
+  const parsed = parseLibraryData(JSON.stringify([source]));
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  const imported = parsed.library.scripts[0] as Script & Record<string, unknown>;
+  assert.equal(imported.audioBlob, undefined);
+  assert.equal(imported.modelWeights, undefined);
+  assert.equal((imported.sections[0] as Script['sections'][number] & Record<string, unknown>).generatedAudio, undefined);
+  const character = imported.actor?.characters[0] as typeof imported.actor.characters[number] & Record<string, unknown>;
+  assert.equal(character.referenceAudio, undefined);
+  assert.equal(character.model, undefined);
+  assert.equal((character.voice as typeof character.voice & Record<string, unknown>).model, undefined);
+  assert.equal(character.voice.engine, 'turbo');
+  assert.equal(character.voice.voiceId, 'rights-cleared-1');
 });

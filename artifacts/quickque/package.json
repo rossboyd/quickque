@@ -17,7 +17,8 @@
     "icons:check": "node scripts/check-icons.mjs",
     "desktop:check-icon": "sh scripts/check-mac-icon.sh",
     "desktop:test-native": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
-    "test:flow": "node --test src/lib/flow/flow.test.ts src/lib/flow/diagnostics.test.ts src/lib/flow/native-errors.test.ts",
+    "test:flow": "node --test src/lib/flow/flow.test.ts src/lib/flow/diagnostics.test.ts src/lib/flow/native-errors.test.ts src/lib/flow/command-acknowledgement.test.ts",
+    "test:scene": "node --test src/lib/scene-lifecycle.test.ts src/lib/scene-flow-completion.test.ts src/lib/scene-speech.test.ts src/lib/flow/command-acknowledgement.test.ts",
     "test:presentation": "node --test src/lib/presentation-timer.test.ts src/lib/presentation-scheduler.test.ts src/lib/presentation-playback.test.ts src/lib/flow/audio-level.test.ts",
     "test:remote": "node --test src/lib/remote/*.test.ts src/lib/remote/*.test.mjs",
     "test:document-import": "node --import ./scripts/pdf-test-loader.mjs --test src/lib/document-import/*.test.ts src/lib/store-persistence.test.ts",
@@ -25,6 +26,7 @@
     "test:reader-surface": "node --test src/lib/reader-surface.test.ts",
     "test:appearance": "node --test src/lib/settings-persistence.test.ts src/lib/reader-position.test.ts src/lib/brand-contrast.test.ts",
     "test:presentation-layout": "node --test src/lib/presentation-preferences.test.ts src/lib/reader-geometry.test.ts src/lib/reader-tokenization.test.ts src/lib/reader-position.test.ts src/lib/reader-surface.test.ts",
+    "test:scene-speech": "node --test src/lib/scene-speech.test.ts",
     "test:reader-browser": "playwright test tests/reader-regression.spec.ts tests/presentation-timing.spec.ts --reporter=line",
     "test:resume": "node --test src/lib/reader-resume-position.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

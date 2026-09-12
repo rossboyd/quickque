@@ -231,3 +231,25 @@ test('a valid recovery copy can be selected without changing its scripts', () =>
     null,
   );
 });
+
+test('native serialization preserves actor metadata and leaves turbo unavailable', () => {
+  const scripts = createInitialScripts(789);
+  scripts[0].actor = {
+    enabled: true,
+    characters: [{
+      id: 'partner',
+      name: 'Partner',
+      age: '',
+      gender: '',
+      style: 'calm',
+      voice: { engine: 'turbo', voiceId: 'metadata-only', rate: 1 },
+    }],
+    myRoleIds: [],
+  };
+  scripts[0].sections[0].notes = 'Do not read this cue.';
+  scripts[0].sections[0].characterId = 'partner';
+  const parsed = parseScriptsJson(serializeScripts(scripts));
+  assert.deepEqual(parsed, scripts);
+  assert.equal(parsed?.[0].actor?.characters[0].voice.engine, 'turbo');
+  assert.equal(parsed?.[0].sections[0].notes, 'Do not read this cue.');
+});

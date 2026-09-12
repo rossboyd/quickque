@@ -18,6 +18,7 @@ const DOCUMENT_FORMAT: &str = "com.quickque.local-library";
 const FORMAT_VERSION: u32 = 1;
 const MAX_LIBRARY_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CONFIG_BYTES: usize = 16 * 1024;
+const MAX_SECTION_NOTES_CHARS: usize = 500_000;
 const LIBRARY_FILE_PREFIX: &str = "quickque-library-";
 const LIBRARY_FILE_SUFFIX: &str = ".json";
 const MAX_TEMP_ATTEMPTS: u32 = 32;
@@ -48,6 +49,9 @@ struct LocalLibraryConfig {
 struct LocalLibraryDocument {
     format: String,
     version: u32,
+    // The browser owns the script schema. Keeping this opaque lets actor,
+    // notes, and future metadata cross the native folder boundary unchanged;
+    // the browser performs the stricter structural validation on load.
     scripts: serde_json::Value,
 }
 
@@ -357,7 +361,30 @@ fn validate_scripts_json(scripts_json: &str) -> Result<serde_json::Value, String
     if !scripts.is_array() {
         return Err("Quickque local library JSON must contain an array of scripts.".to_string());
     }
+    validate_section_notes(&scripts)?;
     Ok(scripts)
+}
+
+fn validate_section_notes(scripts: &serde_json::Value) -> Result<(), String> {
+    for script in scripts.as_array().into_iter().flatten() {
+        let Some(sections) = script.get("sections").and_then(serde_json::Value::as_array) else {
+            continue;
+        };
+        for section in sections {
+            let Some(notes) = section.get("notes") else {
+                continue;
+            };
+            let Some(notes) = notes.as_str() else {
+                return Err("Quickque section notes must be text when present.".to_string());
+            };
+            if notes.chars().count() > MAX_SECTION_NOTES_CHARS {
+                return Err(format!(
+                    "Quickque section notes are too long (maximum {MAX_SECTION_NOTES_CHARS} characters)."
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn verify_expected_directory(
@@ -572,6 +599,83 @@ mod tests {
         assert!(validate_scripts_json("[]").is_ok());
         assert!(validate_scripts_json(r#"{"scripts":[]}"#).is_err());
         assert!(validate_scripts_json("not json").is_err());
+    }
+
+    #[test]
+    fn malformed_section_notes_are_rejected_before_native_save() {
+        let oversized = serde_json::json!([{
+            "sections": [{"notes": "x".repeat(MAX_SECTION_NOTES_CHARS + 1)}]
+        }]);
+        assert!(validate_scripts_json(
+            &serde_json::to_string(&oversized).expect("encode oversized notes")
+        )
+        .is_err());
+        let wrong_type = serde_json::json!([{
+            "sections": [{"notes": {"model": "blob"}}]
+        }]);
+        assert!(validate_scripts_json(
+            &serde_json::to_string(&wrong_type).expect("encode malformed notes")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn actor_metadata_and_notes_survive_native_document_validation() {
+        let input = serde_json::json!([{
+            "id": "actor-script",
+            "title": "Scene",
+            "sections": [{
+                "id": "turn-1",
+                "title": "Partner",
+                "content": "Hello.",
+                "notes": "Hold for the actor.",
+                "characterId": "partner"
+            }],
+            "actor": {
+                "enabled": true,
+                "characters": [{
+                    "id": "partner",
+                    "name": "Partner",
+                    "age": "30s",
+                    "gender": "non-binary",
+                    "style": "restrained",
+                    "voice": {
+                        "engine": "turbo",
+                        "voiceId": "rights-cleared-1",
+                        "rate": 1.0
+                    }
+                }],
+                "myRoleIds": []
+            }
+        }]);
+        let scripts = validate_scripts_json(
+            &serde_json::to_string(&input).expect("encode actor metadata"),
+        )
+        .expect("actor script array should be accepted");
+        let document = LocalLibraryDocument {
+            format: DOCUMENT_FORMAT.to_string(),
+            version: FORMAT_VERSION,
+            scripts,
+        };
+        let encoded = serde_json::to_vec(&document).expect("encode native document");
+        let decoded: LocalLibraryDocument =
+            serde_json::from_slice(&encoded).expect("decode native document");
+        assert_eq!(
+            decoded.scripts[0]["sections"][0]["notes"],
+            "Hold for the actor."
+        );
+        assert_eq!(
+            decoded.scripts[0]["sections"][0]["characterId"],
+            "partner"
+        );
+        assert_eq!(
+            decoded.scripts[0]["actor"]["characters"][0]["voice"]["engine"],
+            "turbo"
+        );
+        assert_eq!(
+            decoded.scripts[0]["actor"]["characters"][0]["voice"]["voiceId"],
+            "rights-cleared-1"
+        );
     }
 
     #[test]

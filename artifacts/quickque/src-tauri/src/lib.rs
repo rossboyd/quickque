@@ -3,6 +3,7 @@ use std::{
     io::{self, BufRead, BufReader, Read, Write},
     process::{Child, ChildStderr, ChildStdin, Command, ExitStatus, Stdio},
     sync::{
+        atomic::{AtomicU64, Ordering},
         mpsc::{self, Receiver, Sender},
         Arc, Mutex,
     },
@@ -15,6 +16,10 @@ use remote::{RemoteInfo, RemoteService, RemoteSnapshot, RemoteStatus};
 
 mod local_library;
 mod flow_protocol;
+mod scene_speech_state;
+use scene_speech_state::{
+    terminate_scene_speech_child, SceneSpeechProcess, SceneSpeechState,
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +29,7 @@ struct FlowCommand {
 }
 
 const MAXIMUM_STDERR_BYTES: usize = 8192;
+static NEXT_SCENE_SPEECH_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 #[derive(Default)]
 struct ProcessState {
     generation: u64,
@@ -41,6 +47,7 @@ struct FlowState {
 #[derive(Default)]
 struct AppState {
     flow: FlowState,
+    scene_speech: SceneSpeechState,
     remote: RemoteService,
 }
 
@@ -64,15 +71,41 @@ impl FlowState {
         Ok((true, previous))
     }
 
-    fn reap(mut process: Option<(Child, Option<ChildStdin>, Option<StderrCapture>)>) {
+    fn reap(&self, mut process: Option<(Child, Option<ChildStdin>, Option<StderrCapture>)>) -> Result<(), String> {
         if let Some((mut child, stdin, stderr)) = process.take() {
             drop(stdin);
-            let _ = child.kill();
-            let _ = child.wait();
+            let stopped = (|| -> Result<(), String> {
+                match child.try_wait() {
+                    Ok(Some(_)) => return Ok(()),
+                    Ok(None) => {}
+                    Err(_) => return Err("FLOW_STOP_FAILED: Could not inspect the microphone helper. Restart Quickque.".to_string()),
+                }
+                if child.kill().is_err() {
+                    // A natural exit can race kill. Only a reaped exit is an
+                    // acknowledgement, never the kill request alone.
+                    return match child.try_wait() {
+                        Ok(Some(_)) => Ok(()),
+                        _ => Err("FLOW_STOP_FAILED: Could not stop the microphone helper. Restart Quickque.".to_string()),
+                    };
+                }
+                child.wait()
+                    .map(|_| ())
+                    .map_err(|_| "FLOW_STOP_FAILED: Microphone helper shutdown was not confirmed. Restart Quickque.".to_string())
+            })();
+            if let Err(error) = stopped {
+                // Keep ownership for the next stop/app-exit attempt. Every
+                // command reaps this child before starting another helper.
+                let mut state = self.process.lock()
+                    .map_err(|_| "FLOW_STOP_FAILED: Microphone process state is unavailable. Restart Quickque.".to_string())?;
+                state.child = Some(child);
+                state.stderr = stderr;
+                return Err(error);
+            }
             if let Some(stderr) = stderr {
                 let _ = stderr.finish();
             }
         }
+        Ok(())
     }
 
     fn shutdown(&self) {
@@ -82,13 +115,96 @@ impl FlowState {
         });
         // Closing the command pipe lets a healthy helper tear down its
         // microphone and inference before the unconditional kill below.
-        Self::reap(process);
+        let _ = self.reap(process);
     }
 }
 
 impl Drop for FlowState {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+impl SceneSpeechState {
+    fn stop(&self) -> Result<(), String> {
+        let _spawn_guard = self
+            .spawn_lock
+            .lock()
+            .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech start state is unavailable.".to_string())?;
+        let child = {
+            let mut process = self
+                .process
+                .lock()
+                .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech state is unavailable.".to_string())?;
+            process.invalidate_all();
+            let child = process.child.take();
+            if child.is_some() {
+                process.stopping = true;
+            }
+            child
+        };
+        if let Some(child) = child {
+            if let Err((child, error)) =
+                terminate_scene_speech_child(child, stop_scene_speech_child)
+            {
+                self.record_stop_failure(child);
+                return Err(error);
+            }
+            self.finish_stop();
+        }
+        Ok(())
+    }
+
+    fn stop_request(&self, request_id: u64) -> Result<(), String> {
+        let _spawn_guard = self
+            .spawn_lock
+            .lock()
+            .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech start state is unavailable.".to_string())?;
+        let child = {
+            let mut process = self
+                .process
+                .lock()
+                .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech state is unavailable.".to_string())?;
+            // IPC requests can cross on different threads. A late stop from a
+            // previous frontend turn must never terminate a newer helper.
+            if !process.accepts_stop(request_id) {
+                return Ok(());
+            }
+            let child = process.child.take();
+            if child.is_some() {
+                process.stopping = true;
+            }
+            child
+        };
+        if let Some(child) = child {
+            if let Err((child, error)) =
+                terminate_scene_speech_child(child, stop_scene_speech_child)
+            {
+                self.record_stop_failure(child);
+                return Err(error);
+            }
+            self.finish_stop();
+        }
+        Ok(())
+    }
+
+    fn finish_stop(&self) {
+        if let Ok(mut process) = self.process.lock() {
+            process.stopping = false;
+        }
+    }
+
+    fn record_stop_failure(&self, child: Arc<Mutex<Child>>) {
+        if let Ok(mut process) = self.process.lock() {
+            // Keep the child reachable for process-drop cleanup. More
+            // importantly, fail closed: no later scene start may overlap a
+            // helper whose termination was not acknowledged.
+            process.stopping = false;
+            process.stop_failed = true;
+            if process.child.is_none() {
+                process.child = Some(child);
+            }
+        }
     }
 }
 
@@ -174,6 +290,320 @@ fn helper_path() -> Result<std::path::PathBuf, String> {
         .parent()
         .ok_or_else(|| "Quickque executable has no parent directory.".to_string())?
         .join("quickque-flow"))
+}
+
+fn stop_scene_speech_child(child: &Arc<Mutex<Child>>) -> Result<(), String> {
+    // The helper owns AVSpeechSynthesizer. Killing the isolated helper is the
+    // reliable cancellation boundary; no Flow/ASR process or microphone is
+    // involved, and the OS tears down the helper's synthesizer with it.
+    let mut child = child
+        .lock()
+        .map_err(|_| "SCENE_SPEECH_STOP_FAILED: Scene speech process state is unavailable.".to_string())?;
+    match child.try_wait() {
+        Ok(Some(_)) => return Ok(()),
+        Ok(None) => {}
+        Err(_) => {
+            return Err(
+                "SCENE_SPEECH_STOP_FAILED: Could not inspect the local speech process."
+                    .to_string(),
+            )
+        }
+    }
+    child
+        .kill()
+        .map_err(|_| "SCENE_SPEECH_STOP_FAILED: Could not stop local system speech.".to_string())?;
+    child
+        .wait()
+        .map(|_| ())
+        .map_err(|_| "SCENE_SPEECH_STOP_FAILED: Local system speech did not exit.".to_string())
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const MAXIMUM_SCENE_SPEECH_RESPONSE_BYTES: usize = 1024 * 1024;
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const MAXIMUM_SCENE_SPEECH_TEXT_BYTES: usize = 100_000;
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SceneSpeechHelperVoice {
+    id: String,
+    name: String,
+    language: String,
+    engine: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SceneSpeechVoiceList {
+    voices: Vec<SceneSpeechHelperVoice>,
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[derive(Debug, Deserialize)]
+struct SceneSpeechHelperFailure {
+    error: String,
+    message: String,
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[derive(Debug, Deserialize)]
+struct SceneSpeechHelperCompletion {
+    status: String,
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SceneSpeechRequest<'a> {
+    text: &'a str,
+    voice_id: &'a str,
+    rate: f32,
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn scene_speech_helper_path() -> Result<std::path::PathBuf, String> {
+    if let Some(path) = std::env::var_os("QUICKQUE_SPEECH_HELPER") {
+        return Ok(path.into());
+    }
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("SCENE_SPEECH_HELPER_UNAVAILABLE: Could not locate Quickque: {error}"))?;
+    Ok(executable
+        .parent()
+        .ok_or_else(|| "SCENE_SPEECH_HELPER_UNAVAILABLE: Quickque executable has no parent directory.".to_string())?
+        .join("quickque-speech"))
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn read_scene_speech_output<R: Read>(mut reader: R) -> Result<Vec<u8>, String> {
+    let mut output = Vec::new();
+    reader
+        .by_ref()
+        .take((MAXIMUM_SCENE_SPEECH_RESPONSE_BYTES + 1) as u64)
+        .read_to_end(&mut output)
+        .map_err(|_| "SCENE_SPEECH_HELPER_PROTOCOL: Could not read the local speech response.".to_string())?;
+    if output.len() > MAXIMUM_SCENE_SPEECH_RESPONSE_BYTES {
+        return Err("SCENE_SPEECH_HELPER_PROTOCOL: The local speech response was too large.".to_string());
+    }
+    Ok(output)
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn scene_speech_failure_message(output: &[u8]) -> String {
+    serde_json::from_slice::<SceneSpeechHelperFailure>(output)
+        .ok()
+        .filter(|failure| {
+            failure.error.starts_with("SCENE_SPEECH_")
+                && !failure.error.is_empty()
+                && !failure.message.is_empty()
+        })
+        .map(|failure| format!("{}: {}", failure.error, failure.message))
+        .unwrap_or_else(|| {
+            "SCENE_SPEECH_HELPER_FAILED: The local system speech service failed.".to_string()
+        })
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn scene_speech_list_local_voices_native() -> Result<SceneSpeechVoiceList, String> {
+    let output = Command::new(scene_speech_helper_path()?)
+        .arg("--list")
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .stdout(Stdio::piped())
+        .output()
+        .map_err(|error| format!("SCENE_SPEECH_HELPER_UNAVAILABLE: Could not start local system speech: {error}"))?;
+    if !output.status.success() {
+        return Err(scene_speech_failure_message(&output.stdout));
+    }
+    let voices = serde_json::from_slice::<SceneSpeechVoiceList>(&output.stdout)
+        .map_err(|_| "SCENE_SPEECH_HELPER_PROTOCOL: The local speech service returned an invalid voice list.".to_string())?;
+    if voices.voices.iter().any(|voice| {
+        voice.engine != "system"
+            || voice.id.is_empty()
+            || voice.name.is_empty()
+            || voice.language.is_empty()
+    }) {
+        return Err("SCENE_SPEECH_HELPER_PROTOCOL: The local speech service returned an invalid voice.".to_string());
+    }
+    Ok(voices)
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn scene_speech_speak_native(
+    state: &SceneSpeechState,
+    text: String,
+    voice_id: String,
+    rate: f32,
+    request_id: u64,
+) -> Result<(), String> {
+    if text.trim().is_empty() {
+        return Err("SCENE_SPEECH_TEXT_EMPTY: Scene speech needs dialogue text to speak.".to_string());
+    }
+    if text.len() > MAXIMUM_SCENE_SPEECH_TEXT_BYTES {
+        return Err("SCENE_SPEECH_TEXT_TOO_LONG: This dialogue turn is too long for one speech request.".to_string());
+    }
+    if voice_id.trim().is_empty() {
+        return Err("SCENE_SPEECH_VOICE_REQUIRED: Choose an installed system voice before starting playback.".to_string());
+    }
+    if !rate.is_finite() || !(0.5..=2.0).contains(&rate) {
+        return Err("SCENE_SPEECH_RATE_INVALID: The requested system speech rate is unavailable.".to_string());
+    }
+
+    // A stop may arrive while this worker is spawning, sending stdin, or
+    // registering the child. Keep that entire interval serialized with stop,
+    // so stop cannot acknowledge cancellation before this helper is either
+    // registered for reaping or rejected without receiving dialogue.
+    let spawn_guard = state
+        .spawn_lock
+        .lock()
+        .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech start state is unavailable.".to_string())?;
+
+    // Stop and reap the previous helper before creating another one. This is
+    // intentionally a process boundary rather than a shared synthesizer queue:
+    // an old delegate callback has no path to complete a newer scene turn.
+    let previous = {
+        let mut process = state
+            .process
+            .lock()
+            .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech state is unavailable.".to_string())?;
+        if !process.accepts_start(request_id) {
+            return Err("SCENE_SPEECH_CANCELLED: Scene speech request was superseded before playback started.".to_string());
+        }
+        let previous = process.child.take();
+        if previous.is_some() {
+            process.stopping = true;
+        }
+        previous
+    };
+    if let Some(previous) = previous {
+        if let Err(error) = stop_scene_speech_child(&previous) {
+            state.record_stop_failure(previous);
+            return Err(error);
+        }
+        state.finish_stop();
+    }
+    let can_start = state
+        .process
+        .lock()
+        .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech state is unavailable.".to_string())?
+        .can_start_helper(request_id);
+    if !can_start {
+        return Err("SCENE_SPEECH_CANCELLED: Scene speech was cancelled before playback started.".to_string());
+    }
+
+    let mut process = Command::new(scene_speech_helper_path()?)
+        .arg("--speak")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("SCENE_SPEECH_HELPER_UNAVAILABLE: Could not start local system speech: {error}"))?;
+    let request = SceneSpeechRequest {
+        text: &text,
+        voice_id: &voice_id,
+        rate,
+    };
+    let write_result = process
+        .stdin
+        .as_mut()
+        .ok_or_else(|| "SCENE_SPEECH_HELPER_PROTOCOL: Local system speech stdin was unavailable.".to_string())
+        .and_then(|stdin| {
+            serde_json::to_writer(&mut *stdin, &request)
+                .map_err(|_| "SCENE_SPEECH_HELPER_PROTOCOL: Could not encode local system speech.".to_string())?;
+            stdin.flush().map_err(|_| {
+                "SCENE_SPEECH_HELPER_PROTOCOL: Could not send local system speech.".to_string()
+            })
+        });
+    // Close stdin after the one request. The helper never receives dialogue as
+    // a command-line argument or writes it to a file/log.
+    drop(process.stdin.take());
+    if let Err(error) = write_result {
+        let _ = process.kill();
+        let _ = process.wait();
+        return Err(error);
+    }
+    let stdout = process
+        .stdout
+        .take()
+        .ok_or_else(|| "SCENE_SPEECH_HELPER_PROTOCOL: Local system speech stdout was unavailable.".to_string())?;
+    let child = Arc::new(Mutex::new(process));
+    let active = {
+        let mut state_process = state
+            .process
+            .lock()
+            .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech state is unavailable.".to_string())?;
+        if !state_process.can_start_helper(request_id) {
+            false
+        } else {
+            state_process.child = Some(Arc::clone(&child));
+            true
+        }
+    };
+    if !active {
+        if let Err(error) = stop_scene_speech_child(&child) {
+            state.record_stop_failure(child);
+            return Err(error);
+        }
+        return Err("SCENE_SPEECH_CANCELLED: Scene speech was cancelled before playback started.".to_string());
+    }
+    // Do not hold the spawn barrier while waiting for AVSpeechSynthesizer.
+    // `scene_speech_stop` can now take the barrier, kill this registered
+    // child, and wait for process teardown.
+    drop(spawn_guard);
+    let generation = request_id;
+
+    let output = match read_scene_speech_output(stdout) {
+        Ok(output) => output,
+        Err(error) => {
+            if let Err(stop_error) = stop_scene_speech_child(&child) {
+                state.record_stop_failure(child);
+                return Err(stop_error);
+            }
+            let mut state_process = state.process.lock().map_err(|_| {
+                "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech state is unavailable.".to_string()
+            })?;
+            if state_process
+                .child
+                .as_ref()
+                .is_some_and(|active| Arc::ptr_eq(active, &child))
+            {
+                state_process.child = None;
+            }
+            return Err(error);
+        }
+    };
+    let status = child
+        .lock()
+        .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech process is unavailable.".to_string())?
+        .wait()
+        .map_err(|_| "SCENE_SPEECH_HELPER_FAILED: The local system speech process could not finish.".to_string())?;
+    let current = {
+        let mut state_process = state
+            .process
+            .lock()
+            .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech state is unavailable.".to_string())?;
+        let current = state_process.generation == generation
+            && !state_process.cancelled
+            && state_process
+                .child
+                .as_ref()
+                .is_some_and(|active| Arc::ptr_eq(active, &child));
+        if current {
+            state_process.child = None;
+        }
+        current
+    };
+    if !current {
+        return Err("SCENE_SPEECH_CANCELLED: Scene speech was cancelled.".to_string());
+    }
+    if !status.success() {
+        return Err(scene_speech_failure_message(&output));
+    }
+    let completion = serde_json::from_slice::<SceneSpeechHelperCompletion>(&output)
+        .map_err(|_| "SCENE_SPEECH_HELPER_PROTOCOL: The local speech service returned an invalid completion.".to_string())?;
+    if completion.status != "finished" {
+        return Err("SCENE_SPEECH_HELPER_PROTOCOL: The local speech service returned an unknown completion.".to_string());
+    }
+    Ok(())
 }
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -544,7 +974,7 @@ fn flow_command(
         "quickque:flow",
         diagnostic_event(command.generation, "rust_command_received"),
     );
-    FlowState::reap(previous);
+    state.flow.reap(previous)?;
 
     #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
     {
@@ -583,6 +1013,96 @@ fn flow_command(
         }
         None => Err("Unknown Flow action.".to_string()),
     }
+}
+
+#[tauri::command]
+fn scene_speech_next_request_id() -> Result<u64, String> {
+    // Tokens are allocated in the native process, not a webview module. They
+    // remain strictly increasing when React rebuilds adapters or a webview
+    // reloads, so a delayed stop can always be recognized as stale.
+    loop {
+        let current = NEXT_SCENE_SPEECH_REQUEST_ID.load(Ordering::Relaxed);
+        if current == u64::MAX {
+            return Err(
+                "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech request tokens are exhausted. Restart Quickque."
+                    .to_string(),
+            );
+        }
+        if NEXT_SCENE_SPEECH_REQUEST_ID
+            .compare_exchange_weak(current, current + 1, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+        {
+            return Ok(current);
+        }
+    }
+}
+
+#[tauri::command]
+async fn scene_speech_list_local_voices() -> Result<SceneSpeechVoiceList, String> {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        tauri::async_runtime::spawn_blocking(scene_speech_list_local_voices_native)
+            .await
+            .map_err(|_| "SCENE_SPEECH_HELPER_FAILED: The local speech service did not complete.".to_string())?
+    }
+
+    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+    {
+        Err("SCENE_SPEECH_UNSUPPORTED: Local system speech requires macOS on Apple Silicon.".to_string())
+    }
+}
+
+#[tauri::command]
+async fn scene_speech_speak(
+    state: tauri::State<'_, AppState>,
+    text: String,
+    voice_id: String,
+    rate: f32,
+    request_id: u64,
+) -> Result<(), String> {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        let process = Arc::clone(&state.scene_speech.process);
+        let spawn_lock = Arc::clone(&state.scene_speech.spawn_lock);
+        tauri::async_runtime::spawn_blocking(move || {
+            scene_speech_speak_native(
+                &SceneSpeechState {
+                    process,
+                    spawn_lock,
+                },
+                text,
+                voice_id,
+                rate,
+                request_id,
+            )
+        })
+        .await
+        .map_err(|_| "SCENE_SPEECH_HELPER_FAILED: The local speech service did not complete.".to_string())?
+    }
+
+    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+    {
+        let _ = (state, text, voice_id, rate, request_id);
+        Err("SCENE_SPEECH_UNSUPPORTED: Local system speech requires macOS on Apple Silicon.".to_string())
+    }
+}
+
+#[tauri::command]
+async fn scene_speech_stop(
+    state: tauri::State<'_, AppState>,
+    request_id: u64,
+) -> Result<(), String> {
+    let process = Arc::clone(&state.scene_speech.process);
+    let spawn_lock = Arc::clone(&state.scene_speech.spawn_lock);
+    tauri::async_runtime::spawn_blocking(move || {
+        SceneSpeechState {
+            process,
+            spawn_lock,
+        }
+        .stop_request(request_id)
+    })
+    .await
+    .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech stop did not complete.".to_string())?
 }
 
 #[tauri::command]
@@ -662,6 +1182,10 @@ pub fn run() {
         .manage(local_library::LocalLibraryState::default())
         .invoke_handler(tauri::generate_handler![
             flow_command,
+            scene_speech_next_request_id,
+            scene_speech_list_local_voices,
+            scene_speech_speak,
+            scene_speech_stop,
             open_microphone_settings,
             remote_start,
             remote_stop,
@@ -683,6 +1207,7 @@ pub fn run() {
         if matches!(event, tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }) {
             let state = handle.state::<AppState>();
             state.flow.shutdown();
+            let _ = state.scene_speech.stop();
             state.remote.stop();
         }
     });
@@ -691,6 +1216,97 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scene_speech_stop_before_start_rejects_that_request() {
+        let mut state = SceneSpeechProcess::default();
+        assert!(state.accepts_stop(7));
+        assert!(state.cancelled);
+        assert!(!state.accepts_start(7));
+        assert!(state.accepts_start(8));
+        assert_eq!(state.generation, 8);
+        assert!(!state.cancelled);
+    }
+
+    #[test]
+    fn stale_scene_speech_stop_cannot_cancel_newer_turn() {
+        let mut state = SceneSpeechProcess::default();
+        assert!(state.accepts_start(4));
+        assert!(state.accepts_start(5));
+        assert!(!state.accepts_stop(4));
+        assert_eq!(state.generation, 5);
+        assert!(!state.cancelled);
+        assert!(state.accepts_stop(5));
+        assert!(state.cancelled);
+    }
+
+    #[test]
+    fn scene_speech_shutdown_invalidates_pending_start() {
+        let mut state = SceneSpeechProcess::default();
+        assert!(state.accepts_start(11));
+        state.invalidate_all();
+        assert!(state.cancelled);
+        assert!(!state.accepts_start(11));
+        assert!(state.accepts_start(13));
+    }
+
+    #[test]
+    fn injected_scene_speech_termination_returns_child_on_failure() {
+        let mut calls = 0;
+        let failure = terminate_scene_speech_child("active-helper", |_| {
+            calls += 1;
+            Err("SCENE_SPEECH_STOP_FAILED: forced test failure".to_string())
+        });
+        assert_eq!(calls, 1);
+        assert_eq!(
+            failure,
+            Err((
+                "active-helper",
+                "SCENE_SPEECH_STOP_FAILED: forced test failure".to_string(),
+            ))
+        );
+    }
+
+    #[test]
+    fn scene_speech_stop_failure_blocks_future_starts() {
+        let mut state = SceneSpeechProcess::default();
+        assert!(state.accepts_start(3));
+        state.stop_failed = true;
+        assert!(!state.accepts_start(4));
+    }
+
+    #[test]
+    fn scene_speech_stop_waits_for_pending_spawn_reservation() {
+        let state = SceneSpeechState::default();
+        let reservation = state
+            .spawn_lock
+            .lock()
+            .expect("test spawn reservation should be available");
+        let stopper = SceneSpeechState {
+            process: Arc::clone(&state.process),
+            spawn_lock: Arc::clone(&state.spawn_lock),
+        };
+        let (done_sender, done_receiver) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let result = stopper.stop_request(1);
+            done_sender.send(result).expect("test receiver should remain available");
+        });
+
+        assert!(
+            done_receiver
+                .recv_timeout(std::time::Duration::from_millis(25))
+                .is_err(),
+            "stop must not acknowledge while spawn/write/register owns the barrier",
+        );
+        drop(reservation);
+        assert_eq!(
+            done_receiver
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("stop should complete once reservation releases"),
+            Ok(())
+        );
+        worker.join().expect("stop worker should not panic");
+    }
 
     #[test]
     fn diagnostic_allowlist_includes_native_audio_stages_and_exit_metadata() {

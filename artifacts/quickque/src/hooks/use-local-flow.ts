@@ -1,8 +1,13 @@
 import { useState, useEffect, useRef, useCallback, type MutableRefObject } from 'react';
+import { invokeAcknowledgedFlowCommand } from '../lib/flow/command-acknowledgement';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { FlowAligner } from '../lib/flow/alignment';
 import { NormalizedToken } from '../lib/flow/tokenize';
+import {
+  SceneFlowCompletionMatcher,
+  type SceneFlowCompletion,
+} from '../lib/scene-flow-completion';
 import { isDesktop } from '../lib/desktop';
 import { recordFlowDebug, recordFlowEvent } from '../lib/flow/diagnostics';
 import { parseAudioLevel, type AudioLevelSample } from '../lib/flow/audio-level';
@@ -41,11 +46,20 @@ export interface FlowState {
   progress: number | null;
   downloadMessage: string | null;
   anchor: number;
+  /** Anchor from a final, confidently matched native utterance only. */
+  finalMatchAnchor: number | null;
+  /** Strict exact-final completion state, used only by scene partner turns. */
+  sceneCompletion: SceneFlowCompletion;
   isFollowing: boolean;
   audioLevelRef: MutableRefObject<AudioLevelSample>;
   start: () => void;
   pause: () => void;
   stop: () => void;
+  /**
+   * Resolves only after the native bridge has synchronously reaped the prior
+   * helper. Scene partner uses this before it lets speaker audio begin.
+   */
+  stopAndWait: () => Promise<void>;
   download: () => void;
   cancelDownload: () => void;
   reanchor: (tokenIndex: number) => void;
@@ -55,6 +69,11 @@ export interface FlowState {
 interface UseLocalFlowArgs {
   tokens: NormalizedToken[];
   enabled: boolean;
+  /**
+   * Keeps normal Flow's permissive position follower unchanged. Scene mode
+   * additionally requires exact contiguous final transcript chunks.
+   */
+  sceneCompletion?: boolean;
 }
 
 let globalGeneration = Date.now();
@@ -82,7 +101,7 @@ function bridgeError(error: unknown, operation: string): string {
     : `Flow ${operation} failed. Check that the Quickque desktop bridge is available.`;
 }
 
-export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
+export function useLocalFlow({ tokens, enabled, sceneCompletion: sceneCompletionEnabled = false }: UseLocalFlowArgs): FlowState {
   const [status, setStatus] = useState<FlowStatus>("unsupported");
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
@@ -91,6 +110,10 @@ export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
   const [progress, setProgress] = useState<number | null>(null);
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [anchor, setAnchor] = useState<number>(0);
+  const [finalMatchAnchor, setFinalMatchAnchor] = useState<number | null>(null);
+  const [sceneCompletion, setSceneCompletion] = useState<SceneFlowCompletion>({
+    eligible: false, anchor: 0, completed: false, uncertain: false,
+  });
   const [isFollowing, setIsFollowing] = useState<boolean>(false);
   // The meter reads a ref so audio telemetry never rerenders the entire script.
   const audioLevelRef = useRef<AudioLevelSample>({ level: 0, receivedAt: 0 });
@@ -99,6 +122,8 @@ export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
   const activeGenRef = useRef<number>(globalGeneration);
   const anchorRef = useRef<number>(0);
   const alignerRef = useRef<FlowAligner | null>(null);
+  const sceneCompletionRef = useRef<SceneFlowCompletionMatcher | null>(null);
+  const sceneCompletionModeRef = useRef(sceneCompletionEnabled);
   const lastSequenceRef = useRef<number>(-1);
   const activeRef = useRef(false);
   const listenerReadyRef = useRef(false);
@@ -108,10 +133,19 @@ export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
 
   // Synchronously update aligner if tokens change
   const prevTokens = useRef(tokens);
-  if (prevTokens.current !== tokens || !alignerRef.current) {
+  const tokensChanged = prevTokens.current !== tokens;
+  if (tokensChanged || !alignerRef.current) {
     alignerRef.current = new FlowAligner(tokens);
     prevTokens.current = tokens;
     anchorRef.current = 0;
+  }
+  if (
+    tokensChanged ||
+    sceneCompletionModeRef.current !== sceneCompletionEnabled ||
+    !sceneCompletionRef.current
+  ) {
+    sceneCompletionRef.current = new SceneFlowCompletionMatcher(tokens);
+    sceneCompletionModeRef.current = sceneCompletionEnabled;
   }
 
   const setStatusSync = useCallback((s: FlowStatus) => {
@@ -126,23 +160,25 @@ export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
 
   const invokeFlow = useCallback(async (action: string, gen: number) => {
     if (!isDesktop()) return;
-    try {
-      await invoke("flow_command", { command: { action, generation: gen } });
-    } catch (err) {
-      if (!activeRef.current || activeGenRef.current !== gen) return;
-      activeGenRef.current = nextGen();
-      captureRequestedRef.current = false;
-      setStatusSync("error");
-      setIsFollowing(false);
-      setErrorCode("FLOW_INVOKE");
-      setErrorDetails(null);
-      setWarning(null);
-      setError(`[FLOW_INVOKE] ${bridgeError(err, action)}`);
-      // Use the failed generation: cleanup events cannot revive the UI.
-      const stopGen = nextGen();
-      void invoke("flow_command", { command: { action: "stop", generation: stopGen } }).catch(() => {});
-      activeGenRef.current = nextGen();
-    }
+    await invokeAcknowledgedFlowCommand(
+      { action, generation: gen },
+      command => invoke("flow_command", { command }),
+      err => {
+        if (!activeRef.current || activeGenRef.current !== gen) return;
+        activeGenRef.current = nextGen();
+        captureRequestedRef.current = false;
+        setStatusSync("error");
+        setIsFollowing(false);
+        setErrorCode("FLOW_INVOKE");
+        setErrorDetails(null);
+        setWarning(null);
+        setError(`[FLOW_INVOKE] ${bridgeError(err, action)}`);
+        // Cleanup is best effort, not an acknowledgement to an awaiting caller.
+        const stopGen = nextGen();
+        void invoke("flow_command", { command: { action: "stop", generation: stopGen } }).catch(() => {});
+        activeGenRef.current = nextGen();
+      },
+    );
   }, [setStatusSync]);
 
   useEffect(() => {
@@ -174,6 +210,8 @@ export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
     setProgress(null);
     setDownloadMessage(null);
     setIsFollowing(false);
+     setFinalMatchAnchor(null);
+     setSceneCompletion(sceneCompletionRef.current!.state);
     lastSequenceRef.current = -1;
 
     let unlisten: UnlistenFn | null = null;
@@ -311,9 +349,19 @@ export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
                 setIsFollowing(true);
                 setAnchor(res.anchor);
                 anchorRef.current = res.anchor;
+                if (payload.isFinal) setFinalMatchAnchor(res.anchor);
               } else if (!payload.isFinal) {
                 setIsFollowing(false);
               }
+            }
+            if (sceneCompletionModeRef.current) {
+              setSceneCompletion(
+                sceneCompletionRef.current!.update(
+                  payload.utteranceId,
+                  payload.text,
+                  payload.isFinal,
+                ),
+              );
             }
           }
         });
@@ -393,6 +441,11 @@ export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
     setErrorDetails(null);
     setWarning(null);
     setIsFollowing(false);
+    setFinalMatchAnchor(null);
+    sceneCompletionRef.current?.reset();
+    setSceneCompletion(sceneCompletionRef.current?.state ?? {
+      eligible: false, anchor: 0, completed: false, uncertain: false,
+    });
     lastSequenceRef.current = -1;
     
     // Explicit anchor reload to discard prior partial matches/utterances globally 
@@ -415,10 +468,15 @@ export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
     activeGenRef.current = gen;
     setStatusSync("paused");
     setIsFollowing(false);
+    setFinalMatchAnchor(null);
+    sceneCompletionRef.current?.reset();
+    setSceneCompletion(sceneCompletionRef.current?.state ?? {
+      eligible: false, anchor: 0, completed: false, uncertain: false,
+    });
     invokeFlow("pause", gen).catch(() => {});
   }, [invokeFlow, setStatusSync]);
 
-  const stop = useCallback(() => {
+  const stopAndWait = useCallback(async () => {
     captureRequestedRef.current = false;
     watchdogClearRef.current?.();
     setWarning(null);
@@ -428,8 +486,17 @@ export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
     activeGenRef.current = gen;
     setStatusSync("stopped");
     setIsFollowing(false);
-    invokeFlow("stop", gen).catch(() => {});
+    setFinalMatchAnchor(null);
+    sceneCompletionRef.current?.reset();
+    setSceneCompletion(sceneCompletionRef.current?.state ?? {
+      eligible: false, anchor: 0, completed: false, uncertain: false,
+    });
+    await invokeFlow("stop", gen);
   }, [invokeFlow, setStatusSync]);
+
+  const stop = useCallback(() => {
+    void stopAndWait().catch(() => {});
+  }, [stopAndWait]);
 
   const download = useCallback(() => {
     if (!activeRef.current) return;
@@ -469,6 +536,11 @@ export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
     setAnchor(tokenIndex);
     anchorRef.current = tokenIndex;
     setIsFollowing(false);
+    setFinalMatchAnchor(null);
+    sceneCompletionRef.current?.reset();
+    setSceneCompletion(sceneCompletionRef.current?.state ?? {
+      eligible: false, anchor: 0, completed: false, uncertain: false,
+    });
 
     // Synchronously invalidate and restart if was actively running
     if (activeRef.current && captureRequestedRef.current) {
@@ -493,11 +565,14 @@ export function useLocalFlow({ tokens, enabled }: UseLocalFlowArgs): FlowState {
     progress,
     downloadMessage,
     anchor,
+    finalMatchAnchor,
+    sceneCompletion,
     isFollowing,
     audioLevelRef,
     start,
     pause,
     stop,
+    stopAndWait,
     download,
     cancelDownload,
     reanchor,

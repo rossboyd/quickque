@@ -1,6 +1,6 @@
 ---
 name: Native audio integration
-description: Swift 6 callback isolation, AVFoundation buffer views, and live resampling test contracts.
+description: Swift 6 callbacks, AVFoundation buffers, live resampling, and acknowledged microphone/speaker handoffs.
 ---
 
 Create SDK audio callbacks in a nonisolated factory with an explicit
@@ -75,3 +75,24 @@ permission and lifecycle risks without improving the activity signal.
 **How to apply:** Reuse the existing capture pipeline, send only short-lived
 numeric measurements, and make optional display telemetry droppable without
 interrupting recognition. Never open a second microphone stream for the display.
+
+Keep cancelled-operation settlement separate from acknowledged audio teardown.
+
+**Why:** Rejecting a speech promise immediately is useful for stale-event
+invalidation, but a promise-finalizer can then clear the active operation while
+the native stop command is still pending. A following actor turn may otherwise
+start microphone capture before the speaker process has actually exited.
+
+**How to apply:** Preserve an awaitable teardown barrier after cancellation and
+fail closed on stop errors. Cross-engine handoffs must await native teardown,
+not a frontend “paused” state. Test with deferred stop acknowledgements, across
+adapter remounts as well as ordinary next/previous navigation; browser completion
+callbacks cannot prove hardware shutdown.
+
+Error reporting must not turn a failed teardown into a resolved promise.
+**Why:** A wrapper that catches native errors to update the UI can silently
+defeat a caller's otherwise correct fail-closed barrier, even when lifecycle
+unit tests pass with directly injected rejecting callbacks.
+**How to apply:** Exercise the real command executor together with turn-taking
+in tests. Preserve rejection even when stale/unmounted UI ignores the error;
+only explicitly fire-and-forget callers may suppress it.

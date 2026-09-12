@@ -10,6 +10,7 @@ import {
 } from './store-model.ts';
 import type { Script } from './types.ts';
 import { DEFAULT_PRESENTATION } from './presentation-preferences.ts';
+import { isValidActor } from './actor-model.ts';
 
 function script(id: string): Script {
   return {
@@ -108,4 +109,84 @@ test('import remapping preserves each script presentation without sharing it', (
   assert.ok(merged);
   assert.deepEqual(merged.scripts[0].presentation, source.presentation);
   assert.notEqual(merged.scripts[0].presentation, source.presentation);
+});
+
+test('actor import remaps character identities and every assigned turn', () => {
+  const destination = state();
+  const source = script('actor-source');
+  source.actor = {
+    enabled: true,
+    characters: [
+      {
+        id: 'alex',
+        name: 'Alex',
+        age: '',
+        gender: '',
+        style: 'warm',
+        voice: { engine: 'system', voiceId: 'voice-alex', rate: 1 },
+      },
+      {
+        id: 'sam',
+        name: 'Sam',
+        age: '',
+        gender: '',
+        style: 'dry',
+        voice: { engine: 'turbo', voiceId: 'voice-sam', rate: 1.2 },
+      },
+    ],
+    myRoleIds: ['alex'],
+  };
+  source.sections[0].characterId = 'alex';
+  const merged = mergeImportedLibrary({
+    scripts: [source],
+    trash: [],
+    customOrder: ['actor-source'],
+  }, destination.scripts, destination.trash, (() => {
+    const ids = ['fresh-script', 'fresh-section', 'new-alex', 'new-sam'];
+    return () => ids.shift() as string;
+  })());
+  assert.ok(merged);
+  const imported = merged.scripts[0];
+  assert.ok(imported.actor);
+  assert.ok(isValidActor(imported.actor));
+  assert.notEqual(imported.actor.characters[0].id, 'alex');
+  assert.notEqual(imported.actor.characters[1].id, 'sam');
+  assert.equal(imported.sections[0].characterId, imported.actor.characters[0].id);
+  assert.deepEqual(imported.actor.myRoleIds, [imported.actor.characters[0].id]);
+  assert.equal(imported.actor.characters[1].voice.engine, 'turbo');
+});
+
+test('disabled actors still deep-clone cast roles and assigned turns on import', () => {
+  const source = script('a');
+  source.actor = {
+    enabled: false,
+    characters: [{
+      id: 'partner',
+      name: 'Partner',
+      age: '',
+      gender: '',
+      style: 'quiet',
+      voice: { engine: 'system', voiceId: 'voice-partner', rate: 1 },
+    }],
+    myRoleIds: ['partner'],
+  };
+  source.sections[0].characterId = 'partner';
+
+  const merged = mergeImportedLibrary({
+    scripts: [source],
+    trash: [],
+    customOrder: ['a'],
+  }, state().scripts, [], (() => {
+    const ids = ['new-script', 'new-section', 'new-character'];
+    return () => ids.shift() as string;
+  })());
+  assert.ok(merged);
+  const imported = merged.scripts[0];
+  assert.equal(imported.actor?.enabled, false);
+  assert.ok(imported.actor);
+  assert.equal(imported.actor.characters[0].id, 'new-character');
+  assert.deepEqual(imported.actor.myRoleIds, ['new-character']);
+  assert.equal(imported.sections[0].characterId, 'new-character');
+  assert.notEqual(imported.actor, source.actor);
+  assert.notEqual(imported.actor.characters, source.actor.characters);
 });

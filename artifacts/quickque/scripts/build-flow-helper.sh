@@ -33,8 +33,11 @@ export MACOSX_DEPLOYMENT_TARGET=26.0
 cd "$ROOT/native"
 xcrun --sdk macosx swift test
 xcrun --sdk macosx swift test -c release
-xcrun --sdk macosx swift build -c release --arch arm64
+xcrun --sdk macosx swift build -c release --arch arm64 --product quickque-flow
+xcrun --sdk macosx swift build -c release --arch arm64 --product quickque-speech
 
 mkdir -p "$ROOT/src-tauri/binaries"
 cp ".build/arm64-apple-macosx/release/quickque-flow" \
   "$ROOT/src-tauri/binaries/quickque-flow-aarch64-apple-darwin"
+cp ".build/arm64-apple-macosx/release/quickque-speech" \
+  "$ROOT/src-tauri/binaries/quickque-speech-aarch64-apple-darwin"

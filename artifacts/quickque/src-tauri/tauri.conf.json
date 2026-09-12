@@ -33,7 +33,7 @@
   "bundle": {
     "active": true,
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/256x256.png", "icons/icon.icns", "icons/icon.ico"],
-    "externalBin": ["binaries/quickque-flow"],
+    "externalBin": ["binaries/quickque-flow", "binaries/quickque-speech"],
     "targets": ["app", "dmg"],
     "category": "Productivity",
     "shortDescription": "A focused prompt queue for presentations and recordings.",

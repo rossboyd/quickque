@@ -57,6 +57,10 @@ import {
   normalizePresentation,
   presentationFromLegacySettings,
 } from './presentation-preferences';
+import {
+  cloneActorWithFreshCharacterIds,
+  cloneScriptData,
+} from './actor-model.ts';
 
 const SEED_SCRIPTS: Script[] = createInitialScripts();
 type StoreContextType = {
@@ -141,11 +145,7 @@ function isSettingsPersistenceError(error: string | null): boolean {
 }
 
 function cloneScript(script: Script): Script {
-  return {
-    ...script,
-    presentation: script.presentation ? { ...script.presentation } : undefined,
-    sections: script.sections.map(section => ({ ...section })),
-  };
+  return cloneScriptData(script);
 }
 
 function cloneTrash(trash: DeletedScript[]): DeletedScript[] {
@@ -881,13 +881,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const duplicateScript = useCallback((id: string) => {
     const scriptToDup = scriptsRef.current.find(script => script.id === id);
     if (!scriptToDup) return null;
+    const clonedSource = cloneScriptData(scriptToDup);
     const usedIds = collectScriptIds(scriptsRef.current, trashRef.current);
     const newId = freshId(usedIds);
     if (!newId) {
       setError('Could not create a unique script ID.');
       return null;
     }
-    const newSections = scriptToDup.sections.map(section => {
+    const newSections = clonedSource.sections.map(section => {
       const sectionId = freshId(usedIds);
       return sectionId ? { ...section, id: sectionId } : null;
     });
@@ -895,18 +896,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setError('Could not create unique section IDs.');
       return null;
     }
+    const remappedActor = clonedSource.actor
+      ? cloneActorWithFreshCharacterIds(
+        clonedSource.actor,
+        () => generateId(),
+        usedIds,
+      )
+      : null;
+    if (clonedSource.actor && !remappedActor) {
+      setError('Could not create unique character IDs.');
+      return null;
+    }
     const now = Date.now();
     const newScript: Script = {
-      ...scriptToDup,
+      ...clonedSource,
       id: newId,
-      title: `${scriptToDup.title.slice(0, 193)} (Copy)`,
+      title: `${clonedSource.title.slice(0, 193)} (Copy)`,
       createdAt: now,
       updatedAt: now,
       presentation: normalizePresentation(
-        scriptToDup.presentation,
+        clonedSource.presentation,
         presentationDefaultsRef.current,
       ),
-      sections: newSections as Script['sections'],
+      sections: (newSections as Script['sections']).map(section => {
+        if (!clonedSource.actor) return section;
+        const characterId = typeof section.characterId === 'string'
+          ? remappedActor?.characterIdMap.get(section.characterId) ?? null
+          : section.characterId;
+        return { ...section, characterId };
+      }),
+      ...(remappedActor ? { actor: remappedActor.actor } : {}),
     };
     const nextOrder = [newId, ...customOrderRef.current.filter(orderId => orderId !== newId)];
     return commitLibrary({

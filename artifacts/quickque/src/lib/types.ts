@@ -2,7 +2,36 @@ export type ScriptSection = {
   id: string;
   title: string;
   content: string;
+  /** Optional director's notes/cues; never part of spoken dialogue. */
+  notes?: string;
+  /** Script-scoped cast identity. A missing identity is visibly unassigned. */
+  characterId?: string | null;
 };
+
+export type ActorVoice = {
+  engine: 'system' | 'turbo';
+  voiceId: string;
+  rate: number;
+};
+
+export type ActorCharacter = {
+  id: string;
+  name: string;
+  age: string;
+  gender: string;
+  style: string;
+  voice: ActorVoice;
+};
+
+export type ActorMode = {
+  enabled: boolean;
+  characters: ActorCharacter[];
+  myRoleIds: string[];
+};
+
+/** Descriptive aliases used by integrations that call this an actor config. */
+export type ActorConfig = ActorMode;
+export type ScriptActor = ActorMode;
 
 export type Script = {
   id: string;
@@ -15,6 +44,8 @@ export type Script = {
    * exports and native libraries source-compatible while they are migrated.
    */
   presentation?: PresentationPreferences;
+  /** Optional actor/self-tape scene-partner configuration. */
+  actor?: ActorMode;
 };
 
 export type Settings = {

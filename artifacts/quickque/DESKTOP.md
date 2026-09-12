@@ -92,6 +92,53 @@ does not include the Replit development plugins. The app bundle loads packaged
 assets only; the desktop CSP does not permit arbitrary network or remote font
 loading.
 
+## Scene-partner system speech
+
+Scene-partner playback uses a separate `quickque-speech` Swift sidecar backed by
+`AVSpeechSynthesizer`; it does not call `/usr/bin/say`, start Flow, request
+microphone access, require Apple SpeechAnalyzer assets, create generated-audio
+files, or use a network service. The sidecar lists the exact identifiers of
+installed macOS voices and receives an exact selected identifier for each turn.
+An unavailable saved voice fails visibly rather than selecting a name, locale,
+or default-voice substitute. The browser preview similarly offers only voices
+whose `localService` is true; no local browser voice means manual/silent preview.
+Turbo deliberately reports unavailable until its separate validation and
+packaging work is complete.
+
+The Rust bridge runs one isolated synthesizer helper per active turn. Starting a
+new turn, pausing/leaving the reader through `stop`, an abort signal, and app
+exit all terminate the active helper before another turn can start. The helper
+has a generous per-turn safety deadline, and stale helper completion cannot
+complete a later turn. The helper receives dialogue through stdin, returns only
+a fixed completion/error shape through stdout, and does not log dialogue.
+
+**Mac validation remains unverified.** This environment has no Apple Silicon
+Mac, so real voice enumeration, synthesis, cancellation responsiveness,
+speaker/microphone handoff with Flow, offline operation, and packaged-sidecar
+lookup must be smoke-tested on a supported Mac before release. Browser or Linux
+unit tests do not establish those native behaviors.
+
+Before a Mac release, follow `SCENE_PARTNER.md` with a synthetic scene and:
+
+1. Record the Mac model/RAM, macOS and Xcode versions; compile both Swift
+   helpers and the Apple-target Tauri bridge. Check helper discovery from the
+   installed app, not only a development launch.
+2. Disconnect the network. Enumerate installed voices, explicitly preview at
+   0.5×/1×/2×, and play consecutive partner turns without loading Flow assets.
+   Verify only dialogue is audible, never labels or notes.
+3. Exercise pause, replay, next/previous, start over, reader exit and app exit,
+   including cancellation while the helper is starting. Confirm no lingering
+   or overlapping speech and no microphone capture from manual turn-taking.
+4. Opt into Flow on actor turns. Confirm the microphone is off during partner
+   speech, starts only after acknowledged speech teardown, and cannot advance
+   on old transcripts, a trailing phrase, uncertain matches or inactivity.
+5. Verify names, cues, mirroring and all controls in the native 360×260 overlay,
+   plus normal/full-window presentation and elapsed-time pause/resume.
+
+The optional neural-engine benchmark is separate and remains **not run**;
+release gates and exact pins are in `TURBO_EVALUATION.md`. No Turbo model,
+runtime, reference voice or installer is included by the scene-partner changes.
+
 ## Apple on-device Flow and privacy
 
 Flow is optional. Checking Apple speech support and language-asset status does

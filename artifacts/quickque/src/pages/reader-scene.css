@@ -1,0 +1,26 @@
+/* Compact scene presentation reuses the reader viewport and cue transforms.
+   Extra settings stay available in the existing Present settings dialog. */
+@media (max-width: 600px), (max-height: 420px) {
+  .scene-reader { min-width: 0; overflow: hidden; }
+  .scene-reader .scene-titlebar { padding: 4px; min-height: 44px; }
+  .scene-reader .scene-options-bar { display: none; }
+  .scene-reader .scene-hud > div { top: 4px; right: 8px; gap: 0; }
+  .scene-reader [aria-label="Presentation timing"] { padding: 4px 8px; }
+  .scene-reader [aria-label="Presentation timing"] > :not(:first-child) { display: none; }
+  .scene-reader .scene-hud > div > :last-child:not([aria-label="Presentation timing"]) { display: none; }
+  .scene-reader .scene-transport {
+    width: calc(100% - 12px);
+    max-width: 430px;
+    bottom: 4px;
+    padding: 4px;
+    gap: 4px;
+    justify-content: space-between;
+  }
+  .scene-reader .scene-transport select { max-width: 90px; min-width: 0; }
+  .scene-reader .scene-transport button { flex-shrink: 0; padding: 6px; }
+  .scene-reader .scene-transport button[aria-label="Pause presentation"],
+  .scene-reader .scene-transport button[aria-label="Start or resume scene"] { width: 38px; height: 38px; }
+  .scene-reader [data-scene-section-heading] { display: none; }
+  .scene-reader [aria-label="Current scene turn"] { padding: 6px 8px; margin-bottom: 6px; line-height: 1.3; }
+  .scene-reader .scene-notes { max-height: 3.9em; overflow-y: auto; }
+}
