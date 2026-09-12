@@ -13,12 +13,16 @@
     "desktop:build": "pnpm native:build && tauri build --config src-tauri/tauri.conf.json",
     "test:flow": "node --test src/lib/flow/flow.test.ts",
     "test:remote": "node --test src/lib/remote/*.test.ts src/lib/remote/*.test.mjs",
+    "test:document-import": "node --import ./scripts/pdf-test-loader.mjs --test src/lib/document-import/*.test.ts src/lib/store-persistence.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",
+    "fflate": "0.8.2",
+    "pdfjs-dist": "4.10.38",
     "qrcode.react": "^4.2.0",
+    "saxes": "6.0.0",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

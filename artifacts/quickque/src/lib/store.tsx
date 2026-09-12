@@ -1,6 +1,23 @@
-import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  createContext,
+  useContext,
+  ReactNode,
+} from 'react';
 import { Script, Settings, DEFAULT_SETTINGS } from './types';
 import { generateId } from './utils';
+import {
+  collectScriptIds,
+  createDocumentScript,
+  isValidScript,
+  loadLibrary,
+  persistLibrary,
+  storageErrors,
+  StorageLike,
+} from './store-persistence';
 
 const SEED_SCRIPTS: Script[] = [
   {
@@ -85,6 +102,7 @@ type StoreContextType = {
   deleteScript: (id: string) => void;
   duplicateScript: (id: string) => string | null;
   importScripts: (data: string) => boolean;
+  importDocument: (title: string, text: string) => ImportDocumentResult;
   exportScripts: () => string;
   error: string | null;
   clearError: () => void;
@@ -92,174 +110,317 @@ type StoreContextType = {
 
 const StoreContext = createContext<StoreContextType | null>(null);
 
+type ImportDocumentResult =
+  | { ok: true; id: string }
+  | { ok: false; error: string };
+
+function getLocalStorage(): StorageLike | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function freshId(usedIds: Set<string>): string | null {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const id = generateId();
+    if (id && !usedIds.has(id)) {
+      usedIds.add(id);
+      return id;
+    }
+  }
+  return null;
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [scripts, setScripts] = useState<Script[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [activeScriptId, setActiveScriptId] = useState<string | null>(null);
+  const [activeScriptId, setActiveScriptState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  const scriptsRef = useRef<Script[]>([]);
+  const activeScriptIdRef = useRef<string | null>(null);
+  const storageRef = useRef<StorageLike | null>(null);
+  const savesDisabledRef = useRef(false);
+
   useEffect(() => {
-    try {
-      const storedScripts = localStorage.getItem('quickque_scripts');
-      if (storedScripts) {
-        setScripts(JSON.parse(storedScripts));
-      } else {
-        setScripts(SEED_SCRIPTS);
-        localStorage.setItem('quickque_scripts', JSON.stringify(SEED_SCRIPTS));
-      }
+    const storage = getLocalStorage();
+    storageRef.current = storage;
 
-      const storedSettings = localStorage.getItem('quickque_settings');
-      if (storedSettings) {
-        setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(storedSettings) });
-      }
-
-      const storedActiveId = localStorage.getItem('quickque_active_script');
-      if (storedActiveId) {
-        setActiveScriptId(storedActiveId);
-      } else {
-        setActiveScriptId(SEED_SCRIPTS[0].id);
-      }
-    } catch (err) {
-      console.error('Failed to load from local storage', err);
-      setError('Failed to load your data. You may be in private browsing mode.');
+    if (!storage) {
+      scriptsRef.current = SEED_SCRIPTS;
+      activeScriptIdRef.current = SEED_SCRIPTS[0]?.id ?? null;
       setScripts(SEED_SCRIPTS);
-      setActiveScriptId(SEED_SCRIPTS[0].id);
+      setActiveScriptState(SEED_SCRIPTS[0]?.id ?? null);
+      savesDisabledRef.current = true;
+      setError('Failed to load your scripts. Your existing data was left untouched.');
+    } else {
+      const loaded = loadLibrary(storage, SEED_SCRIPTS);
+      if (!loaded.ok) {
+        // Do not attempt a repair write here. The original malformed bytes
+        // remain available for manual recovery, and all library saves stay
+        // disabled until the provider is reloaded with valid data.
+        scriptsRef.current = SEED_SCRIPTS;
+        activeScriptIdRef.current = SEED_SCRIPTS[0]?.id ?? null;
+        setScripts(SEED_SCRIPTS);
+        setActiveScriptState(SEED_SCRIPTS[0]?.id ?? null);
+        savesDisabledRef.current = true;
+        setError(loaded.error);
+      } else {
+        scriptsRef.current = loaded.scripts;
+        activeScriptIdRef.current = loaded.activeScriptId;
+        setScripts(loaded.scripts);
+        setActiveScriptState(loaded.activeScriptId);
+
+        if (loaded.needsMigration || loaded.wasMissing) {
+          // Migration and first-run seeding are deliberately performed before
+          // exposing any write-capable library actions.
+          const persisted = persistLibrary(
+            storage,
+            loaded.scripts,
+            loaded.activeScriptId,
+          );
+          if (!persisted.ok) {
+            // A quota/permission failure is retryable. Only unreadable or
+            // malformed stored data disables saves to prevent clobbering it.
+            setError(persisted.error);
+          }
+        }
+      }
+
+      try {
+        const storedSettings = storage.getItem('quickque_settings');
+        if (storedSettings) {
+          const parsedSettings = JSON.parse(storedSettings);
+          if (parsedSettings && typeof parsedSettings === 'object') {
+            setSettings({ ...DEFAULT_SETTINGS, ...parsedSettings });
+          }
+        }
+      } catch {
+        // Settings are independent from the script library. Keep defaults if
+        // their optional storage entry is unreadable.
+        setError('Failed to load settings.');
+      }
     }
+
     setIsLoaded(true);
   }, []);
 
   useEffect(() => {
     if (!isLoaded) return;
+    const storage = storageRef.current;
+    if (!storage) return;
     try {
-      localStorage.setItem('quickque_scripts', JSON.stringify(scripts));
-    } catch (err) {
-      setError('Failed to save scripts. Your changes may be lost on reload.');
-    }
-  }, [scripts, isLoaded]);
+      storage.setItem('quickque_settings', JSON.stringify(settings));
 
-  useEffect(() => {
-    if (!isLoaded) return;
-    try {
-      localStorage.setItem('quickque_settings', JSON.stringify(settings));
-      
       // Apply dark mode to document
       if (settings.darkTheme) {
         document.documentElement.classList.add('dark');
       } else {
         document.documentElement.classList.remove('dark');
       }
-      
-    } catch (err) {
+    } catch {
       setError('Failed to save settings.');
     }
   }, [settings, isLoaded]);
 
-  useEffect(() => {
-    if (!isLoaded) return;
-    try {
-      if (activeScriptId) {
-        localStorage.setItem('quickque_active_script', activeScriptId);
-      } else {
-        localStorage.removeItem('quickque_active_script');
-      }
-    } catch (err) {
-      // ignore
+  const commitLibrary = useCallback((nextScripts: Script[], nextActiveScriptId: string | null) => {
+    if (savesDisabledRef.current) {
+      const message = storageErrors.writeLibrary;
+      setError(message);
+      return { ok: false as const, error: message };
     }
-  }, [activeScriptId, isLoaded]);
+
+    const storage = storageRef.current;
+    if (!storage) {
+      const message = storageErrors.writeLibrary;
+      setError(message);
+      return { ok: false as const, error: message };
+    }
+
+    const persisted = persistLibrary(storage, nextScripts, nextActiveScriptId);
+    if (!persisted.ok) {
+      // Neither ref nor React state is changed on a failed write. This keeps
+      // memory and the last durable envelope in lockstep.
+      setError(persisted.error);
+      return persisted;
+    }
+
+    scriptsRef.current = nextScripts;
+    activeScriptIdRef.current = nextActiveScriptId;
+    setScripts(nextScripts);
+    setActiveScriptState(nextActiveScriptId);
+    setError(current => current === storageErrors.writeLibrary ? null : current);
+    return { ok: true as const };
+  }, []);
+
+  const setActiveScriptId = useCallback((id: string | null) => {
+    if (
+      id !== null &&
+      !scriptsRef.current.some(script => script.id === id)
+    ) {
+      setError('The selected script no longer exists.');
+      return;
+    }
+    commitLibrary(scriptsRef.current, id);
+  }, [commitLibrary]);
 
   const updateSettings = useCallback((newSettings: Partial<Settings>) => {
     setSettings(prev => ({ ...prev, ...newSettings }));
   }, []);
 
   const createScript = useCallback(() => {
-    const newId = generateId();
+    const usedIds = collectScriptIds(scriptsRef.current);
+    const newId = freshId(usedIds);
+    const sectionId = freshId(usedIds);
+    if (!newId || !sectionId) {
+      setError('Could not create unique script IDs.');
+      return '';
+    }
+
+    const now = Date.now();
     const newScript: Script = {
       id: newId,
       title: 'Untitled Script',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
       sections: [
         {
-          id: generateId(),
+          id: sectionId,
           title: 'Section 1',
           content: ''
         }
       ]
     };
-    setScripts(prev => [newScript, ...prev]);
-    setActiveScriptId(newId);
-    return newId;
-  }, []);
+    return commitLibrary(
+      [newScript, ...scriptsRef.current],
+      newId,
+    ).ok ? newId : '';
+  }, [commitLibrary]);
 
   const updateScript = useCallback((id: string, updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt'>>) => {
-    setScripts(prev => prev.map(s => {
-      if (s.id !== id) return s;
-      return { ...s, ...updates, updatedAt: Date.now() };
-    }));
-  }, []);
+    const currentScripts = scriptsRef.current;
+    if (!currentScripts.some(script => script.id === id)) return;
+
+    const nextScripts = currentScripts.map(script => {
+      if (script.id !== id) return script;
+      return { ...script, ...updates, updatedAt: Date.now() };
+    });
+    commitLibrary(nextScripts, activeScriptIdRef.current);
+  }, [commitLibrary]);
 
   const deleteScript = useCallback((id: string) => {
-    setScripts(prev => prev.filter(s => s.id !== id));
-    if (activeScriptId === id) {
-      setActiveScriptId(null);
-    }
-  }, [activeScriptId]);
+    const currentScripts = scriptsRef.current;
+    if (!currentScripts.some(script => script.id === id)) return;
+
+    const nextActiveId = activeScriptIdRef.current === id
+      ? null
+      : activeScriptIdRef.current;
+    commitLibrary(
+      currentScripts.filter(script => script.id !== id),
+      nextActiveId,
+    );
+  }, [commitLibrary]);
 
   const duplicateScript = useCallback((id: string) => {
-    const scriptToDup = scripts.find(s => s.id === id);
+    const scriptToDup = scriptsRef.current.find(script => script.id === id);
     if (!scriptToDup) return null;
 
-    const newId = generateId();
+    const usedIds = collectScriptIds(scriptsRef.current);
+    const newId = freshId(usedIds);
+    if (!newId) {
+      setError('Could not create a unique script ID.');
+      return null;
+    }
+    const newSections = scriptToDup.sections.map(section => {
+      const sectionId = freshId(usedIds);
+      return sectionId ? { ...section, id: sectionId } : null;
+    });
+    if (newSections.some(section => section === null)) {
+      setError('Could not create unique section IDs.');
+      return null;
+    }
+
+    const now = Date.now();
     const newScript: Script = {
       ...scriptToDup,
       id: newId,
       title: `${scriptToDup.title} (Copy)`,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      sections: scriptToDup.sections.map(sec => ({
-        ...sec,
-        id: generateId()
-      }))
+      createdAt: now,
+      updatedAt: now,
+      sections: newSections as Script['sections'],
     };
-    
-    setScripts(prev => [newScript, ...prev]);
-    setActiveScriptId(newId);
-    return newId;
-  }, [scripts]);
+
+    return commitLibrary(
+      [newScript, ...scriptsRef.current],
+      newId,
+    ).ok ? newId : null;
+  }, [commitLibrary]);
 
   const importScripts = useCallback((data: string) => {
     try {
-      const parsed = JSON.parse(data);
-      if (Array.isArray(parsed) && parsed.every(s => s.id && s.title && Array.isArray(s.sections))) {
-        // Simple validation passed
-        // Re-generate IDs to avoid collisions
-        const imported: Script[] = parsed.map(s => ({
-          ...s,
-          id: generateId(),
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          sections: s.sections.map((sec: any) => ({
-            ...sec,
-            id: generateId()
-          }))
-        }));
-        setScripts(prev => [...imported, ...prev]);
-        return true;
+      const parsed: unknown = JSON.parse(data);
+      if (!Array.isArray(parsed) || !parsed.every(isValidScript)) {
+        return false;
       }
-      return false;
-    } catch (e) {
+
+      const usedIds = collectScriptIds(scriptsRef.current);
+      const now = Date.now();
+      const imported: Script[] = [];
+      for (const script of parsed) {
+        const newId = freshId(usedIds);
+        if (!newId) return false;
+        const sections: Script['sections'] = [];
+        for (const section of script.sections) {
+          const sectionId = freshId(usedIds);
+          if (!sectionId) return false;
+          sections.push({ ...section, id: sectionId });
+        }
+        imported.push({
+          ...script,
+          id: newId,
+          createdAt: now,
+          updatedAt: now,
+          sections,
+        });
+      }
+
+      return commitLibrary(
+        [...imported, ...scriptsRef.current],
+        activeScriptIdRef.current,
+      ).ok;
+    } catch {
       return false;
     }
-  }, []);
+  }, [commitLibrary]);
+
+  const importDocument = useCallback((title: string, text: string): ImportDocumentResult => {
+    const document = createDocumentScript(
+      title,
+      text,
+      collectScriptIds(scriptsRef.current),
+    );
+    if (!document.ok) return document;
+
+    const persisted = commitLibrary(
+      [document.script, ...scriptsRef.current],
+      document.script.id,
+    );
+    if (!persisted.ok) return persisted;
+    return { ok: true, id: document.script.id };
+  }, [commitLibrary]);
 
   const exportScripts = useCallback(() => {
-    return JSON.stringify(scripts, null, 2);
-  }, [scripts]);
+    // Backups intentionally remain the historical bare Script[] format.
+    return JSON.stringify(scriptsRef.current, null, 2);
+  }, []);
 
   const clearError = useCallback(() => setError(null), []);
 
-  if (!isLoaded) return null; // or loading spinner
+  if (!isLoaded) return null;
 
   return (
     <StoreContext.Provider value={{
@@ -273,6 +434,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       deleteScript,
       duplicateScript,
       importScripts,
+      importDocument,
       exportScripts,
       error,
       clearError

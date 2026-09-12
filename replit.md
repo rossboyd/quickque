@@ -33,6 +33,8 @@ A local-first personal teleprompter for live meetings, with an interruption-frie
 - Use explicit pause for interruptions. Automatic speaker identification is outside the current scope; never suggest manual playback listens to or recognizes speech.
 - The native helper owns speech-inactivity timing: 30 seconds without detected speech stops capture. Off-script speech counts, and webview timer throttling must not delay shutdown.
 - Distinguish browser preview from native capabilities. Browser transparency cannot reveal another application's window, and browser code cannot reliably pin a window above Zoom or Meet.
+- Document import is on-device plain-text extraction only. Keep parsers and worker assets bundled locally; never render imported HTML or fetch embedded resources. See `src/lib/document-import/PARSERS.md` under the Quickque artifact for limits and supported subsets.
+- Library and active selection must persist in one atomic record before import success is shown. This avoids partial two-key saves on quota failures. Continue accepting legacy storage; JSON backups remain a bare scripts array.
 
 ## Product
 

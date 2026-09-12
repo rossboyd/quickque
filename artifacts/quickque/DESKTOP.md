@@ -263,6 +263,33 @@ data is not migrated automatically. Use the application's export function in
 the web version and import that file in the desktop version when migration is
 needed.
 
+
+### Document import
+
+**Import Document** in the library accepts one TXT, DOCX, RTF, or text-based
+PDF, from the file picker or by dropping a file. Review and edit its title and
+plain text, then choose **Save as Script**. Cancel creates nothing. Duplicate
+filenames create separate scripts. Rich styling and images are not retained;
+PDF columns and reading order must be checked in the preview. Scans require
+copying text or using OCR in another application.
+
+Extraction is local, with no account, upload, document-triggered resource
+downloads, or runtime CDN. A disposable bundled worker is terminated on cancel,
+completion, or a 20-second deadline. Input is limited to 10 MiB, expanded content
+to 32 MiB, PDF length to 500 pages, and output to 500,000 UTF-16 characters.
+Parser-specific supported subsets and resource enforcement are documented in
+`src/lib/document-import/PARSERS.md`.
+
+Script saves use a single atomic local-storage record containing the library
+and selection. Existing array storage is migrated locally, while **Backup
+JSON / Restore JSON** remain the separate scripts-array backup format. Import
+confirmation only succeeds after storage accepts the write. Storage errors
+keep the review open and leave the old library and selection unchanged.
+
+The Tauri window disables native drag/drop interception so Finder drops can
+reach the webview's DOM file handlers. The CSP allows same-origin workers only.
+Neither setting is proof of functioning WKWebView file access.
+
 ## Platform validation
 
 The Rust source and configuration can be inspected on Linux, but macOS window,
@@ -282,3 +309,32 @@ LibriSpeech test-clean and 4.78× real-time throughput on an M2. Those are
 upstream benchmark figures, not measurements of Quickque or promises of
 performance. Quickque-specific accuracy, end-to-end latency, and resource use
 must be measured on supported hardware before release.
+
+#### Mac-only import acceptance checks (not run in this Linux environment)
+
+Use the packaged Apple Silicon `.app`, not just the Vite development server:
+
+1. Disconnect from the internet. Import the fixtures in
+   `src/lib/document-import/fixtures/` using the file picker. Repeat with a
+   Finder drop on the library. Test TXT, DOCX, RTF, and compressed PDF; verify
+   Unicode, paragraphs, editable preview, Save, Present, and app quit/relaunch.
+2. In Web Inspector, verify the packaged module worker loads from the app's
+   local origin without CSP errors or network requests. Verify processing a
+   large document and cancelling it terminates the worker; the next import
+   should still work. Test on the minimum supported macOS version as well.
+3. Cancel the native picker, cancel extraction, and dismiss the review with
+   Escape. Verify no script or selection changes. Reimport the same filename
+   twice and confirm two independent scripts.
+4. Import malformed, oversized, password-protected, empty, and scanned PDFs.
+   Confirm actionable errors and that the library remains usable. Simulate a
+   local-storage write failure in Web Inspector; ensure the review is retained
+   and nothing is reported as saved.
+5. **Settings → Backup JSON** must save a downloadable JSON file through
+   WKWebView; **Restore JSON** must accept it via the native picker. Check the
+   filename and file bytes in Finder. Existing blob-download behavior is
+   unchanged and must not be assumed to work from a Chromium browser check.
+
+Native file-picker, Finder drag/drop, WKWebView module-worker/CSP behavior, and
+JSON download behavior remain **unverified on macOS** until those checks are
+performed. Browser tests and a successful desktop frontend build do not
+substitute for these checks.

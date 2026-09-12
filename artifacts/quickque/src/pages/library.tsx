@@ -1,12 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocation } from 'wouter';
 import { calculateWordCount, estimateTime, formatTime, generateId } from '@/lib/utils';
 import { SettingsDialog } from '@/components/settings-dialog';
+import { DocumentImportDialog } from '@/components/document-import-dialog';
 import { 
   Plus, Search, MoreVertical, Play, 
   Trash2, Copy, FileText, GripVertical, 
-  Settings as SettingsIcon, Trash, AlertTriangle, MonitorPlay, ChevronUp, ChevronDown
+  Settings as SettingsIcon, Trash, AlertTriangle, MonitorPlay, ChevronUp, ChevronDown,
+  FileUp
 } from 'lucide-react';
 
 export default function Library() {
@@ -23,7 +25,44 @@ export default function Library() {
   } = useStore();
   
   const [search, setSearch] = useState('');
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
+  const [droppedError, setDroppedError] = useState<string | null>(null);
   const [_, setLocation] = useLocation();
+
+  useEffect(() => {
+    // Guard all window file drops against browser navigation
+    const preventDefault = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('dragover', preventDefault);
+    window.addEventListener('drop', preventDefault);
+    return () => {
+      window.removeEventListener('dragover', preventDefault);
+      window.removeEventListener('drop', preventDefault);
+    };
+  }, []);
+
+  const handleLibraryDrop = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      if (isImportOpen) return;
+
+      const files = e.dataTransfer.files;
+      if (!files || files.length === 0) return;
+      
+      setIsImportOpen(true);
+      if (files.length > 1) {
+        setDroppedFile(null);
+        setDroppedError('Please drop a single file. Multiple files are not supported.');
+      } else {
+        setDroppedError(null);
+        setDroppedFile(files[0]);
+      }
+    }
+  };
 
   const activeScript = scripts.find(s => s.id === activeScriptId);
 
@@ -38,6 +77,10 @@ export default function Library() {
     setSearch('');
   };
 
+  const handleImportSuccess = () => {
+    setSearch('');
+  };
+
   const handlePresent = () => {
     if (activeScriptId) {
       setLocation(`/read/${activeScriptId}`);
@@ -45,7 +88,15 @@ export default function Library() {
   };
 
   return (
-    <div className="flex h-[100dvh] w-full bg-background overflow-hidden selection:bg-primary/20">
+    <div 
+      className="flex h-[100dvh] w-full bg-background overflow-hidden selection:bg-primary/20"
+      onDragOver={e => {
+        if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+        }
+      }}
+      onDrop={handleLibraryDrop}
+    >
       
       {/* SIDEBAR */}
       <div className="w-80 flex-shrink-0 border-r border-border bg-sidebar flex flex-col z-10 shadow-sm relative">
@@ -55,13 +106,23 @@ export default function Library() {
               <MonitorPlay className="w-5 h-5 text-primary" />
               Quickque
             </h1>
-            <button 
-              onClick={handleCreate}
-              className="p-2 hover:bg-sidebar-accent rounded-md text-sidebar-foreground transition-colors"
-              title="New Script"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={() => setIsImportOpen(true)}
+                className="px-2.5 py-1.5 hover:bg-sidebar-accent rounded-md text-sidebar-foreground transition-colors flex items-center gap-2 text-sm font-medium"
+                title="Import Document"
+              >
+                <FileUp className="w-4 h-4" />
+                Import Document
+              </button>
+              <button 
+                onClick={handleCreate}
+                className="p-1.5 hover:bg-sidebar-accent rounded-md text-sidebar-foreground transition-colors"
+                title="New Script"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
           </div>
           
           <div className="relative">
@@ -127,6 +188,18 @@ export default function Library() {
 
       {/* EDITOR */}
       <div className="flex-1 flex flex-col min-w-0 bg-background relative overflow-hidden">
+        <DocumentImportDialog 
+          open={isImportOpen} 
+          onOpenChange={setIsImportOpen} 
+          onSuccess={handleImportSuccess}
+          externalFile={droppedFile}
+          externalError={droppedError}
+          clearExternal={() => {
+            setDroppedFile(null);
+            setDroppedError(null);
+          }}
+        />
+
         {error && (
           <div className="absolute top-0 inset-x-0 p-3 bg-destructive/10 text-destructive text-sm flex items-center justify-between border-b border-destructive/20 z-50">
             <div className="flex items-center gap-2">

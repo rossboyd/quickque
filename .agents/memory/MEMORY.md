@@ -1,2 +1,3 @@
 - [Native audio integration](native-audio-integration.md) — verify streaming semantics and immutable downloads against pinned upstream source, not current README examples.
 - [Native Rust validation on Linux](native-rust-validation-linux.md) — isolate platform-neutral Rust modules when full Tauri checks are blocked by Linux UI libraries.
+- [PDF extraction failures](pdf-extraction-failures.md) — PDF.js can resolve text extraction after catching decoder failures; completion alone does not prove a complete import.
