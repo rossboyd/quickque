@@ -18,8 +18,16 @@ let package = Package(
             name: "QuickqueSpeech",
             dependencies: []
         ),
-        .executableTarget(name: "QuickqueAudioExport", dependencies: []),
-        .testTarget(name: "QuickqueAudioExportTests", dependencies: ["QuickqueAudioExport"]),
+        .target(
+            name: "QuickqueAudioExportCore",
+            path: "Sources/QuickqueAudioExport"
+        ),
+        .executableTarget(
+            name: "QuickqueAudioExport",
+            dependencies: ["QuickqueAudioExportCore"],
+            path: "Sources/QuickqueAudioExportCommand"
+        ),
+        .testTarget(name: "QuickqueAudioExportTests", dependencies: ["QuickqueAudioExportCore"]),
         .testTarget(name: "QuickqueFlowTests", dependencies: ["QuickqueFlow"])
     ]
 )

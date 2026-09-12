@@ -1,16 +1,16 @@
 @preconcurrency import AVFoundation
 import Foundation
 
-enum AudioExportError: LocalizedError {
+public enum AudioExportError: LocalizedError {
     case invalid(String)
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self { case .invalid(let message): return message }
     }
 }
 
 /// Converts the assembled rehearsal WAV into a genuine audio-only MP4 with AAC audio.
 /// The caller owns concatenation, entitlement checks and the final destination move.
-func exportAudio(input: URL, output: URL) async throws {
+public func exportAudio(input: URL, output: URL) async throws {
     guard input.standardizedFileURL != output.standardizedFileURL,
           !FileManager.default.fileExists(atPath: output.path) else {
         throw AudioExportError.invalid("Export destination already exists.")
@@ -43,20 +43,4 @@ func exportAudio(input: URL, output: URL) async throws {
     try Task.checkCancellation()
     try FileManager.default.moveItem(at: temporaryOutput, to: output)
     completed = true
-}
-
-@main
-struct AudioExportCommand {
-    static func main() async {
-        do {
-            let args = Array(CommandLine.arguments.dropFirst())
-            guard args.count == 4, args[0] == "--input", args[2] == "--output" else {
-                throw AudioExportError.invalid("Usage: quickque-audio-export --input <audio.wav> --output <new.mp4>")
-            }
-            try await exportAudio(input: URL(fileURLWithPath: args[1]), output: URL(fileURLWithPath: args[3]))
-        } catch {
-            FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
-            exit(1)
-        }
-    }
 }

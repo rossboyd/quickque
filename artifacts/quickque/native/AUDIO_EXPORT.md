@@ -19,3 +19,7 @@ copies it into the Tauri external binaries. Packaged path:
 Run `swift test --filter AudioExportTests` in `native` on a supported Mac to
 verify a real one-second WAV becomes playable AAC in an MP4 container, with its
 duration preserved, and that an existing export cannot be overwritten.
+
+The tests import the `QuickqueAudioExportCore` library, not the executable.
+Keep the command-line entry point in its separate target so the test runner
+cannot invoke argument parsing or exit through the command's `@main`.

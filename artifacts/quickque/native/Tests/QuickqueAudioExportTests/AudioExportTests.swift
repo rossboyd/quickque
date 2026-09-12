@@ -1,6 +1,6 @@
 @preconcurrency import AVFoundation
 import XCTest
-@testable import QuickqueAudioExport
+import QuickqueAudioExportCore
 
 final class AudioExportTests: XCTestCase {
     func testExportsPlayableAACInMP4AndProtectsExistingDestination() async throws {

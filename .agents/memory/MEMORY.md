@@ -7,3 +7,4 @@
 - [React SSR router compatibility](react-ssr-router.md) — Wouter's memory-location hook can fail React 19 SSR despite passing typechecks; verify actual HTML responses.
 - [Stripe bootstrap compatibility](stripe-bootstrap-compatibility.md) — credential aliases, awaited catalogue sync, and managed webhook secret selection differ from generic templates.
 - [Reader reflow anchoring](reader-reflow-anchoring.md) — capture the reading word before requesting font changes; parent layout cleanup can already see the new DOM.
+- [Native test exit status](native-test-exit-status.md) — a passing XCTest summary can precede command-entry-point failure; check the entire Swift invocation.
