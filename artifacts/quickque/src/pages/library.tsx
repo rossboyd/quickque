@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { SortMode } from '@/lib/types';
 import { Editor } from '@/components/editor';
 import { RecoveryUI } from '@/components/recovery-ui';
+import { BrandMark } from '@/components/brand-mark';
 import { 
   Plus, Search, MoreVertical, 
   Trash2, Copy, FileText, 
@@ -279,7 +280,7 @@ export default function Library() {
         <div className="p-5 pb-4 space-y-5">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold tracking-tight text-sidebar-foreground flex items-center gap-2">
-              <MonitorPlay className="w-5 h-5 text-primary" />
+              <BrandMark className="w-6 h-5" />
               Quickque
             </h1>
             <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Workspace</span>
