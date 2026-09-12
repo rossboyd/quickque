@@ -1,20 +1,21 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "QuickqueFlow",
-    platforms: [.macOS(.v14)],
-    products: [.executable(name: "quickque-flow", targets: ["QuickqueFlow"])],
-    dependencies: [
-        .package(
-            url: "https://github.com/FluidInference/FluidAudio.git",
-            revision: "41540ea237350afe5117a082b5c28eda642d0612"
-        )
+    platforms: [.macOS(.v26)],
+    products: [
+        .executable(name: "quickque-flow", targets: ["QuickqueFlow"]),
+        .executable(name: "quickque-speech", targets: ["QuickqueSpeech"]),
     ],
     targets: [
         .executableTarget(
             name: "QuickqueFlow",
-            dependencies: [.product(name: "FluidAudio", package: "FluidAudio")]
+            dependencies: []
+        ),
+        .executableTarget(
+            name: "QuickqueSpeech",
+            dependencies: []
         ),
         .testTarget(name: "QuickqueFlowTests", dependencies: ["QuickqueFlow"])
     ]

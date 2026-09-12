@@ -54,93 +54,93 @@
 }
 
 :root {
-  /* Restful light theme: soft cream / pale blue-gray base with deep indigo accents */
-  --background: 210 20% 98%;
-  --foreground: 220 40% 15%;
+  /* Complementary light theme: cool surfaces with restrained indigo */
+  --background: 225 33% 98%;
+  --foreground: 224 39% 13%;
 
-  --card: 210 20% 98%;
-  --card-foreground: 220 40% 15%;
-  --card-border: 214 15% 90%;
+  --card: 0 0% 100%;
+  --card-foreground: 224 39% 13%;
+  --card-border: 225 24% 86%;
 
-  --popover: 210 20% 98%;
-  --popover-foreground: 220 40% 15%;
-  --popover-border: 214 15% 90%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 224 39% 13%;
+  --popover-border: 225 24% 86%;
 
-  --primary: 230 55% 45%;
-  --primary-foreground: 210 20% 98%;
+  --primary: 234 57% 45%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 15% 90%;
-  --secondary-foreground: 220 40% 25%;
+  --secondary: 228 30% 94%;
+  --secondary-foreground: 224 39% 13%;
 
-  --muted: 210 10% 92%;
-  --muted-foreground: 215 20% 45%;
+  --muted: 228 30% 94%;
+  --muted-foreground: 225 17% 38%;
 
-  --accent: 230 40% 92%;
-  --accent-foreground: 230 55% 35%;
+  --accent: 232 47% 92%;
+  --accent-foreground: 234 57% 31%;
 
-  --destructive: 0 70% 50%;
-  --destructive-foreground: 0 0% 100%;
+  --destructive: 0 75% 45%;
+  --destructive-foreground: 0 0% 98%;
 
-  --border: 214 15% 90%;
-  --input: 214 15% 90%;
-  --ring: 230 55% 45%;
+  --border: 225 24% 86%;
+  --input: 225 24% 82%;
+  --ring: 234 57% 45%;
 
-  --sidebar: 210 20% 96%;
-  --sidebar-foreground: 220 40% 20%;
-  --sidebar-border: 214 15% 88%;
-  --sidebar-primary: 230 55% 45%;
-  --sidebar-primary-foreground: 210 20% 98%;
-  --sidebar-accent: 210 15% 90%;
-  --sidebar-accent-foreground: 220 40% 20%;
-  --sidebar-ring: 230 55% 45%;
+  --sidebar: 228 36% 96%;
+  --sidebar-foreground: 224 39% 13%;
+  --sidebar-border: 225 24% 86%;
+  --sidebar-primary: 234 57% 45%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 232 47% 92%;
+  --sidebar-accent-foreground: 234 57% 31%;
+  --sidebar-ring: 234 57% 45%;
 
   --app-font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --app-font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --app-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   
-  --radius: 0.75rem;
+  --radius: 0.5rem;
 }
 
 .dark {
-  /* Restful dark theme: deep slate/navy base with soft cream accents */
-  --background: 220 40% 10%;
-  --foreground: 210 20% 90%;
+  /* Reference palette: midnight navy surfaces with restrained periwinkle */
+  --background: 222 47% 8%;
+  --foreground: 225 33% 96%;
 
-  --card: 220 40% 10%;
-  --card-foreground: 210 20% 90%;
-  --card-border: 220 30% 18%;
+  --card: 222 38% 12%;
+  --card-foreground: 225 33% 96%;
+  --card-border: 222 28% 20%;
 
-  --popover: 220 40% 10%;
-  --popover-foreground: 210 20% 90%;
-  --popover-border: 220 30% 18%;
+  --popover: 222 38% 11%;
+  --popover-foreground: 225 33% 96%;
+  --popover-border: 222 28% 22%;
 
-  --primary: 230 65% 65%;
-  --primary-foreground: 220 40% 10%;
+  --primary: 234 78% 70%;
+  --primary-foreground: 225 48% 11%;
 
-  --secondary: 220 30% 18%;
-  --secondary-foreground: 210 20% 85%;
+  --secondary: 223 32% 16%;
+  --secondary-foreground: 225 33% 96%;
 
-  --muted: 220 30% 15%;
-  --muted-foreground: 215 15% 65%;
+  --muted: 223 32% 16%;
+  --muted-foreground: 224 18% 68%;
 
-  --accent: 230 40% 18%;
-  --accent-foreground: 230 65% 75%;
+  --accent: 228 34% 20%;
+  --accent-foreground: 225 33% 96%;
 
-  --destructive: 0 60% 45%;
-  --destructive-foreground: 0 0% 100%;
+  --destructive: 0 77% 70%;
+  --destructive-foreground: 222 47% 8%;
 
-  --border: 220 30% 18%;
-  --input: 220 30% 18%;
-  --ring: 230 65% 65%;
+  --border: 222 28% 20%;
+  --input: 222 25% 24%;
+  --ring: 234 78% 70%;
 
-  --sidebar: 220 45% 8%;
-  --sidebar-foreground: 210 20% 90%;
-  --sidebar-border: 220 30% 15%;
-  --sidebar-primary: 230 65% 65%;
-  --sidebar-primary-foreground: 220 40% 10%;
-  --sidebar-accent: 220 30% 18%;
-  --sidebar-accent-foreground: 210 20% 90%;
-  --sidebar-ring: 230 65% 65%;
+  --sidebar: 222 52% 7%;
+  --sidebar-foreground: 225 33% 96%;
+  --sidebar-border: 222 30% 18%;
+  --sidebar-primary: 234 78% 70%;
+  --sidebar-primary-foreground: 225 48% 11%;
+  --sidebar-accent: 225 35% 14%;
+  --sidebar-accent-foreground: 225 33% 96%;
+  --sidebar-ring: 234 78% 70%;
 }
 
 @layer base {
@@ -156,6 +156,8 @@
 /* Base transparent overlay support */
 html.is-overlay, html.is-overlay body, html.is-overlay #root {
   background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 /* Scrollbar styles for modern minimal look */

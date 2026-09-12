@@ -1,0 +1,1 @@
+prefix_rule(pattern=["/bin/bash", "-lc", "pnpm run typecheck && pnpm --filter @workspace/quickque-website build && node artifacts/quickque-website/scripts/check-production.mjs && node --test artifacts/quickque-website/tests/*.test.mjs"], decision="allow")

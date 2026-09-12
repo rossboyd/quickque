@@ -1,0 +1,6 @@
+approvals_reviewer = "user"
+[projects."/home/runner/workspace"]
+trust_level = "trusted"
+
+[tui.model_availability_nux]
+gpt-6-astra = 1

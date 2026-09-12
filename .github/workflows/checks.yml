@@ -1,0 +1,33 @@
+name: Source and website checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm --filter @workspace/quickque test:flow
+      - run: pnpm --filter @workspace/quickque test:remote
+      - run: pnpm --filter @workspace/quickque test:document-import
+      - run: pnpm --filter @workspace/quickque test:library
+      - run: pnpm --filter @workspace/quickque-website build
+      - run: node artifacts/quickque-website/scripts/check-production.mjs
+      - run: node --test artifacts/quickque-website/tests/*.test.mjs
+
+# These checks deliberately do not claim a macOS build, installer, microphone,
+# native file import, or physical phone/LAN pass. See the desktop checklists.

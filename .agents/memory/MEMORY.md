@@ -1,1 +1,9 @@
-- [Native audio integration](native-audio-integration.md) — verify streaming semantics and immutable downloads against pinned upstream source, not current README examples.
+- [Native audio integration](native-audio-integration.md) — safe callbacks, buffer views, resampler tests and acknowledged microphone/speaker handoffs.
+- [Native Rust validation on Linux](native-rust-validation-linux.md) — isolate platform-neutral Rust modules when full Tauri checks are blocked by Linux UI libraries.
+- [PDF extraction failures](pdf-extraction-failures.md) — PDF.js can resolve text extraction after catching decoder failures; completion alone does not prove a complete import.
+- [Flow diagnostic evidence](flow-diagnostic-evidence.md) — a frontend timeout does not prove a model-check stall; distinguish bridge, helper startup, input receipt, and model execution.
+- [pnpm build approvals](pnpm-build-approvals.md) — use the narrow allowBuilds map across pnpm 10.26+ and 11; legacy approval settings were removed in 11.
+- [Native library compatibility](native-library-compatibility.md) — reconcile chosen-folder scripts with browser metadata; recovery must block queued autosaves.
+- [React SSR router compatibility](react-ssr-router.md) — Wouter's memory-location hook can fail React 19 SSR despite passing typechecks; verify actual HTML responses.
+- [Stripe bootstrap compatibility](stripe-bootstrap-compatibility.md) — credential aliases, awaited catalogue sync, and managed webhook secret selection differ from generic templates.
+- [Reader reflow anchoring](reader-reflow-anchoring.md) — capture the reading word before requesting font changes; parent layout cleanup can already see the new DOM.

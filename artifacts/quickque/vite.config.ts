@@ -2,6 +2,7 @@ import path from 'path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
+import { pdfBudgetPlugin } from './scripts/pdf-budget.mjs';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
@@ -29,7 +30,10 @@ if (!basePath) {
 
 export default defineConfig({
   base: basePath,
+  optimizeDeps: { include: ['fflate', 'saxes'], exclude: ['pdfjs-dist'] },
+  worker: { format: 'es', plugins: () => [pdfBudgetPlugin()] },
   plugins: [
+    pdfBudgetPlugin(),
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),

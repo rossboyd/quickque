@@ -1,0 +1,38 @@
+Quickque Flow diagnostics (in memory; no speech content)
+23:53:37.917 watchdog_armed — Waiting for operation (deadline in ms) #1789170782743 (120000)
+23:53:37.917 command_sent — Sending command to Rust [start] #1789170782743
+23:53:37.920 rust_command_received — Rust received command #1789170782743
+23:53:37.920 helper_spawn_begin — Starting native helper process #1789170782743
+23:53:37.920 helper_spawned — Native helper process created #1789170782743
+23:53:37.921 helper_command_sent — Command written to helper stdin #1789170782743
+23:53:37.921 command_resolved — Rust command returned successfully [start] #1789170782743 (4)
+23:53:37.929 helper_boot — Swift helper entered main #1789170782743
+23:53:37.929 helper_read_wait — Swift helper waiting for command bytes #1789170782743
+23:53:37.930 helper_command_received — Swift helper decoded command #1789170782743
+23:53:37.930 model_check_begin — Checking model installation and integrity #1789170782743
+23:53:37.930 helper_read_wait — Swift helper waiting for command bytes #1789170782743
+23:53:38.046 model_check_complete — Model installation check returned #1789170782743
+23:53:38.047 microphone_request_begin — Checking/requesting macOS microphone permission #1789170782743
+23:53:38.052 microphone_authorized — macOS microphone permission granted #1789170782743
+23:53:38.052 status:loading — Native status: preparing #1789170782743
+23:53:38.052 watchdog_cleared — Operation deadline cleared #1789170782743
+23:53:38.052 watchdog_armed — Waiting for operation (deadline in ms) #1789170782743 (120000)
+23:53:38.052 asr_load_begin — Loading local speech model #1789170782743
+23:53:38.189 asr_load_complete — Local speech model loaded #1789170782743
+23:53:38.190 vad_load_begin — Loading local voice activity model #1789170782743
+23:53:38.212 vad_load_complete — Local voice activity model loaded #1789170782743
+23:53:38.296 audio_engine_start — Starting microphone audio engine #1789170782743
+23:53:38.335 audio_engine_listening — Microphone audio engine is listening #1789170782743
+23:53:38.335 status:listening — Native status: listening #1789170782743
+23:53:38.335 watchdog_cleared — Operation deadline cleared #1789170782743
+23:53:38.592 audio_buffer_received — Audio buffer received #1789170782743
+23:53:38.594 audio_conversion_begin — Audio conversion started #1789170782743
+23:53:38.595 audio_conversion_complete — Audio conversion completed #1789170782743
+23:53:38.596 asr_append_begin — Speech recognition append started #1789170782743
+23:53:38.597 asr_append_complete — Speech recognition append completed #1789170782743
+23:53:38.598 asr_process_begin — Speech recognition processing started #1789170782743
+23:53:39.666 error:overrun — Native error code: overrun #1789170782743
+23:53:39.666 lifecycle_error — Flow stopped after an error — see setup error for details #1789170782744
+23:53:39.666 command_sent — Sending command to Rust [stop] #1789170782745
+23:53:39.670 stale_event — Ignored an event from an older session #1789170782745
+23:53:39.679 command_resolved — Rust command returned successfully [stop] #1789170782745 (14)

@@ -2,10 +2,14 @@ import path from 'path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
+import { pdfBudgetPlugin } from './scripts/pdf-budget.mjs';
 
 export default defineConfig({
   base: './',
+  optimizeDeps: { include: ['fflate', 'saxes'], exclude: ['pdfjs-dist'] },
+  worker: { format: 'es', plugins: () => [pdfBudgetPlugin()] },
   plugins: [
+    pdfBudgetPlugin(),
     react(),
     tailwindcss(),
     {

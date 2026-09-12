@@ -1,0 +1,57 @@
+rossboyd@Rosss-MacBook-Air-2 quickque % git pull --ff-only
+pnpm install
+pnpm --filter @workspace/quickque desktop:build
+Already up to date.
+Scope: all 9 workspace projects
+Error: ERR_PNPM_IGNORED_BUILDS
+
+  × installing dependencies
+  ╰─▶ Ignored build scripts: esbuild@0.27.3
+  help: Run "pnpm approve-builds" to pick which dependencies should be allowed
+        to run scripts.
+
+
+$ pnpm native:build && pnpm desktop:test-native && tauri build --config src-tauri/tauri.conf.json
+$ sh scripts/build-flow-helper.sh
+[1/1] Planning build
+Building for debugging...
+/Users/rossboyd/Documents/github/quickque/artifacts/quickque/native/Sources/QuickqueFlow/FlowService.swift:417:23: warning: no 'async' operations occur within 'await' expression
+415 |                 try await ContinuousClock().sleep(until: deadline)
+416 |                 guard !Task.isCancelled,
+417 |                       await self.isCurrent(expectedSession)
+    |                       `- warning: no 'async' operations occur within 'await' expression
+418 |                 else {
+419 |                     return
+
+/Users/rossboyd/Documents/github/quickque/artifacts/quickque/native/Sources/QuickqueFlow/FlowService.swift:421:23: warning: no 'async' operations occur within 'await' expression
+419 |                     return
+420 |                 }
+421 |                 guard await self.silenceDeadlineIsSafe(expectedSession) else {
+    |                       `- warning: no 'async' operations occur within 'await' expression
+422 |                     await self.rearmSilenceAfterLag(expectedSession)
+423 |                     return
+
+/Users/rossboyd/Documents/github/quickque/artifacts/quickque/native/Sources/QuickqueFlow/FlowService.swift:422:21: warning: no 'async' operations occur within 'await' expression
+420 |                 }
+421 |                 guard await self.silenceDeadlineIsSafe(expectedSession) else {
+422 |                     await self.rearmSilenceAfterLag(expectedSession)
+    |                     `- warning: no 'async' operations occur within 'await' expression
+423 |                     return
+424 |                 }
+/Users/rossboyd/Documents/github/quickque/artifacts/quickque/native/Sources/QuickqueFlow/AudioPipeline.swift:722:68: error: value of type 'AnalyzerInput' has no member 'bufferDuration'
+720 |                                 1,
+721 |                                 Int(
+722 |                                     (CMTimeGetSeconds(droppedInput.bufferDuration)
+    |                                                                    `- error: value of type 'AnalyzerInput' has no member 'bufferDuration'
+723 |                                         * 16_000).rounded()
+724 |                                 )
+
+error: fatalError
+[ELIFECYCLE] Command failed with exit code 1.
+[ELIFECYCLE] Command failed with exit code 1.
+Error: ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL
+
+  × "pnpm recursive run" failed in /Users/rossboyd/Documents/github/quickque/
+  │ artifacts/quickque
+
+rossboyd@Rosss-MacBook-Air-2 quickque % 

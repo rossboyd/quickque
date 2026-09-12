@@ -1,41 +1,185 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocation } from 'wouter';
-import { calculateWordCount, estimateTime, formatTime, generateId } from '@/lib/utils';
+import { calculateWordCount, estimateTime, formatTime, cn } from '@/lib/utils';
 import { SettingsDialog } from '@/components/settings-dialog';
+import { DocumentImportDialog } from '@/components/document-import-dialog';
+import { getVisibleScripts, downloadFile } from '@/lib/library-management';
+import { getScriptPurpose, getPerformanceSummary, getSceneSetupIssues } from '@/lib/script-purpose';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { SortMode } from '@/lib/types';
+import { Editor } from '@/components/editor';
+import { RecoveryUI } from '@/components/recovery-ui';
 import { 
-  Plus, Search, MoreVertical, Play, 
-  Trash2, Copy, FileText, GripVertical, 
-  Settings as SettingsIcon, Trash, AlertTriangle, MonitorPlay, ChevronUp, ChevronDown
+  Plus, Search, MoreVertical, 
+  Trash2, Copy, FileText, 
+  Trash, AlertTriangle, MonitorPlay,
+  FileUp, Download, ArrowUpDown, Edit2, Code, ArrowUp, ArrowDown, ChevronDown,
+  RotateCcw, X,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { tokenize } from '@/lib/flow/tokenize';
+import { useLocalFlow } from '@/hooks/use-local-flow';
+import { FlowSetupWizard } from '@/components/flow-setup-wizard';
+import { isDesktop } from '@/lib/desktop';
+
+const SORT_LABELS: Record<SortMode, string> = {
+  newest: 'Newest First',
+  oldest: 'Oldest First',
+  az: 'Title A-Z',
+  za: 'Title Z-A',
+  custom: 'Custom Order'
+};
 
 export default function Library() {
+  const store = useStore();
   const { 
-    scripts, 
-    activeScriptId, 
-    setActiveScriptId, 
-    createScript, 
-    updateScript, 
-    deleteScript, 
-    duplicateScript,
-    error,
-    clearError
-  } = useStore();
+    scripts, activeScriptId, setActiveScriptId,
+    settings,
+    createScript, updateScript, duplicateScript,
+    error, clearError, profile,
+    trash, sortMode, customOrder,
+    setSortMode, reorderScripts,
+    deleteScripts, restoreScripts, permanentlyDeleteScripts,
+    exportScripts, recoveryData, recoveryRequired,
+    recoverLibrary, retryLoadLibrary
+  } = store;
   
   const [search, setSearch] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
+  const [droppedError, setDroppedError] = useState<string | null>(null);
   const [_, setLocation] = useLocation();
+  const [showWizard, setShowWizard] = useState(false);
+
+  useEffect(() => {
+    if (isDesktop()) {
+      const seen = localStorage.getItem('quickque-first-launch-seen');
+      const done = localStorage.getItem('quickque-flow-setup-done');
+      if (!seen && !done) {
+        setShowWizard(true);
+      }
+    }
+  }, []);
+
+  const setupTokens = useMemo(() => {
+    let globalIdx = 0;
+    return tokenize("Testing microphone permissions for Quickque Voice Follow.").map(t => ({
+      ...t,
+      sectionIdx: 0,
+      globalTokenIdx: globalIdx++
+    }));
+  }, []);
+
+  const setupFlow = useLocalFlow({ tokens: setupTokens, enabled: showWizard });
+
+  const [viewMode, setViewMode] = useState<'library' | 'trash'>('library');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{type: 'trash' | 'restore' | 'permanent', ids: string[]} | null>(null);
+  const [isMobileEditorOpen, setIsMobileEditorOpen] = useState(false);
+
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Guard all window file drops against browser navigation
+    const preventDefault = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('dragover', preventDefault);
+    window.addEventListener('drop', preventDefault);
+    return () => {
+      window.removeEventListener('dragover', preventDefault);
+      window.removeEventListener('drop', preventDefault);
+    };
+  }, []);
+
+  const handleLibraryDrop = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      if (isImportOpen || recoveryRequired) return;
+
+      const files = e.dataTransfer.files;
+      if (!files || files.length === 0) return;
+      
+      setIsImportOpen(true);
+      if (files.length > 1) {
+        setDroppedFile(null);
+        setDroppedError('Please drop a single file. Multiple files are not supported.');
+      } else {
+        setDroppedError(null);
+        setDroppedFile(files[0]);
+      }
+    }
+  };
 
   const activeScript = scripts.find(s => s.id === activeScriptId);
+  const hasOnlySeed = scripts.length === 1 && scripts[0].id === 'seed-1';
+  const showBanner = profile?.onboardingComplete && hasOnlySeed;
 
-  const filteredScripts = useMemo(() => {
-    if (!search.trim()) return scripts;
-    const lower = search.toLowerCase();
-    return scripts.filter(s => s.title.toLowerCase().includes(lower));
-  }, [scripts, search]);
+  const visibleItems = useMemo(() => {
+    const sourceList = viewMode === 'library' ? scripts : trash.map(t => t.script);
+    return getVisibleScripts(
+      sourceList,
+      search,
+      viewMode === 'library' ? sortMode : 'newest',
+      viewMode === 'library' ? customOrder : []
+    );
+  }, [scripts, trash, search, sortMode, customOrder, viewMode]);
 
-  const handleCreate = () => {
-    createScript();
+  const visibleItemIds = visibleItems.map(item => item.id);
+  const allSelected = visibleItemIds.length > 0 && visibleItemIds.every(id => selectedIds.includes(id));
+  const someSelected = visibleItemIds.some(id => selectedIds.includes(id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(selectedIds.filter(id => !visibleItemIds.includes(id)));
+    } else {
+      const newSelected = new Set([...selectedIds, ...visibleItemIds]);
+      setSelectedIds(Array.from(newSelected));
+    }
+  };
+
+  const handleCreate = () => setShowCreate(true);
+
+  const createWithPurpose = (purpose: 'presentation' | 'performance') => {
+    setViewMode('library');
+    const res = createScript(purpose);
+    if (res) setShowCreate(false);
     setSearch('');
+    if (res) setIsMobileEditorOpen(true);
+  };
+
+  const handleDuplicate = (id: string) => {
+    const res = duplicateScript(id);
+    if (res) setIsMobileEditorOpen(true);
+  };
+
+  const handleOpenScript = (id: string) => {
+    setActiveScriptId(id);
+    setIsMobileEditorOpen(true);
   };
 
   const handlePresent = () => {
@@ -44,74 +188,401 @@ export default function Library() {
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    if (draggedId && draggedId !== id && sortMode === 'custom' && !search) {
+      setDragOverId(id);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (draggedId && draggedId !== targetId && viewMode === 'library' && sortMode === 'custom' && !search) {
+      const newOrder = [...visibleItems.map(s => s.id)];
+      const from = newOrder.indexOf(draggedId);
+      const to = newOrder.indexOf(targetId);
+      if (from !== -1 && to !== -1) {
+        newOrder.splice(from, 1);
+        newOrder.splice(to, 0, draggedId);
+        reorderScripts(newOrder);
+      }
+    }
+    handleDragEnd();
+  };
+
+  if (recoveryRequired) {
+    return (
+      <RecoveryUI 
+        error={error} 
+        recoveryData={recoveryData} 
+        retryLoadLibrary={retryLoadLibrary} 
+        recoverLibrary={recoverLibrary} 
+      />
+    );
+  }
+
   return (
-    <div className="flex h-[100dvh] w-full bg-background overflow-hidden selection:bg-primary/20">
-      
-      {/* SIDEBAR */}
-      <div className="w-80 flex-shrink-0 border-r border-border bg-sidebar flex flex-col z-10 shadow-sm relative">
-        <div className="p-4 space-y-4">
+    <div 
+      className="flex flex-col h-[100dvh] w-full bg-background overflow-hidden selection:bg-primary/20"
+      onDragOver={e => {
+        if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+        }
+      }}
+      onDrop={handleLibraryDrop}
+    >
+      {showWizard && (
+        <FlowSetupWizard
+          flow={setupFlow}
+          onComplete={() => {
+            localStorage.setItem('quickque-first-launch-seen', 'true');
+            localStorage.setItem('quickque-flow-setup-done', 'true');
+            setShowWizard(false);
+            setupFlow.stop();
+          }}
+          onCancel={() => {
+            localStorage.setItem('quickque-first-launch-seen', 'true');
+            setShowWizard(false);
+            setupFlow.stop();
+          }}
+        />
+      )}
+
+      {error && (
+        <div className="flex-shrink-0 p-3 bg-destructive/10 text-destructive text-sm flex items-center justify-between border-b border-destructive/20 z-50" role="alert">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            <span>{error}</span>
+          </div>
+          <button onClick={clearError} className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive">Dismiss</button>
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* SIDEBAR */}
+        <div className={cn(
+          "flex-shrink-0 border-r border-border bg-sidebar flex-col z-10 shadow-sm relative transition-all duration-300",
+          "w-full md:w-[336px]",
+          isMobileEditorOpen ? "hidden md:flex" : "flex"
+        )}>
+        <div className="p-5 pb-4 space-y-5">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold tracking-tight text-sidebar-foreground flex items-center gap-2">
               <MonitorPlay className="w-5 h-5 text-primary" />
               Quickque
             </h1>
-            <button 
+            <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Workspace</span>
+          </div>
+          <div className="grid grid-cols-[1fr_1.2fr] gap-2">
+            <button
               onClick={handleCreate}
-              className="p-2 hover:bg-sidebar-accent rounded-md text-sidebar-foreground transition-colors"
-              title="New Script"
+              className="flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="h-4 w-4" />
+              New script
+            </button>
+            <button
+              onClick={() => setIsImportOpen(true)}
+              className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-sidebar-border px-2 py-2.5 text-[13px] font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Import Document"
+            >
+              <FileUp className="h-4 w-4" />
+              Import document
             </button>
           </div>
-          
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input 
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search scripts..."
-              className="w-full pl-9 pr-4 py-2 bg-background border border-sidebar-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
-            />
+
+          <nav aria-label="Script library" className="grid grid-cols-2 gap-1 rounded-lg bg-sidebar-accent/40 p-1">
+            <button
+              className={cn(
+                "flex items-center justify-center gap-2 text-sm px-2 py-2 rounded-md transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                viewMode === 'library' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-current={viewMode === 'library' ? 'page' : undefined}
+              onClick={() => { setViewMode('library'); setSelectedIds([]); setSearch(''); }}
+            >
+              <FileText className="h-4 w-4" />
+              Library
+              <span className="text-xs opacity-60">{scripts.length}</span>
+            </button>
+            <button
+              className={cn(
+                "flex items-center justify-center gap-2 text-sm px-2 py-2 rounded-md transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                viewMode === 'trash' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-current={viewMode === 'trash' ? 'page' : undefined}
+              onClick={() => { setViewMode('trash'); setSelectedIds([]); setSearch(''); }}
+            >
+              <Trash2 className="h-4 w-4" />
+              Trash
+              <span className="text-xs opacity-60">{trash.length}</span>
+            </button>
+          </nav>
+
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input 
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={viewMode === 'trash' ? 'Search Trash…' : 'Search all script content…'}
+                aria-label="Search scripts"
+                className="w-full pl-9 pr-8 py-2.5 bg-background border border-sidebar-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
+              />
+              {search && (
+                <button 
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full"
+                  aria-label="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                {search ? `${visibleItems.length} results` : viewMode === 'trash' ? 'Deleted scripts' : 'Your scripts'}
+              </span>
+              {viewMode === 'library' && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="px-2 py-1.5 hover:bg-sidebar-accent rounded-md text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Sort scripts: ${SORT_LABELS[sortMode]}`}>
+                    <ArrowUpDown className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">{SORT_LABELS[sortMode]}</span>
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuRadioGroup value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
+                    <DropdownMenuRadioItem value="newest">{SORT_LABELS['newest']}</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="oldest">{SORT_LABELS['oldest']}</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="az">{SORT_LABELS['az']}</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="za">{SORT_LABELS['za']}</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="custom">{SORT_LABELS['custom']}</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              )}
+            </div>
           </div>
         </div>
 
+        {sortMode === 'custom' && viewMode === 'library' && (
+          <div className="px-5 pb-3 text-[11px] leading-relaxed text-muted-foreground">
+            {search ? (
+              "Clear search to reorder scripts."
+            ) : (
+              "Drag scripts to reorder, or use their options menu."
+            )}
+          </div>
+        )}
+
+        {viewMode === 'trash' && <p className="px-5 pb-3 text-[11px] text-muted-foreground">Kept on this device until you permanently delete them.</p>}
+        <div className={cn("flex flex-wrap gap-2 items-center justify-between px-5 py-2 text-xs border-y border-sidebar-border min-h-11", selectedIds.length > 0 && "bg-primary/5")}>
+          {visibleItems.length > 0 && (
+            <label className="flex items-center gap-2 cursor-pointer text-muted-foreground hover:text-foreground">
+              <input 
+                type="checkbox" 
+                checked={allSelected} 
+                ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 rounded border-border accent-primary cursor-pointer"
+                aria-label={allSelected ? "Deselect visible scripts" : "Select visible scripts"}
+              />
+               <span>{selectedIds.length > 0 ? `${selectedIds.length} selected` : 'Select all shown'}</span>
+            </label>
+          )}
+
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Actions for ${selectedIds.length} selected scripts`}>
+                    Actions <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  {viewMode === 'library' ? (
+                    <>
+                      <DropdownMenuItem onSelect={() => downloadFile('quickque-export.txt', exportScripts(selectedIds, 'txt'), 'text/plain')}>
+                        <FileText /> Export as TXT
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => downloadFile('quickque-export.json', exportScripts(selectedIds, 'json'))}>
+                        <Download /> Export as JSON
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConfirmAction({ type: 'trash', ids: [...selectedIds] })}>
+                        <Trash2 /> Move to Trash
+                      </DropdownMenuItem>
+                    </>
+                  ) : (
+                    <>
+                      <DropdownMenuItem onSelect={() => setConfirmAction({ type: 'restore', ids: [...selectedIds] })}>
+                        <RotateCcw /> Restore to library
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConfirmAction({ type: 'permanent', ids: [...selectedIds] })}>
+                        <Trash /> Delete permanently
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <button
+                onClick={() => setSelectedIds([])}
+                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                aria-label="Clear selection"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {filteredScripts.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground text-sm">
-              {search ? 'No scripts found' : 'No scripts yet'}
+          {visibleItems.length === 0 ? (
+            <div className="p-4 text-center text-muted-foreground text-sm mt-4">
+              {search ? 'No scripts found' : viewMode === 'trash' ? (
+                <>Trash is empty<br/><span className="text-xs opacity-70">No automatic expiry</span></>
+              ) : 'No scripts yet'}
             </div>
           ) : (
-            filteredScripts.map(script => {
+            visibleItems.map((script, idx) => {
+              const isPerformance = getScriptPurpose(script) === 'performance';
+              const setupIssues = isPerformance ? getSceneSetupIssues(script) : [];
               const totalWords = script.sections.reduce((acc, sec) => acc + calculateWordCount(sec.content), 0);
               const timeSec = estimateTime(totalWords);
               const isActive = script.id === activeScriptId;
+              const isSelected = selectedIds.includes(script.id);
+              const itemInTrash = viewMode === 'trash' ? trash.find(t => t.script.id === script.id) : null;
+              const isDraggable = sortMode === 'custom' && !search && viewMode === 'library';
               
               return (
                 <div 
                   key={script.id}
-                  className={`group flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${isActive ? 'bg-primary text-primary-foreground shadow-sm' : 'hover:bg-sidebar-accent text-sidebar-foreground'}`}
-                  onClick={() => setActiveScriptId(script.id)}
+                  draggable={isDraggable}
+                  onDragStart={(e) => handleDragStart(e, script.id)}
+                  onDragOver={(e) => handleDragOver(e, script.id)}
+                  onDragLeave={() => setDragOverId(null)}
+                  onDrop={(e) => handleDrop(e, script.id)}
+                  onDragEnd={handleDragEnd}
+                  className={cn(
+                    "group flex items-center justify-between p-2 rounded-lg transition-colors",
+                    isActive ? "bg-primary text-primary-foreground shadow-sm" : "hover:bg-sidebar-accent text-sidebar-foreground",
+                    dragOverId === script.id && "border-t-2 border-primary",
+                    draggedId === script.id && "opacity-50"
+                  )}
                 >
-                  <div className="flex-1 min-w-0 pr-2">
-                    <div className="font-medium truncate">{script.title || 'Untitled Script'}</div>
-                    <div className={`text-xs mt-1 opacity-80 flex items-center gap-2`}>
-                      <span>{totalWords} words</span>
-                      <span>•</span>
-                      <span>~{formatTime(timeSec)}</span>
+                  <div className="flex items-center gap-2 flex-1 min-w-0 pr-2">
+                    <div className="flex items-center justify-center p-1">
+                      <input 
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedIds([...selectedIds, script.id]);
+                          else setSelectedIds(selectedIds.filter(id => id !== script.id));
+                        }}
+                        className="w-4 h-4 rounded border-border accent-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label={`Select ${script.title || 'Untitled Script'}`}
+                      />
+                    </div>
+                    
+                    <div className="flex-1 min-w-0 flex flex-col items-start">
+                      {editingId === script.id ? (
+                        <input 
+                          autoFocus
+                          maxLength={200}
+                          className="w-full bg-background text-foreground text-sm px-1 py-0.5 rounded border border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary"
+                          defaultValue={script.title}
+                          onBlur={e => {
+                            const val = e.target.value.trim();
+                            if (val && val !== script.title) {
+                              updateScript(script.id, { title: val });
+                            }
+                            setEditingId(null);
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
+                            if (e.key === 'Escape') setEditingId(null);
+                          }}
+                          aria-label="Rename script"
+                        />
+                      ) : (
+                        <button
+                          className="text-left font-medium truncate text-sm w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                          onClick={() => {
+                            if (viewMode === 'library') handleOpenScript(script.id);
+                          }}
+                        >
+                          {script.title || 'Untitled Script'}
+                        </button>
+                      )}
+                      <span className="mt-1 rounded-full border border-current/20 px-2 py-0.5 text-[10px] font-semibold tracking-wide">{isPerformance ? 'Performance' : 'Presentation'}</span>
+                      {viewMode === 'library' && isPerformance ? (
+                        <div className="text-xs mt-1 opacity-90 space-y-1">
+                          <p>{getPerformanceSummary(script)}</p>
+                          <p>{!script.actor?.enabled ? 'Partner audio off' : setupIssues.length ? `${setupIssues.length} setup ${setupIssues.length === 1 ? 'issue' : 'issues'}` : 'Ready · voices checked at rehearsal'}</p>
+                        </div>
+                      ) : viewMode === 'library' ? (
+                        <div className="text-xs mt-0.5 opacity-80 flex items-center gap-2">
+                          <span>{totalWords} words</span>
+                          <span>•</span>
+                          <span>~{formatTime(timeSec)}</span>
+                        </div>
+                      ) : (
+                        <div className="text-xs mt-0.5 opacity-80">
+                          Deleted {itemInTrash ? new Date(itemInTrash.deletedAt).toLocaleDateString() : ''}
+                        </div>
+                      )}
                     </div>
                   </div>
                   
-                  <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                  <div className="relative flex-shrink-0">
                     <ScriptMenu 
-                      scriptId={script.id} 
-                      onDuplicate={() => duplicateScript(script.id)}
-                      onDelete={() => {
-                        if (confirm('Are you sure you want to delete this script?')) {
-                          deleteScript(script.id);
-                        }
-                      }}
+                      viewMode={viewMode}
                       isActive={isActive}
+                      scriptTitle={script.title || 'Untitled Script'}
+                      onRename={() => setEditingId(script.id)}
+                      onDuplicate={() => handleDuplicate(script.id)}
+                      onDelete={() => setConfirmAction({ type: 'trash', ids: [script.id] })}
+                      onRestore={() => setConfirmAction({ type: 'restore', ids: [script.id] })}
+                      onPermanentDelete={() => setConfirmAction({ type: 'permanent', ids: [script.id] })}
+                      onExportJSON={() => {
+                        const data = exportScripts([script.id], 'json');
+                        downloadFile(`${script.title || 'script'}.json`, data);
+                      }}
+                      onExportTXT={() => {
+                        const data = exportScripts([script.id], 'txt');
+                        downloadFile(`${script.title || 'script'}.txt`, data, 'text/plain');
+                      }}
+                      canMoveUp={isDraggable && idx > 0}
+                      canMoveDown={isDraggable && idx < visibleItems.length - 1}
+                      onMoveUp={() => {
+                        const newOrder = [...visibleItems.map(s => s.id)];
+                        const temp = newOrder[idx];
+                        newOrder[idx] = newOrder[idx - 1];
+                        newOrder[idx - 1] = temp;
+                        reorderScripts(newOrder);
+                      }}
+                      onMoveDown={() => {
+                        const newOrder = [...visibleItems.map(s => s.id)];
+                        const temp = newOrder[idx];
+                        newOrder[idx] = newOrder[idx + 1];
+                        newOrder[idx + 1] = temp;
+                        reorderScripts(newOrder);
+                      }}
                     />
                   </div>
                 </div>
@@ -120,208 +591,245 @@ export default function Library() {
           )}
         </div>
 
-        <div className="p-4 border-t border-sidebar-border">
+        <div className="p-4 border-t border-sidebar-border mt-auto">
           <SettingsDialog />
         </div>
       </div>
 
       {/* EDITOR */}
-      <div className="flex-1 flex flex-col min-w-0 bg-background relative overflow-hidden">
-        {error && (
-          <div className="absolute top-0 inset-x-0 p-3 bg-destructive/10 text-destructive text-sm flex items-center justify-between border-b border-destructive/20 z-50">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4" />
-              <span>{error}</span>
-            </div>
-            <button onClick={clearError} className="hover:underline">Dismiss</button>
+      <div className={cn(
+        "flex-1 flex-col min-w-0 bg-background relative overflow-hidden",
+        isMobileEditorOpen ? "flex" : "hidden md:flex"
+      )}>
+        <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>What are you preparing?</DialogTitle>
+            <DialogDescription>Choose your script type. You can change it in the editor anytime.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button onClick={() => createWithPurpose('presentation')} className="rounded-xl border border-border p-5 text-left hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <MonitorPlay className="mb-3 h-6 w-6 text-primary" />
+              <span className="block font-semibold">Presentation</span>
+              <span className="mt-2 block text-sm text-muted-foreground">Talks, meetings and videos. Organize your script into sections.</span>
+            </button>
+            <button onClick={() => createWithPurpose('performance')} className="rounded-xl border border-border p-5 text-left hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <FileText className="mb-3 h-6 w-6 text-primary" />
+              <span className="block font-semibold">Performance / Self-tape</span>
+              <span className="mt-2 block text-sm text-muted-foreground">Cast your scene, choose your role and rehearse with a local scene partner.</span>
+            </button>
           </div>
-        )}
+        </DialogContent>
+      </Dialog>
+      <DocumentImportDialog
+          open={isImportOpen} 
+          onOpenChange={setIsImportOpen} 
+          onSuccess={() => {
+            setViewMode('library');
+            setSelectedIds([]);
+            setSearch('');
+            setIsMobileEditorOpen(true);
+          }}
+          externalFile={droppedFile}
+          externalError={droppedError}
+          clearExternal={() => {
+            setDroppedFile(null);
+            setDroppedError(null);
+          }}
+        />
 
-        {activeScript ? (
-          <Editor 
-            script={activeScript} 
-            onChange={(updates) => updateScript(activeScript.id, updates)} 
-            onPresent={handlePresent}
-          />
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8">
-            <FileText className="w-16 h-16 mb-4 opacity-20" />
-            <h2 className="text-xl font-medium mb-2 text-foreground">No script selected</h2>
-            <p className="text-sm">Select a script from the sidebar or create a new one.</p>
-            <button 
+        {showBanner && (
+          <div className="flex-shrink-0 p-4 bg-primary/10 border-b border-primary/20 z-40 flex items-center justify-between animate-in slide-in-from-top-2">
+            <div>
+              <h3 className="font-semibold text-primary">Welcome to Quickque!</h3>
+              <p className="text-sm text-primary/80 mt-0.5">Try the welcome walkthrough, then create your first script.</p>
+            </div>
+            <button
               onClick={handleCreate}
-              className="mt-6 px-4 py-2 bg-primary text-primary-foreground rounded-md shadow hover:bg-primary/90 transition-colors flex items-center gap-2"
+              className="flex-shrink-0 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors shadow-sm whitespace-nowrap ml-4 flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               Create Script
             </button>
           </div>
         )}
+
+        {activeScript ? (
+          <Editor 
+            script={activeScript} 
+            settings={settings}
+            onChange={(updates) => updateScript(activeScript.id, updates)} 
+            onPresent={handlePresent}
+            onCloseMobile={() => setIsMobileEditorOpen(false)}
+          />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8">
+            <FileText className="w-16 h-16 mb-4 opacity-20" />
+            <h2 className="text-xl font-medium mb-2 text-foreground">No script selected</h2>
+            <p className="text-sm">Select a script from the sidebar or create a new one.</p>
+            {viewMode === 'library' && (
+              <button 
+                onClick={handleCreate}
+                className="mt-6 px-4 py-2 bg-primary text-primary-foreground rounded-md shadow hover:bg-primary/90 transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              >
+                <Plus className="w-4 h-4" />
+                Create Script
+              </button>
+            )}
+          </div>
+        )}
       </div>
-
-    </div>
-  );
-}
-
-function ScriptMenu({ scriptId, onDuplicate, onDelete, isActive }: { scriptId: string, onDuplicate: () => void, onDelete: () => void, isActive: boolean }) {
-  const [open, setOpen] = useState(false);
-  
-  return (
-    <div className="relative">
-      <button 
-        onClick={() => setOpen(!open)}
-        className={`p-1.5 rounded-md transition-colors ${isActive ? 'hover:bg-black/10' : 'hover:bg-black/5 dark:hover:bg-white/10 opacity-0 group-hover:opacity-100'}`}
-      >
-        <MoreVertical className="w-4 h-4" />
-      </button>
       
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 w-40 bg-popover border border-popover-border rounded-md shadow-lg z-50 py-1 text-popover-foreground">
-            <button 
-              onClick={() => { setOpen(false); onDuplicate(); }}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
+      </div> {/* End layout flex */}
+
+      {/* Action Dialog */}
+      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.type === 'trash' && `Move ${confirmAction.ids.length} script${confirmAction.ids.length === 1 ? '' : 's'} to Trash?`}
+              {confirmAction?.type === 'permanent' && `Permanently delete ${confirmAction.ids.length} script${confirmAction.ids.length === 1 ? '' : 's'}?`}
+              {confirmAction?.type === 'restore' && `Restore ${confirmAction.ids.length} script${confirmAction.ids.length === 1 ? '' : 's'}?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.type === 'trash' && "You can restore them later from the Trash."}
+              {confirmAction?.type === 'permanent' && "This action cannot be undone. The selected scripts will be deleted forever."}
+              {confirmAction?.type === 'restore' && "Scripts will be returned to your library."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={confirmAction?.type !== 'restore' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
+              onClick={(event) => {
+                event.preventDefault();
+                if (!confirmAction) return;
+                let success = false;
+                if (confirmAction.type === 'trash') {
+                  success = deleteScripts(confirmAction.ids);
+                  if (success && activeScriptId && confirmAction.ids.includes(activeScriptId)) {
+                    setIsMobileEditorOpen(false);
+                  }
+                } else if (confirmAction.type === 'restore') {
+                  success = restoreScripts(confirmAction.ids);
+                  if (success) {
+                    setViewMode('library');
+                    setSearch('');
+                    setIsMobileEditorOpen(true);
+                  }
+                } else if (confirmAction.type === 'permanent') {
+                  success = permanentlyDeleteScripts(confirmAction.ids);
+                }
+                
+                if (success) {
+                  setSelectedIds([]);
+                  setConfirmAction(null);
+                }
+              }}
             >
-              <Copy className="w-4 h-4" /> Duplicate
-            </button>
-            <button 
-              onClick={() => { setOpen(false); onDelete(); }}
-              className="w-full text-left px-3 py-2 text-sm text-destructive hover:bg-destructive/10 flex items-center gap-2"
-            >
-              <Trash2 className="w-4 h-4" /> Delete
-            </button>
-          </div>
-        </>
-      )}
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }
+type ScriptMenuProps = {
+  viewMode: 'library' | 'trash';
+  isActive: boolean;
+  scriptTitle: string;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onRename: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onRestore: () => void;
+  onPermanentDelete: () => void;
+  onExportJSON: () => void;
+  onExportTXT: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+};
 
-function Editor({ script, onChange, onPresent }: { script: any, onChange: (u: any) => void, onPresent: () => void }) {
-  const totalWords = script.sections.reduce((acc: number, sec: any) => acc + calculateWordCount(sec.content), 0);
-  const timeSec = estimateTime(totalWords);
-
-  const addSection = () => {
-    onChange({
-      sections: [...script.sections, { id: generateId(), title: 'New Section', content: '' }]
-    });
-  };
-
-  const updateSection = (id: string, updates: any) => {
-    onChange({
-      sections: script.sections.map((s: any) => s.id === id ? { ...s, ...updates } : s)
-    });
-  };
-
-  const deleteSection = (id: string) => {
-    if (script.sections.length <= 1) return;
-    onChange({
-      sections: script.sections.filter((s: any) => s.id !== id)
-    });
-  };
-
-  const moveSection = (index: number, direction: -1 | 1) => {
-    if (index + direction < 0 || index + direction >= script.sections.length) return;
-    const newSections = [...script.sections];
-    const temp = newSections[index];
-    newSections[index] = newSections[index + direction];
-    newSections[index + direction] = temp;
-    onChange({ sections: newSections });
-  };
-
+function ScriptMenu({ 
+  viewMode, isActive, scriptTitle, onRename, onDuplicate, onDelete, 
+  onRestore, onPermanentDelete, onExportJSON, onExportTXT,
+  canMoveUp, canMoveDown, onMoveUp, onMoveDown
+}: ScriptMenuProps) {
+  const renameAfterClose = useRef(false);
   return (
-    <div className="flex-1 flex flex-col overflow-hidden relative">
-      <div className="flex-shrink-0 border-b border-border bg-background z-10 px-8 py-6">
-        <div className="flex items-start justify-between gap-4 max-w-4xl mx-auto">
-          <div className="flex-1 min-w-0">
-            <input 
-              type="text"
-              value={script.title}
-              onChange={e => onChange({ title: e.target.value })}
-              className="w-full bg-transparent text-3xl font-bold text-foreground focus:outline-none placeholder:text-muted-foreground/50 truncate"
-              placeholder="Script Title"
-            />
-            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-              <span>{totalWords} words</span>
-              <span>Estimated time: {formatTime(timeSec)}</span>
-              <span>{script.sections.length} section{script.sections.length !== 1 ? 's' : ''}</span>
-            </div>
-          </div>
-          <button 
-            onClick={onPresent}
-            className="flex-shrink-0 flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-medium rounded-full shadow-lg shadow-primary/20 hover:bg-primary/90 hover:-translate-y-0.5 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
-          >
-            <Play className="w-5 h-5 fill-current" />
-            Present
-          </button>
-        </div>
-      </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button 
+          className={cn(
+             "p-2.5 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            isActive 
+              ? "hover:bg-black/10 dark:hover:bg-white/20" 
+               : "hover:bg-black/5 dark:hover:bg-white/10"
+          )}
+          aria-label={`Options for ${scriptTitle}`}
+        >
+          <MoreVertical className="w-4 h-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48" onCloseAutoFocus={event => {
+        if (renameAfterClose.current) {
+          event.preventDefault();
+          renameAfterClose.current = false;
+          onRename();
+        }
+      }}>
+        {viewMode === 'library' ? (
+          <>
+            <DropdownMenuItem onSelect={() => { renameAfterClose.current = true; }}>
+              <Edit2 className="w-4 h-4 mr-2" /> Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onDuplicate}>
+              <Copy className="w-4 h-4 mr-2" /> Duplicate
+            </DropdownMenuItem>
+            
+            <DropdownMenuSeparator />
+            
+            <DropdownMenuItem onClick={onExportTXT}>
+              <FileText className="w-4 h-4 mr-2" /> Export as TXT
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onExportJSON}>
+              <Code className="w-4 h-4 mr-2" /> Export as JSON
+            </DropdownMenuItem>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
-        <div className="max-w-4xl mx-auto space-y-6 pb-32">
-          {script.sections.map((section: any, idx: number) => (
-            <div key={section.id} className="group relative bg-card rounded-xl border border-card-border shadow-sm focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/40 transition-all">
-              <div className="flex items-center justify-between p-3 border-b border-card-border bg-muted/30 rounded-t-xl">
-                <div className="flex items-center flex-1 gap-2">
-                  <div className="flex flex-col text-muted-foreground opacity-50">
-                    <button 
-                      onClick={() => moveSection(idx, -1)} 
-                      disabled={idx === 0}
-                      className="p-0.5 hover:bg-black/5 dark:hover:bg-white/10 rounded disabled:opacity-30"
-                    >
-                      <ChevronUp className="w-3.5 h-3.5" />
-                    </button>
-                    <button 
-                      onClick={() => moveSection(idx, 1)} 
-                      disabled={idx === script.sections.length - 1}
-                      className="p-0.5 hover:bg-black/5 dark:hover:bg-white/10 rounded disabled:opacity-30"
-                    >
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={section.title}
-                    onChange={e => updateSection(section.id, { title: e.target.value })}
-                    className="flex-1 bg-transparent font-semibold text-foreground focus:outline-none px-2 py-1"
-                    placeholder="Section Title"
-                  />
-                </div>
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="text-xs text-muted-foreground font-mono bg-background px-2 py-1 rounded border">
-                    {calculateWordCount(section.content)} w
-                  </div>
-                  {script.sections.length > 1 && (
-                    <button 
-                      onClick={() => deleteSection(section.id)}
-                      className="p-1.5 text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                      title="Delete Section"
-                    >
-                      <Trash className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <textarea
-                value={section.content}
-                onChange={e => updateSection(section.id, { content: e.target.value })}
-                className="w-full bg-transparent text-foreground p-4 min-h-[160px] resize-y focus:outline-none leading-relaxed"
-                placeholder="Type your script here..."
-                style={{ fontSize: '1.05rem' }}
-              />
-            </div>
-          ))}
-          
-          <button 
-            onClick={addSection}
-            className="w-full py-4 border-2 border-dashed border-border rounded-xl text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors flex items-center justify-center gap-2 font-medium"
-          >
-            <Plus className="w-5 h-5" />
-            Add Section
-          </button>
-        </div>
-      </div>
-    </div>
+            {(canMoveUp || canMoveDown) && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onMoveUp} disabled={!canMoveUp}>
+                  <ArrowUp className="w-4 h-4 mr-2" /> Move Up
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onMoveDown} disabled={!canMoveDown}>
+                  <ArrowDown className="w-4 h-4 mr-2" /> Move Down
+                </DropdownMenuItem>
+              </>
+            )}
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem onClick={onDelete} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+              <Trash2 className="w-4 h-4 mr-2" /> Move to Trash
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <>
+            <DropdownMenuItem onClick={onRestore}>
+              <RotateCcw className="w-4 h-4 mr-2" /> Restore
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onPermanentDelete} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+              <Trash className="w-4 h-4 mr-2" /> Delete Permanently
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

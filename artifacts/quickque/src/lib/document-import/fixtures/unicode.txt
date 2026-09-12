@@ -1,0 +1,4 @@
+Quickque — 世界
+
+<script>alert('not executed')</script>
+Second paragraph.
