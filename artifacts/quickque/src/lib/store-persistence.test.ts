@@ -38,6 +38,7 @@ function script(id: string, title = 'Old script'): Script {
   return {
     id,
     title,
+    purpose: 'presentation',
     createdAt: 1,
     updatedAt: 1,
     presentation: { ...DEFAULT_PRESENTATION },
@@ -48,7 +49,7 @@ function script(id: string, title = 'Old script'): Script {
 test('loads the legacy array and active key, then produces an envelope on migration', () => {
   const storage = new MemoryStorage();
   const scripts = [script('legacy-a'), script('legacy-b')];
-  storage.put(QUICKQUE_SCRIPTS_KEY, JSON.stringify(scripts));
+  storage.put(QUICKQUE_SCRIPTS_KEY, JSON.stringify(scripts.map(({ purpose, ...legacy }) => legacy)));
   storage.put(QUICKQUE_ACTIVE_SCRIPT_KEY, 'legacy-b');
 
   const loaded = loadLibrary(storage, []);

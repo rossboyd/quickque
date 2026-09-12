@@ -623,6 +623,7 @@ mod tests {
     fn actor_metadata_and_notes_survive_native_document_validation() {
         let input = serde_json::json!([{
             "id": "actor-script",
+            "purpose": "performance",
             "title": "Scene",
             "sections": [{
                 "id": "turn-1",
@@ -660,6 +661,7 @@ mod tests {
         let encoded = serde_json::to_vec(&document).expect("encode native document");
         let decoded: LocalLibraryDocument =
             serde_json::from_slice(&encoded).expect("decode native document");
+        assert_eq!(decoded.scripts[0]["purpose"], "performance");
         assert_eq!(
             decoded.scripts[0]["sections"][0]["notes"],
             "Hold for the actor."

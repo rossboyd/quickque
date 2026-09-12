@@ -239,12 +239,10 @@ class SceneSpeechAdapter implements SceneSpeech {
     }
     const synthesis = this.browserSynthesis;
     const initial = localBrowserVoices(synthesis);
-    const addVoicesChangedListener = synthesis?.addEventListener;
-    const removeVoicesChangedListener = synthesis?.removeEventListener;
     if (
       initial.length > 0 ||
-      !addVoicesChangedListener ||
-      !removeVoicesChangedListener
+      !synthesis?.addEventListener ||
+      !synthesis?.removeEventListener
     ) {
       return initial;
     }
@@ -256,12 +254,12 @@ class SceneSpeechAdapter implements SceneSpeech {
       let timer: ReturnType<typeof globalThis.setTimeout> | null = null;
       const finish = () => {
         if (timer !== null) this.cancelTimeout(timer);
-        removeVoicesChangedListener('voiceschanged', onVoicesChanged);
+        synthesis.removeEventListener!('voiceschanged', onVoicesChanged);
         resolve(localBrowserVoices(synthesis));
       };
       const onVoicesChanged = () => finish();
       timer = this.scheduleTimeout(() => finish(), 1_000);
-      addVoicesChangedListener('voiceschanged', onVoicesChanged);
+      synthesis.addEventListener!('voiceschanged', onVoicesChanged);
     });
   }
 

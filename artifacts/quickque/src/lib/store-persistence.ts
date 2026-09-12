@@ -1,3 +1,4 @@
+import { isValidScriptPurpose } from './script-purpose.ts';
 import type {
   DeletedScript,
   PresentationPreferences,
@@ -125,6 +126,7 @@ function isValidScriptFields(value: unknown): value is Omit<Script, 'presentatio
   presentation?: unknown;
 } {
   if (!isRecord(value)) return false;
+  if (!isValidScriptPurpose(value.purpose)) return false;
   if (!isValidId(value.id)) return false;
   if (!isBoundedString(value.title, MAX_TITLE_LENGTH)) return false;
   if (value.actor !== undefined && !isValidActor(value.actor)) return false;
@@ -557,6 +559,8 @@ export function loadLibrary(
     needsMigration: Array.isArray(parsed) ||
       !isRecord(parsed) ||
       parsed.version === LEGACY_STORAGE_VERSION ||
+      (Array.isArray(parsed.scripts) && parsed.scripts.some((script: Record<string, unknown>) => script.purpose === undefined)) ||
+      (Array.isArray(parsed.trash) && parsed.trash.some((entry: { script: Record<string, unknown> }) => entry.script.purpose === undefined)) ||
       parsed.trash === undefined ||
       parsed.customOrder === undefined ||
       parsed.sortMode === undefined ||
@@ -766,6 +770,7 @@ export function createDocumentScript(
     ok: true,
     script: {
       id: scriptId,
+      purpose: 'presentation',
       title: title as string,
       createdAt: now,
       updatedAt: now,

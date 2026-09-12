@@ -202,12 +202,12 @@ export function ActorAuthoringPanel({
 
       <div className="p-4 border-b border-border flex items-center justify-between">
         <div className="space-y-0.5">
-          <label className="text-sm font-medium">Enable Scene Partner</label>
+          <label className="text-sm font-medium">Partner audio</label>
           <p className="text-xs text-muted-foreground">Record on another camera. Quickque never records.</p>
         </div>
         <button
           role="switch"
-          aria-label="Enable Scene Partner"
+          aria-label="Partner audio"
           aria-checked={currentActor.enabled}
           onClick={handleToggle}
           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
@@ -222,8 +222,9 @@ export function ActorAuthoringPanel({
         </button>
       </div>
 
-      {currentActor.enabled && (
+      {(
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          <p className="text-sm font-medium">1. Add cast · 2. Choose your role · 3. Assign turns in the editor · 4. Preview partner voices · 5. Rehearse</p>
           <p className="text-xs text-muted-foreground">Select one or more “My roles” to perform yourself. No selected roles means a full read-through; selecting all roles gives silent cues. Character descriptions are for you, not voice-generation instructions or guarantees.</p>
           {previewError && <p role="alert" className="text-sm text-destructive">{previewError}</p>}
           <div className="space-y-4">
@@ -311,6 +312,8 @@ export function ActorAuthoringPanel({
                       />
                     </div>
                     
+                    <details className="space-y-3">
+                      <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Optional character descriptions</summary>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <label className="text-xs font-medium">Age Description</label>
@@ -351,6 +354,7 @@ export function ActorAuthoringPanel({
                       />
                     </div>
 
+                    </details>
                     {(
                       <div className="space-y-3 pt-3 border-t border-border">
                         <div className="space-y-1.5">
@@ -404,7 +408,7 @@ export function ActorAuthoringPanel({
                           </select>
                           {!loadingVoices && (voiceLoadError || voices.length === 0) && (
                             <p role="status" className="text-xs text-muted-foreground">
-                              {voiceLoadError ? 'Could not list local voices. Retry or check the Mac speech helper installation.' : 'No confirmed local voices are available. Use Silent cues in the browser reader, or choose an installed voice in the Mac app.'}
+                              {voiceLoadError ? 'Could not list local voices. Retry or check the Mac speech helper installation.' : 'No confirmed local voices are available. Select every character as My role for silent turn cues, switch Partner audio off to read at your own pace, or choose an installed voice in the Mac app.'}
                             </p>
                           )}
                         </div>

@@ -39,7 +39,7 @@ test('valid existing scripts are preserved and malformed source is rejected', ()
     },
   ];
   const serialized = JSON.stringify(existing);
-  assert.deepEqual(parseScriptsJson(serialized), existing);
+  assert.deepEqual(parseScriptsJson(serialized), existing.map(script => ({ ...script, purpose: 'presentation' })));
   assert.equal(parseScriptsJson('{"scripts":[]}'), null);
   assert.equal(parseScriptsJson('not json'), null);
 });

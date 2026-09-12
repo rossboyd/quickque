@@ -80,6 +80,29 @@ test('scene speech exposes only local browser system voices', async () => {
   }]);
 });
 
+test('delayed browser voices retain their EventTarget receiver and clean up listeners', async () => {
+  let voices: ReturnType<NonNullable<SceneSpeechDependencies['browserSpeechSynthesis']>['getVoices']> = [];
+  let removed = 0;
+  class DelayedSynthesis extends EventTarget {
+    getVoices() { return voices; }
+    speak() {}
+    cancel() {}
+    override removeEventListener(type: string, listener: EventListenerOrEventListenerObject | null) {
+      super.removeEventListener(type, listener);
+      removed += 1;
+    }
+  }
+  const synthesis = new DelayedSynthesis();
+  const adapter = createSceneSpeech({ isDesktop: () => false, browserSpeechSynthesis: synthesis });
+  const pending = adapter.listLocalVoices();
+  voices = [{ voiceURI: 'local.alex', name: 'Alex', lang: 'en-US', localService: true }];
+  synthesis.dispatchEvent(new Event('voiceschanged'));
+  assert.deepEqual(await pending, [{ id: 'local.alex', name: 'Alex', language: 'en-US', engine: 'system' }]);
+  assert.equal(removed, 1);
+  synthesis.dispatchEvent(new Event('voiceschanged'));
+  assert.equal(removed, 1, 'the completed listener is detached');
+});
+
 test('scene speech rejects Turbo and missing system voices explicitly', async () => {
   const { adapter, localVoice, spoken } = browserHarness();
   const signal = new AbortController().signal;

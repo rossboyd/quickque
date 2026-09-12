@@ -6,9 +6,10 @@ record video or audio, save takes or export generated speech.**
 
 ## Set up a scene
 
-1. Open a script and choose **Scene Partner**, then enable it for that script.
-   Ordinary scripts are unchanged unless you opt in. Disabling the mode keeps
-   your cast and assignments for later.
+1. Choose **New script** → **Performance / Self-tape**, then open **Scene Partner**.
+   For an existing script, change **Script type** to **Performance** first.
+   Switching **Partner audio** off keeps the performance type, cast and
+   assignments for later. You can change the script type back to Presentation.
 2. Add characters, using the names and optional age/age-range, gender and
    performance descriptions you choose. These free-text descriptions are
    visual reminders, not automatic voice-generation instructions or promises
@@ -34,7 +35,12 @@ assignments and voice metadata travel with duplication, JSON exports, full
 backups, Trash/restore and native library files. Ordinary text/document imports
 are not automatically parsed or guessed into a cast.
 
-## Present
+## Rehearse
+
+Choose **Rehearse** in the editor. With Partner audio enabled, setup checks
+flag empty dialogue, unassigned turns and missing partner voices. Select an
+issue to return to the relevant dialogue, character assignment or cast setup.
+Local voices are checked before opening a rehearsal with partner lines.
 
 Opening the reader does not start speech or microphone capture. Use **Start**.
 Quickque plays assigned partner turns in order and waits on your roles.
@@ -51,7 +57,8 @@ active-session time (including time spent performing your role), not the length
 of a recording or a promise of an exact spoken duration.
 
 In a browser, only voices reported by the browser as local are offered. If none
-are available, use the explicit **Silent cues** option. That preview does not
+are available, select every character as **My role** for silent turn cues, or
+switch **Partner audio** off to read at your own pace. That preview does not
 contact a cloud voice service. Native macOS speech uses a separate system-voice
 helper; manual turn-taking needs no recognition model or Flow microphone access.
 

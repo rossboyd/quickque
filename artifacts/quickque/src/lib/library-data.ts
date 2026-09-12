@@ -1,3 +1,4 @@
+import { isValidScriptPurpose } from './script-purpose.ts';
 import type {
   PresentationPreferences,
   Script,
@@ -27,6 +28,7 @@ export function createWelcomeScript(
 ): Script {
   return {
     id: 'seed-1',
+    purpose: 'presentation',
     title: 'Welcome to Quickque',
     createdAt: now,
     updatedAt: now,
@@ -93,6 +95,7 @@ export function isValidScriptSection(value: unknown): value is ScriptSection {
 export function isValidScript(value: unknown): value is Script {
   return (
     isRecord(value) &&
+    isValidScriptPurpose(value.purpose) &&
     typeof value.id === 'string' &&
     value.id.length > 0 &&
     typeof value.title === 'string' &&
@@ -154,6 +157,7 @@ export type ImportableScriptSection = {
 };
 
 export type ImportableScript = {
+  purpose?: Script['purpose'];
   id: string;
   title: string;
   sections: ImportableScriptSection[];
@@ -172,6 +176,7 @@ export function isImportableScripts(value: unknown): value is ImportableScript[]
     value.every((script) => {
       if (!isRecord(script)) return false;
       if (
+        !isValidScriptPurpose(script.purpose) ||
         typeof script.id !== 'string' ||
         script.id.length === 0 ||
         typeof script.title !== 'string' ||

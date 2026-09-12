@@ -1,4 +1,5 @@
 import type { ActorCharacter, ActorMode, ActorVoice, Script, ScriptSection } from './types.ts';
+import { getScriptPurpose } from './script-purpose.ts';
 import { generateId } from './utils.ts';
 import { normalizePresentation } from './presentation-preferences.ts';
 
@@ -218,6 +219,7 @@ export function unassignDeletedCharacter(
  */
 export function cloneScriptData(script: Script): Script {
   const cloned: Script = {
+    purpose: getScriptPurpose(script),
     id: script.id,
     title: script.title,
     createdAt: script.createdAt,

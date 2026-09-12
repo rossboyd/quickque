@@ -1,3 +1,4 @@
+import { getScriptPurpose } from '@/lib/script-purpose';
 import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import './reader-scene.css';
 import { useStore } from '@/lib/store';
@@ -245,7 +246,8 @@ export default function Reader() {
   // Keep the scene feature additive: old documents still use the exact reader
   // tokenisation and Flow lifecycle.
   const actor = script?.actor;
-  const sceneEnabled = actor?.enabled === true;
+  const isPerformance = script ? getScriptPurpose(script) === 'performance' : false;
+  const sceneEnabled = isPerformance && actor?.enabled === true;
   const characters = actor?.characters ?? [];
   const characterIds = useMemo(() => new Set(characters.map(character => character.id)), [characters]);
   const sceneTurns = useMemo(() => (script?.sections ?? []).map(section => ({
@@ -1331,15 +1333,15 @@ export default function Reader() {
                   <button
                     type="button"
                     className="p-2 rounded-full transition-colors backdrop-blur-md hover:bg-black/10 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                     title="Present settings"
-                     aria-label="Open present settings"
+                     title={isPerformance ? 'Rehearsal settings' : 'Present settings'}
+                     aria-label={isPerformance ? 'Open rehearsal settings' : 'Open present settings'}
                   >
                     <Palette className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </DialogTrigger>
                 <DialogContent className="max-w-[min(92vw,32rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto p-4 sm:p-6">
                   <DialogHeader>
-                     <DialogTitle>Present settings</DialogTitle>
+                     <DialogTitle>{isPerformance ? 'Rehearsal settings' : 'Present settings'}</DialogTitle>
                     <DialogDescription>
                        Adjust this script's reader layout and appearance.
                     </DialogDescription>
@@ -1664,8 +1666,18 @@ export default function Reader() {
                       )}
                       {mine && sceneFlowEnabled && (
                         <p className="mt-2 text-xs font-normal text-muted-foreground">
-                          {flow.status === 'listening'
-                            ? 'Following your current turn locally. Use Next if matching is uncertain.'
+                          {!flow.sceneCompletion.eligible
+                            ? 'Short or repetitive line—press Next when you finish.'
+                            : flow.sceneCompletion.uncertain
+                              ? <>
+                                  Couldn’t match this line. Press Next or{' '}
+                                  <button type="button" className="font-semibold underline"
+                                    onClick={() => flow.reanchor(0)}>
+                                    retry from the beginning
+                                  </button>.
+                                </>
+                            : flow.status === 'listening'
+                            ? 'Following your current turn locally.'
                             : flow.status === 'silence-stopped'
                               ? <>
                                   Flow stopped for inactivity; this turn was not advanced.{' '}
@@ -1783,13 +1795,13 @@ export default function Reader() {
       )}
 
       {/* Bottom Controls / Section Navigation */}
-      <div className={`scene-transport absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-4 p-2 md:p-3 rounded-full bg-background/80 backdrop-blur-xl border border-border shadow-2xl z-50 transition-all duration-300 ${showControls || (sceneEnabled ? !['preparing', 'speaking', 'waiting'].includes(scene.phase) : readMode === 'manual' ? !isPlaying : flow.status !== 'listening') ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+      <div className={`scene-transport absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-4 p-2 md:p-3 rounded-full bg-background/80 backdrop-blur-xl border border-border shadow-2xl z-50 transition-all duration-300 ${showControls || (sceneEnabled ? scene.phase !== 'speaking' && scene.phase !== 'preparing' : readMode === 'manual' ? !isPlaying : flow.status !== 'listening') ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
         
         <button
           onClick={() => dispatchCommand({ action: 'previous' })}
           disabled={activeSectionIdx === 0}
           className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
-          title="Previous Section (Left Arrow)"
+          title={sceneEnabled ? 'Previous turn (Left Arrow)' : 'Previous section (Left Arrow)'}
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
@@ -1827,16 +1839,16 @@ export default function Reader() {
           onClick={() => dispatchCommand({ action: 'next' })}
           disabled={!sceneEnabled && activeSectionIdx === enrichedSections.length - 1}
           className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
-          title="Next Section (Right Arrow)"
+          title={sceneEnabled ? 'Next turn (Right Arrow)' : 'Next section (Right Arrow)'}
         >
-          <ChevronRight className="w-5 h-5" />
+          <span className="flex items-center gap-1">{sceneEnabled && <span className="text-sm font-medium">Next</span>}<ChevronRight className="w-5 h-5" /></span>
         </button>
         
         <div className="w-px h-6 bg-border mx-1" />
         
         <button
           onClick={() => dispatchCommand({ action: 'playPause' })}
-          aria-label={['countdown', 'starting', 'playing'].includes(playbackState.phase) ? 'Pause presentation' : sceneEnabled ? 'Start or resume scene' : 'Play presentation'}
+          aria-label={['countdown', 'starting', 'playing'].includes(playbackState.phase) ? isPerformance ? 'Pause rehearsal' : 'Pause presentation' : sceneEnabled ? 'Start or resume scene' : 'Play presentation'}
           disabled={!sceneEnabled && readMode === 'flow' && !['ready', 'listening', 'paused', 'silence-stopped', 'stopped', 'loading', 'error'].includes(flow.status)}
           className="w-14 h-14 flex items-center justify-center bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 hover:scale-105 transition-all focus:outline-none focus:ring-4 focus:ring-primary/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
         >

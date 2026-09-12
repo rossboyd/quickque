@@ -5,6 +5,8 @@ import { calculateWordCount, estimateTime, formatTime, cn } from '@/lib/utils';
 import { SettingsDialog } from '@/components/settings-dialog';
 import { DocumentImportDialog } from '@/components/document-import-dialog';
 import { getVisibleScripts, downloadFile } from '@/lib/library-management';
+import { getScriptPurpose, getPerformanceSummary, getSceneSetupIssues } from '@/lib/script-purpose';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { SortMode } from '@/lib/types';
 import { Editor } from '@/components/editor';
 import { RecoveryUI } from '@/components/recovery-ui';
@@ -62,6 +64,7 @@ export default function Library() {
   } = store;
   
   const [search, setSearch] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [droppedError, setDroppedError] = useState<string | null>(null);
@@ -159,9 +162,12 @@ export default function Library() {
     }
   };
 
-  const handleCreate = () => {
+  const handleCreate = () => setShowCreate(true);
+
+  const createWithPurpose = (purpose: 'presentation' | 'performance') => {
     setViewMode('library');
-    const res = createScript();
+    const res = createScript(purpose);
+    if (res) setShowCreate(false);
     setSearch('');
     if (res) setIsMobileEditorOpen(true);
   };
@@ -454,6 +460,8 @@ export default function Library() {
             </div>
           ) : (
             visibleItems.map((script, idx) => {
+              const isPerformance = getScriptPurpose(script) === 'performance';
+              const setupIssues = isPerformance ? getSceneSetupIssues(script) : [];
               const totalWords = script.sections.reduce((acc, sec) => acc + calculateWordCount(sec.content), 0);
               const timeSec = estimateTime(totalWords);
               const isActive = script.id === activeScriptId;
@@ -521,7 +529,13 @@ export default function Library() {
                           {script.title || 'Untitled Script'}
                         </button>
                       )}
-                      {viewMode === 'library' ? (
+                      <span className="mt-1 rounded-full border border-current/20 px-2 py-0.5 text-[10px] font-semibold tracking-wide">{isPerformance ? 'Performance' : 'Presentation'}</span>
+                      {viewMode === 'library' && isPerformance ? (
+                        <div className="text-xs mt-1 opacity-90 space-y-1">
+                          <p>{getPerformanceSummary(script)}</p>
+                          <p>{!script.actor?.enabled ? 'Partner audio off' : setupIssues.length ? `${setupIssues.length} setup ${setupIssues.length === 1 ? 'issue' : 'issues'}` : 'Ready · voices checked at rehearsal'}</p>
+                        </div>
+                      ) : viewMode === 'library' ? (
                         <div className="text-xs mt-0.5 opacity-80 flex items-center gap-2">
                           <span>{totalWords} words</span>
                           <span>•</span>
@@ -587,7 +601,27 @@ export default function Library() {
         "flex-1 flex-col min-w-0 bg-background relative overflow-hidden",
         isMobileEditorOpen ? "flex" : "hidden md:flex"
       )}>
-        <DocumentImportDialog 
+        <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>What are you preparing?</DialogTitle>
+            <DialogDescription>Choose your script type. You can change it in the editor anytime.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button onClick={() => createWithPurpose('presentation')} className="rounded-xl border border-border p-5 text-left hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <MonitorPlay className="mb-3 h-6 w-6 text-primary" />
+              <span className="block font-semibold">Presentation</span>
+              <span className="mt-2 block text-sm text-muted-foreground">Talks, meetings and videos. Organize your script into sections.</span>
+            </button>
+            <button onClick={() => createWithPurpose('performance')} className="rounded-xl border border-border p-5 text-left hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <FileText className="mb-3 h-6 w-6 text-primary" />
+              <span className="block font-semibold">Performance / Self-tape</span>
+              <span className="mt-2 block text-sm text-muted-foreground">Cast your scene, choose your role and rehearse with a local scene partner.</span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <DocumentImportDialog
           open={isImportOpen} 
           onOpenChange={setIsImportOpen} 
           onSuccess={() => {

@@ -80,7 +80,7 @@ type StoreContextType = {
     updates: Partial<PresentationPreferences>,
   ) => boolean;
   resetScriptPresentation: (id: string) => boolean;
-  createScript: () => string;
+  createScript: (purpose?: Script['purpose']) => string;
   updateScript: (
     id: string,
     updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt' | 'presentation'>>,
@@ -754,7 +754,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return true;
   }, []);
 
-  const createScript = useCallback(() => {
+  const createScript = useCallback((purpose: Script['purpose'] = 'presentation') => {
     const usedIds = collectScriptIds(scriptsRef.current, trashRef.current);
     const newId = freshId(usedIds);
     const sectionId = freshId(usedIds);
@@ -766,11 +766,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const now = Date.now();
     const newScript: Script = {
       id: newId,
-      title: 'Untitled Script',
+      title: purpose === 'performance' ? 'Untitled Performance' : 'Untitled Presentation',
+      purpose,
+      ...(purpose === 'performance' ? { actor: { enabled: true, characters: [], myRoleIds: [] } } : {}),
       createdAt: now,
       updatedAt: now,
       presentation: normalizePresentation(presentationDefaultsRef.current),
-      sections: [{ id: sectionId, title: 'Section 1', content: '' }],
+      sections: [{ id: sectionId, title: purpose === 'performance' ? 'Turn 1' : 'Section 1', content: '' }],
     };
     const nextOrder = [newId, ...customOrderRef.current.filter(id => id !== newId)];
     return commitLibrary({
@@ -1659,18 +1661,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setSettings((previous) => ({ ...previous, ...newSettings }));
   }, []);
 
-  const createScript = useCallback(() => {
+  const createScript = useCallback((purpose: Script['purpose'] = 'presentation') => {
     const newId = generateId();
     const now = Date.now();
     const newScript: Script = {
       id: newId,
-      title: 'Untitled Script',
+      title: purpose === 'performance' ? 'Untitled Performance' : 'Untitled Presentation',
+      purpose,
+      ...(purpose === 'performance' ? { actor: { enabled: true, characters: [], myRoleIds: [] } } : {}),
       createdAt: now,
       updatedAt: now,
       sections: [
         {
           id: generateId(),
-          title: 'Section 1',
+          title: purpose === 'performance' ? 'Turn 1' : 'Section 1',
           content: '',
         },
       ],

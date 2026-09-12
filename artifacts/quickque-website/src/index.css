@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./premium.css";
 
 @font-face {
   font-family: 'DM Serif Display';

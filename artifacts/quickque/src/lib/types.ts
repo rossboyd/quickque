@@ -33,7 +33,11 @@ export type ActorMode = {
 export type ActorConfig = ActorMode;
 export type ScriptActor = ActorMode;
 
+export type ScriptPurpose = 'presentation' | 'performance';
+
 export type Script = {
+  /** Script identity is independent of whether partner audio is enabled. */
+  purpose?: ScriptPurpose;
   id: string;
   title: string;
   sections: ScriptSection[];

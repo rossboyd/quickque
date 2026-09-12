@@ -42,6 +42,13 @@ A local-first personal teleprompter for live meetings, with an interruption-frie
 
 ## Product
 
+### Script purpose and performance setup
+
+- New script opens a Presentation / Performance chooser. Purpose persists independently of Partner audio, including duplication, imports, backups and Trash.
+- Performance uses turns, cast setup and Rehearse. With partner audio enabled, preflight checks empty dialogue, character assignments and available local partner voices; each issue links back to setup.
+- Selecting every cast member as My role provides silent turn cues without voices. Partner audio off preserves the cast and opens the ordinary reader.
+- The public homepage has an interactive product illustration, local canvas mesh with motion controls, and a source-build disclosure. Guide labels track the new script chooser; release and live checkout remain unavailable.
+
 ### Reader timing and local resume
 
 - Countdown is 0–30 seconds on a fresh start. Cancelled starts do not capture or

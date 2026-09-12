@@ -27,7 +27,7 @@
     "test:appearance": "node --test src/lib/settings-persistence.test.ts src/lib/reader-position.test.ts src/lib/brand-contrast.test.ts",
     "test:presentation-layout": "node --test src/lib/presentation-preferences.test.ts src/lib/reader-geometry.test.ts src/lib/reader-tokenization.test.ts src/lib/reader-position.test.ts src/lib/reader-surface.test.ts",
     "test:scene-speech": "node --test src/lib/scene-speech.test.ts",
-    "test:reader-browser": "playwright test tests/reader-regression.spec.ts tests/presentation-timing.spec.ts --reporter=line",
+    "test:reader-browser": "playwright test tests/reader-regression.spec.ts tests/presentation-timing.spec.ts tests/performance-setup.spec.ts --reporter=line",
     "test:resume": "node --test src/lib/reader-resume-position.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
