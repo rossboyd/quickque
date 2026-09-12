@@ -1,4 +1,6 @@
 import { getScriptPurpose } from '@/lib/script-purpose';
+import { getCharacterColor } from '@/lib/actor-colors';
+import { SceneCues } from '@/components/scene-cues';
 import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import './reader-scene.css';
 import { useStore } from '@/lib/store';
@@ -1541,6 +1543,12 @@ export default function Reader() {
         </div>
       )}
 
+      {isPerformance && <SceneCues script={script}
+        turnIndex={sceneEnabled ? scene.turnIndex : activeSectionIdx}
+        phase={sceneEnabled ? scene.phase : 'paused'}
+        silent={!sceneEnabled || sceneSilentManual}
+        transform={viewportTransform} />}
+
       {/* Reader Content Area */}
       <div className="flex-1 relative overflow-hidden">
         {/*
@@ -1609,8 +1617,15 @@ export default function Reader() {
                 ref={el => { sectionRefs.current[idx] = el; }}
                 // Never fade whole inactive sections: custom foreground colours
                 // can become unreadable at 30% alpha over a camera/background.
-                className="transition-opacity duration-500 opacity-100"
+                className={`transition-opacity duration-500 opacity-100 ${isPerformance ? 'border-l-4 pl-4' : ''}`}
+                style={isPerformance ? { borderLeftColor: getCharacterColor(characters.find(character => character.id === script.sections[idx]?.characterId)) } : undefined}
               >
+                {isPerformance && <p className="mb-2 text-sm font-semibold text-foreground">
+                  {characters.find(character => character.id === script.sections[idx]?.characterId)?.name ?? 'Unassigned'}
+                  {' · '}{script.sections[idx]?.characterId && characterIds.has(script.sections[idx].characterId!)
+                    ? sceneMyRoleIds.includes(script.sections[idx].characterId!) ? 'In Person' : 'AI Partner'
+                    : 'Assign a character'}
+                </p>}
                 {enrichedSections.length > 1 && (
                   <h3
                     className="font-bold mb-6 flex items-center gap-4"
@@ -1632,10 +1647,11 @@ export default function Reader() {
                   const mine = !!character && effectiveSceneMyRoleIds.includes(character.id);
                   const ownership = !character
                     ? 'Unassigned turn'
-                    : mine ? 'Your turn' : scene.phase === 'speaking' ? 'Partner speaking' : 'Partner turn';
+                    : sceneMyRoleIds.includes(character.id) ? 'In Person · Your turn' : sceneSilentManual ? 'AI Partner · Silent cues' : scene.phase === 'speaking' ? 'AI Partner · Speaking' : 'AI Partner · Ready';
                   return (
                     <aside
-                      className="mb-4 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 shadow-sm"
+                      className="mb-4 rounded-lg border border-border border-l-4 bg-background text-foreground px-4 py-3 shadow-sm"
+                      style={{ borderLeftColor: getCharacterColor(character) }}
                       aria-live="polite"
                       aria-label="Current scene turn"
                     >
@@ -1824,13 +1840,16 @@ export default function Reader() {
         )}
 
         <select
+          aria-label={isPerformance ? 'Turn navigation' : 'Section navigation'}
           value={activeSectionIdx}
           onChange={(e) => dispatchCommand({ action: 'jumpToSection', value: Number(e.target.value) })}
           className="bg-transparent font-medium text-foreground appearance-none outline-none text-center text-sm px-2 w-32 md:w-48 truncate cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 rounded"
         >
           {enrichedSections.map((sec, idx) => (
             <option key={sec.id} value={idx}>
-              {idx + 1}. {sec.title || 'Untitled'}
+              {idx + 1}. {isPerformance
+                ? `${characters.find(character => character.id === script.sections[idx]?.characterId)?.name ?? 'Unassigned'} · ${sceneMyRoleIds.includes(script.sections[idx]?.characterId ?? '') ? 'In Person' : 'AI Partner'} · ${sec.title || 'Untitled'}`
+                : sec.title || 'Untitled'}
             </option>
           ))}
         </select>

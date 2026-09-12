@@ -1,5 +1,12 @@
 /* Compact scene presentation reuses the reader viewport and cue transforms.
    Extra settings stay available in the existing Present settings dialog. */
+.scene-cues .scene-cue-name { overflow-wrap: anywhere; }
+@media (max-height: 500px) {
+  .scene-cues .scene-cast-summary, .scene-cues .scene-next-words { display: none; }
+  .scene-cues > div > .grid { padding: 4px 8px; gap: 8px; }
+  .scene-cues .scene-cue-name { font-size: 14px; }
+  .scene-cues [aria-label="Speaking now"], .scene-cues [aria-label="Up next"] { padding: 4px 8px; }
+}
 @media (max-width: 600px), (max-height: 420px) {
   .scene-reader { min-width: 0; overflow: hidden; }
   .scene-reader .scene-titlebar { padding: 4px; min-height: 44px; }
@@ -19,6 +26,7 @@
   .scene-reader .scene-transport select { max-width: 90px; min-width: 0; }
   .scene-reader .scene-transport button { flex-shrink: 0; padding: 6px; }
   .scene-reader .scene-transport button[aria-label="Pause presentation"],
+  .scene-reader .scene-transport button[aria-label="Pause rehearsal"],
   .scene-reader .scene-transport button[aria-label="Start or resume scene"] { width: 38px; height: 38px; }
   .scene-reader [data-scene-section-heading] { display: none; }
   .scene-reader [aria-label="Current scene turn"] { padding: 6px 8px; margin-bottom: 6px; line-height: 1.3; }

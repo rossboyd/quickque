@@ -38,5 +38,5 @@ export function getSceneSetupIssues(script: Script, availableVoiceIds?: Readonly
 export function getPerformanceSummary(script: Script): string {
   const actor = script.actor;
   const names = actor?.characters.filter(c => actor.myRoleIds.includes(c.id)).map(c => c.name) ?? [];
-  return `${names.length ? `Your role: ${names.join(', ')}` : 'Full read-through'} · ${script.sections.length} turns`;
+  return `${names.length ? `In Person: ${names.join(', ')}` : 'Full AI Partner read-through'} · ${script.sections.length} turns`;
 }

@@ -17,6 +17,8 @@ export type ActorVoice = {
 export type ActorCharacter = {
   id: string;
   name: string;
+  /** Optional six-digit hex accent; older casts receive a stable default. */
+  accentColor?: string;
   age: string;
   gender: string;
   style: string;

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash, Users, User, Mic, Volume2, AlertCircle, Square, RefreshCw } from 'lucide-react';
 import { listLocalVoices, createSceneSpeech, type LocalVoice } from '@/lib/scene-speech';
 import type { ActorCharacter, ActorMode, ScriptSection } from '@/lib/types';
+import { CHARACTER_COLORS, getCharacterColor, nextCharacterColor } from '@/lib/actor-colors';
 import { toast } from '@/hooks/use-toast';
 import { generateId } from '@/lib/utils';
 import {
@@ -100,6 +101,7 @@ export function ActorAuthoringPanel({
     const newChar: ActorCharacter = {
       id: generateId(),
       name: 'New Character',
+      accentColor: nextCharacterColor(currentActor.characters),
       age: '',
       gender: '',
       style: '',
@@ -128,13 +130,13 @@ export function ActorAuthoringPanel({
     setReassignToId('unassign');
   };
 
-  const toggleMyRole = (id: string) => {
-    const isMine = currentActor.myRoleIds.includes(id);
+  const setAssignment = (id: string, inPerson: boolean) => {
+    stopPreview();
     onChange({
       ...currentActor,
-      myRoleIds: isMine
-        ? currentActor.myRoleIds.filter((roleId) => roleId !== id)
-        : [...currentActor.myRoleIds, id],
+      myRoleIds: inPerson
+        ? [...currentActor.myRoleIds.filter(roleId => roleId !== id), id]
+        : currentActor.myRoleIds.filter(roleId => roleId !== id),
     });
   };
 
@@ -224,14 +226,15 @@ export function ActorAuthoringPanel({
 
       {(
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          <p className="text-sm font-medium">1. Add cast · 2. Choose your role · 3. Assign turns in the editor · 4. Preview partner voices · 5. Rehearse</p>
-          <p className="text-xs text-muted-foreground">Select one or more “My roles” to perform yourself. No selected roles means a full read-through; selecting all roles gives silent cues. Character descriptions are for you, not voice-generation instructions or guarantees.</p>
+          <p className="text-sm font-medium">1. Add cast · 2. Assign In Person or AI Partner · 3. Assign turns in the editor · 4. Preview partner voices · 5. Rehearse</p>
+          <p className="text-xs text-muted-foreground">Choose In Person for characters you or another person will perform. AI Partner reads its lines using a local system voice. Give each character a colour to recognise their turns. All In Person means silent cues; all AI Partner means a full read-through.</p>
           {previewError && <p role="alert" className="text-sm text-destructive">{previewError}</p>}
           <div className="space-y-4">
             {currentActor.characters.map((char) => (
               <div
                 key={char.id}
-                className="bg-card border border-border rounded-xl overflow-hidden shadow-sm"
+                className="bg-card border border-border border-l-4 rounded-xl overflow-hidden shadow-sm"
+                style={{ borderLeftColor: getCharacterColor(char) }}
               >
                 <div 
                   className="p-3 bg-muted/50 flex items-center justify-between cursor-pointer"
@@ -247,32 +250,17 @@ export function ActorAuthoringPanel({
                     aria-label={`Edit ${char.name}`}
                     aria-expanded={editingCharId === char.id}
                 >
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleMyRole(char.id);
-                      }}
-                      className={`p-1.5 rounded-md transition-colors ${
-                        currentActor.myRoleIds.includes(char.id)
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-background text-muted-foreground hover:bg-background/80'
-                      }`}
-                      title={currentActor.myRoleIds.includes(char.id) ? "My Role (Silent)" : "Scene Partner (Spoken)"}
-                      aria-label={`My role: ${char.name}`}
-                      aria-pressed={currentActor.myRoleIds.includes(char.id)}
-                    >
-                      {currentActor.myRoleIds.includes(char.id) ? <User className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    </button>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span aria-hidden="true" className="h-4 w-4 shrink-0 rounded-full border border-foreground/20" style={{ backgroundColor: getCharacterColor(char) }} />
                     <div>
-                      <h3 className="font-medium text-sm">{char.name}</h3>
+                      <h3 className="font-medium text-sm break-words">{char.name}</h3>
                       <p className="text-xs text-muted-foreground">
-                        {currentActor.myRoleIds.includes(char.id) ? "My role" : "Scene partner"}
+                        {currentActor.myRoleIds.includes(char.id) ? "In Person" : "AI Partner"}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {(
+                    {!currentActor.myRoleIds.includes(char.id) && (
                       <button
                         aria-label={isPreviewing === char.id ? `Stop preview for ${char.name}` : `Preview voice for ${char.name}`}
                         onClick={(e) => {
@@ -294,6 +282,32 @@ export function ActorAuthoringPanel({
                     >
                       <Trash className="w-4 h-4" />
                     </button>
+                  </div>
+                </div>
+
+                <div className="px-3 py-3 border-t border-border space-y-3">
+                  <div role="group" aria-label={`Who performs ${char.name}?`} className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
+                    {(['In Person', 'AI Partner'] as const).map(label => {
+                      const selected = currentActor.myRoleIds.includes(char.id) === (label === 'In Person');
+                      return <button key={label} type="button" aria-pressed={selected}
+                        onClick={() => setAssignment(char.id, label === 'In Person')}
+                        className={`flex items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-primary ${selected ? 'bg-background text-foreground shadow-sm ring-1 ring-border' : 'text-muted-foreground hover:text-foreground'}`}>
+                        {label === 'In Person' ? <User className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}{label}
+                      </button>;
+                    })}
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-medium">Character colour</span>
+                    <input type="color" aria-label={`Colour for ${char.name}`} value={getCharacterColor(char)}
+                      onChange={event => handleUpdateChar(char.id, { accentColor: event.target.value })}
+                      className="h-8 w-10 cursor-pointer rounded border border-border bg-transparent" />
+                  </div>
+                  <div role="group" aria-label={`Colour presets for ${char.name}`} className="flex flex-wrap gap-2">
+                    {CHARACTER_COLORS.map(color => <button key={color.value} type="button"
+                      aria-label={color.name} aria-pressed={getCharacterColor(char).toLowerCase() === color.value}
+                      onClick={() => handleUpdateChar(char.id, { accentColor: color.value })}
+                      className={`h-7 w-7 rounded-full border-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${getCharacterColor(char).toLowerCase() === color.value ? 'border-foreground ring-2 ring-background ring-offset-2 ring-offset-foreground' : 'border-foreground/20'}`}
+                      style={{ backgroundColor: color.value }} />)}
                   </div>
                 </div>
 
@@ -355,7 +369,7 @@ export function ActorAuthoringPanel({
                     </div>
 
                     </details>
-                    {(
+                    {!currentActor.myRoleIds.includes(char.id) && (
                       <div className="space-y-3 pt-3 border-t border-border">
                         <div className="space-y-1.5">
                           <label className="text-xs font-medium">Voice (Engine)</label>
@@ -408,7 +422,7 @@ export function ActorAuthoringPanel({
                           </select>
                           {!loadingVoices && (voiceLoadError || voices.length === 0) && (
                             <p role="status" className="text-xs text-muted-foreground">
-                              {voiceLoadError ? 'Could not list local voices. Retry or check the Mac speech helper installation.' : 'No confirmed local voices are available. Select every character as My role for silent turn cues, switch Partner audio off to read at your own pace, or choose an installed voice in the Mac app.'}
+                              {voiceLoadError ? 'Could not list local voices. Retry or check the Mac speech helper installation.' : 'No confirmed local voices are available. Assign every character as In Person for silent turn cues, switch Partner audio off to read at your own pace, or choose an installed voice in the Mac app.'}
                             </p>
                           )}
                         </div>
