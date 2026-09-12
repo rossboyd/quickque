@@ -5,8 +5,9 @@ import { isDesktop } from '@/lib/desktop';
 import { FlowSetupWizard } from '@/components/flow-setup-wizard';
 import { useLocalFlow } from '@/hooks/use-local-flow';
 import { tokenize } from '@/lib/flow/tokenize';
+import { BrandMark } from '@/components/brand-mark';
 import {
-  Play, MonitorPlay,
+  Play,
   FolderOpen, Mic, BookOpen, Keyboard, X,
   CheckCircle2, Loader2, AlertCircle
 } from 'lucide-react';
@@ -142,8 +143,8 @@ export function WelcomeWizard() {
             <div className="p-8 pb-6">
               {step === 0 && (
                 <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
-                  <div className="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-4">
-                    <MonitorPlay className="w-8 h-8" />
+                  <div className="w-20 h-20 bg-white border border-border rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4">
+                    <BrandMark className="w-12 h-10" />
                   </div>
                   <div className="text-center">
                     <h3 className="text-2xl font-bold mb-2">Welcome to Quickque</h3>
