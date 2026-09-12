@@ -156,6 +156,8 @@
 /* Base transparent overlay support */
 html.is-overlay, html.is-overlay body, html.is-overlay #root {
   background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 /* Scrollbar styles for modern minimal look */

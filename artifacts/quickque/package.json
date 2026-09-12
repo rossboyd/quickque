@@ -15,6 +15,7 @@
     "test:remote": "node --test src/lib/remote/*.test.ts src/lib/remote/*.test.mjs",
     "test:document-import": "node --import ./scripts/pdf-test-loader.mjs --test src/lib/document-import/*.test.ts src/lib/store-persistence.test.ts",
     "test:library": "node --test src/lib/library-management.test.ts src/lib/store-*.test.ts",
+    "test:reader-surface": "node --test src/lib/reader-surface.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -14,6 +14,7 @@ import { useRemoteStore } from '@/lib/remote/store';
 import { resolveCommandEffect } from '@/lib/remote/reducer';
 import type { RemoteSnapshot } from '@/lib/remote/types';
 import { invoke } from '@tauri-apps/api/core';
+import { getReaderSurfacePresentation } from '@/lib/reader-surface';
 
 export default function Reader() {
   const { scripts, settings, updateSettings } = useStore();
@@ -529,16 +530,15 @@ export default function Reader() {
     );
   }
 
-  const bgOpacity = settings.compactMode ? (settings.backgroundOpacity / 100) : 1;
-  const overlayClass = settings.compactMode ? 'fixed inset-0 m-2 rounded-xl border shadow-2xl overflow-hidden backdrop-blur-sm' : 'h-[100dvh] w-full';
+  const readerSurface = getReaderSurfacePresentation(
+    settings.compactMode,
+    settings.backgroundOpacity,
+  );
 
   return (
     <div 
-      className={`flex flex-col transition-all duration-300 ${overlayClass}`}
-      style={{
-        backgroundColor: `hsl(var(--background) / ${bgOpacity})`,
-        borderColor: settings.compactMode ? `hsl(var(--border) / 0.5)` : 'transparent',
-      }}
+      className={`flex flex-col transition-all duration-300 ${readerSurface.className}`}
+      style={readerSurface.style}
     >
       {/* Title Bar (Draggable in compact mode) */}
       <div 

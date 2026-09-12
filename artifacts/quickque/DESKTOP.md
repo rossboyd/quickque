@@ -256,6 +256,21 @@ above another application's exclusive full-screen Space. Screen sharing and
 recording software may capture the overlay, including during full-screen
 sharing; users should verify the selected capture source before presenting.
 
+### Transparent overlay acceptance check
+
+Browser transparency does not verify how the native macOS WebView composites
+the transparent window. Before releasing a packaged macOS build:
+
+1. Open Google Meet or an equivalent window showing a moving face or video.
+2. Place Quickque's compact overlay over the video.
+3. Set Background Opacity to 0%. The reading area must be fully clear and the
+   video beneath it must remain sharp, with no frosted or blurred region.
+4. Set Background Opacity to an intermediate value such as 40%. The video must
+   remain sharp beneath only the selected background tint.
+5. Confirm text, borders, status messages, and controls remain readable.
+6. Leave compact mode, exit the reader, reopen it, and switch between compact
+   and full reader modes. Full reader and library screens must remain opaque.
+
 ## Local data
 
 The web origin and Tauri application have separate `localStorage`. Existing web
