@@ -11,7 +11,7 @@ import { downloadFile } from '@/lib/library-management';
 import { isDesktop } from '@/lib/desktop';
 import { AppearanceControls } from '@/components/appearance-controls';
 import { PresentationControls } from '@/components/presentation-controls';
-import { FlowDebugPanel } from '@/components/flow-debug-panel';
+import { setFlowDebugVisible, useFlowDebugVisibility } from '@/lib/flow-debug-visibility';
 
 export function SettingsDialog() {
   const {
@@ -37,6 +37,8 @@ export function SettingsDialog() {
   const [reading, setReading] = useState(false);
   const [folderLoading, setFolderLoading] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
+  const [debugPreferenceError, setDebugPreferenceError] = useState(false);
+  const debugVisible = useFlowDebugVisibility();
   const fileInput = useRef<HTMLInputElement>(null);
 
   const handleChooseFolder = async () => {
@@ -272,13 +274,32 @@ export function SettingsDialog() {
           <hr className="border-border" />
 
           <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Debug</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Inspect in-memory Voice Follow checkpoints. Diagnostics contain no audio or transcripts.
-              </p>
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Debug</h3>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="font-medium">Show Flow debug panel</div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Display in-memory Voice Follow checkpoints at the bottom-left throughout the app. Diagnostics contain no audio or transcripts.
+                </p>
+              </div>
+              <label className="relative inline-flex shrink-0 cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  aria-label="Show Flow debug panel"
+                  className="sr-only peer"
+                  checked={debugVisible}
+                  onChange={event => {
+                    setDebugPreferenceError(!setFlowDebugVisible(event.target.checked));
+                  }}
+                />
+                <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
+              </label>
             </div>
-            <FlowDebugPanel initiallyOpen={false} />
+            {debugPreferenceError && (
+              <p role="alert" className="text-sm text-destructive">
+                Debug visibility will reset when Quickque closes because this preference could not be saved.
+              </p>
+            )}
           </div>
 
           <hr className="border-border" />

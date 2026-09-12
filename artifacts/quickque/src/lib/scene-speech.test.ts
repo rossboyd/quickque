@@ -4,8 +4,18 @@ import { test } from 'node:test';
 import {
   SceneSpeechError,
   createSceneSpeech,
+  voiceFailureMessage,
   type SceneSpeechDependencies,
 } from './scene-speech.ts';
+
+test('preview failures distinguish a broken helper from an unavailable voice', () => {
+  const missing = voiceFailureMessage(new SceneSpeechError('SCENE_SPEECH_HELPER_UNAVAILABLE', 'spawn failed'));
+  assert.match(missing, /Reinstall/);
+  assert.match(missing, /SCENE_SPEECH_HELPER_UNAVAILABLE/);
+  assert.match(voiceFailureMessage('SCENE_SPEECH_VOICE_UNAVAILABLE: gone'), /choose an installed voice/);
+  assert.match(voiceFailureMessage(new SceneSpeechError('SCENE_SPEECH_TIMEOUT', 'expired')), /did not finish/);
+  assert.match(voiceFailureMessage(new Error('SCENE_SPEECH_HELPER_FAILED: service failed')), /service failed/);
+});
 
 type FakeUtterance = {
   text: string;
@@ -288,4 +298,24 @@ test('a native stop failure prevents later scene playback from starting', async 
       error.code === 'SCENE_SPEECH_NATIVE_ERROR',
   );
   assert.equal(starts, 1);
+});
+
+test('native Chatterbox voices are retained and speech routes to the Turbo engine', async () => {
+  const requests: Record<string, unknown>[] = [];
+  const voice = { engine: 'turbo' as const, id: 'chatterbox-turbo:default-en', name: 'Chatterbox Default', language: 'en' };
+  const adapter = createSceneSpeech({ isDesktop: () => true, invoke: async <T>(command: string, args?: Record<string, unknown>): Promise<T> => {
+    if (command === 'scene_speech_list_local_voices') return { voices: [voice] } as T;
+    if (command === 'scene_speech_next_request_id') return 1 as T;
+    if (command === 'scene_speech_speak') requests.push(args!);
+    return undefined as T;
+  } });
+  assert.deepEqual(await adapter.listLocalVoices(), [voice]);
+  await adapter.speak('Your next line.', { engine: 'turbo', voiceId: voice.id, rate: 1 }, new AbortController().signal);
+  assert.deepEqual(requests, [{ text: 'Your next line.', engine: 'turbo', voiceId: voice.id, rate: 1, requestId: 1 }]);
+});
+
+test('Chatterbox stays unavailable in the browser instead of falling back to a system voice', async () => {
+  const { adapter, spoken } = browserHarness();
+  await assert.rejects(adapter.speak('Line', { engine: 'turbo', voiceId: 'chatterbox-turbo:default-en', rate: 1 }, new AbortController().signal), /SCENE_SPEECH_TURBO_UNSUPPORTED/);
+  assert.deepEqual(spoken, []);
 });

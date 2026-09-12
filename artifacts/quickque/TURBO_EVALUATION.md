@@ -12,6 +12,17 @@ listening quality, unified-memory use, cancellation and Flow coexistence could
 not be measured here. All Mac measurements below are **not run / unverified**.
 No CUDA benchmark or browser result substitutes for those measurements.
 
+## Implementation progress (2026-09-12)
+
+The user has specified an **M2 Mac with 24 GB RAM** and requested progress on
+Resemble. A developer-only [evaluation runner](scripts/turbo/README.md) now
+prepares hash-verified pinned model assets and measures the official MPS
+implementation with a separately cleared voice. Model preparation is explicit;
+normal evaluation is offline and does not save generated audio. Download,
+integrity, cancellation cleanup and voice-manifest validation have unit tests.
+No model weights were downloaded on this host, no cleared voice is available,
+and no Mac benchmark has run. This is not yet an app runtime or a release.
+
 ## Pinned source inspection (2026-09-12)
 
 These are evaluation pins, not an approved runtime lock:

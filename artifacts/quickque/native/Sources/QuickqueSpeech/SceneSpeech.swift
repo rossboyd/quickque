@@ -197,7 +197,11 @@ private func speak() throws {
     synthesizer.speak(utterance)
 
     let seconds = min(900.0, max(30.0, Double(request.text.count) * 1.5 + 10.0))
-    try delegate.waitForResult(until: Date().addingTimeInterval(seconds))
+    // AVSpeechSynthesizer delegates are weak. Keep both objects alive through
+    // asynchronous completion, including in optimized release builds.
+    try withExtendedLifetime((synthesizer, delegate)) {
+        try delegate.waitForResult(until: Date().addingTimeInterval(seconds))
+    }
     emit(["status": "finished"])
 }
 

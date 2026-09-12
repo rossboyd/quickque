@@ -4,7 +4,7 @@ import { generateId } from './utils.ts';
 
 /** Transcribed only from the Matilda screenshot supplied by the user. */
 export function createMatildaSample(voices: LocalVoice[] = [], now = Date.now(), idFactory = generateId): Script {
-  const english = voices.filter(voice => /^en(?:[-_]|$)/i.test(voice.language));
+  const english = voices.filter(voice => voice.engine === 'system' && /^en(?:[-_]|$)/i.test(voice.language));
   const cast = [
     { name: 'Matilda', accentColor: '#c084fc' },
     { name: 'Miss Honey', accentColor: '#f59e0b' },

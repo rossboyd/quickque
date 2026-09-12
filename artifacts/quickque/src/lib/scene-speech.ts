@@ -7,7 +7,7 @@ export type LocalVoice = {
   id: string;
   name: string;
   language: string;
-  engine: 'system';
+  engine: 'system' | 'turbo';
 };
 
 export type SceneSpeechVoice = {
@@ -70,6 +70,23 @@ export class SceneSpeechError extends Error {
   }
 }
 
+/** Preserve the failure category instead of sending every failure to Settings. */
+export function voiceFailureMessage(error: unknown): string {
+  const failure = normaliseNativeError(error);
+  const advice: Record<string, string> = {
+    SCENE_SPEECH_HELPER_UNAVAILABLE: 'Quickque could not launch its speech helper. Reinstall the Mac app from a complete build; refreshing voices cannot repair a missing helper.',
+    SCENE_SPEECH_HELPER_PROTOCOL: 'The speech helper returned an invalid response. Reinstall the Mac app from a complete build.',
+    SCENE_SPEECH_VOICE_REQUIRED: 'Choose an installed voice for this character, then preview it.',
+    SCENE_SPEECH_VOICE_UNAVAILABLE: 'This character’s saved voice is unavailable. Refresh the list and choose an installed voice. If necessary, install one in System Settings → Accessibility → Read & Speak.',
+    SCENE_SPEECH_TIMEOUT: 'The selected voice did not finish speaking. Try another installed voice. If all voices fail, restart Quickque.',
+    SCENE_SPEECH_STOP_FAILED: 'Quickque could not confirm speech stopped. Restart Quickque before trying again.',
+    SCENE_SPEECH_TURBO_UNAVAILABLE: 'Download Chatterbox in Scene Partner setup, then preview Chatterbox Default.',
+  };
+  return advice[failure.code]
+    ? `${advice[failure.code]} (${failure.code})`
+    : `Voice failed: ${failure.message.slice(0, 600)}`;
+}
+
 function cancellationError(): SceneSpeechError {
   return new SceneSpeechError(
     'SCENE_SPEECH_CANCELLED',
@@ -91,10 +108,10 @@ function normaliseNativeError(error: unknown): SceneSpeechError {
 }
 
 function validateRequest(text: string, voice: SceneSpeechVoice): void {
-  if (voice.engine === 'turbo') {
+  if (voice.engine === 'turbo' && (voice.voiceId !== 'chatterbox-turbo:default-en' || voice.rate !== 1)) {
     throw new SceneSpeechError(
       'SCENE_SPEECH_TURBO_UNAVAILABLE',
-      'Turbo speech is not installed or verified on this Mac.',
+      'Choose Chatterbox Default at its natural speaking rate.',
     );
   }
   if (!text.trim()) {
@@ -227,7 +244,7 @@ class SceneSpeechAdapter implements SceneSpeech {
         }
         return response.voices.filter(
           (voice): voice is LocalVoice =>
-            voice?.engine === 'system' &&
+            (voice?.engine === 'system' || voice?.engine === 'turbo') &&
             typeof voice.id === 'string' &&
             typeof voice.name === 'string' &&
             typeof voice.language === 'string' &&
@@ -273,6 +290,9 @@ class SceneSpeechAdapter implements SceneSpeech {
       await this.cancelActive();
       if (signal.aborted) throw cancellationError();
       const desktop = this.desktop();
+      if (voice.engine === 'turbo' && !desktop) {
+        throw new SceneSpeechError('SCENE_SPEECH_TURBO_UNSUPPORTED', 'Chatterbox runs in the Quickque Mac app. Open this performance there.');
+      }
       let requestId = 0;
       if (desktop) {
         try {
@@ -356,7 +376,7 @@ class SceneSpeechAdapter implements SceneSpeech {
           'System speech did not finish before its safety timeout.',
         ),
       ).catch(() => {});
-    }, speechTimeoutFor(text));
+    }, voice.engine === 'turbo' ? Math.max(180_000, speechTimeoutFor(text)) : speechTimeoutFor(text));
 
     const abort = () => {
       void cancel().catch(() => {});
@@ -382,6 +402,7 @@ class SceneSpeechAdapter implements SceneSpeech {
 
     void this.nativeInvoke('scene_speech_speak', {
       text,
+      engine: voice.engine,
       voiceId: voice.voiceId,
       rate: voice.rate,
       requestId,

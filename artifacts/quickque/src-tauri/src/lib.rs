@@ -12,6 +12,7 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager};
 mod remote;
+mod turbo;
 use remote::{RemoteInfo, RemoteService, RemoteSnapshot, RemoteStatus};
 
 mod local_library;
@@ -430,6 +431,7 @@ fn scene_speech_list_local_voices_native() -> Result<SceneSpeechVoiceList, Strin
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 fn scene_speech_speak_native(
     state: &SceneSpeechState,
+    mut command: Command,
     text: String,
     voice_id: String,
     rate: f32,
@@ -490,7 +492,7 @@ fn scene_speech_speak_native(
         return Err("SCENE_SPEECH_CANCELLED: Scene speech was cancelled before playback started.".to_string());
     }
 
-    let mut process = Command::new(scene_speech_helper_path()?)
+    let mut process = command
         .arg("--speak")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -1038,10 +1040,17 @@ fn scene_speech_next_request_id() -> Result<u64, String> {
 }
 
 #[tauri::command]
-async fn scene_speech_list_local_voices() -> Result<SceneSpeechVoiceList, String> {
+async fn scene_speech_list_local_voices(app: AppHandle) -> Result<SceneSpeechVoiceList, String> {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
-        tauri::async_runtime::spawn_blocking(scene_speech_list_local_voices_native)
+        tauri::async_runtime::spawn_blocking(move || {
+            let system = scene_speech_list_local_voices_native();
+            if turbo::status(&app).ok().and_then(|s| s.get("status").and_then(serde_json::Value::as_str).map(str::to_owned)).as_deref() == Some("ready") {
+                let mut voices = system.unwrap_or(SceneSpeechVoiceList { voices: vec![] });
+                voices.voices.push(SceneSpeechHelperVoice { id: turbo::VOICE_ID.into(), name: "Chatterbox Default".into(), language: "en".into(), engine: "turbo".into() });
+                Ok(voices)
+            } else { system }
+        })
             .await
             .map_err(|_| "SCENE_SPEECH_HELPER_FAILED: The local speech service did not complete.".to_string())?
     }
@@ -1054,6 +1063,8 @@ async fn scene_speech_list_local_voices() -> Result<SceneSpeechVoiceList, String
 
 #[tauri::command]
 async fn scene_speech_speak(
+    app: AppHandle,
+    engine: Option<String>,
     state: tauri::State<'_, AppState>,
     text: String,
     voice_id: String,
@@ -1062,6 +1073,16 @@ async fn scene_speech_speak(
 ) -> Result<(), String> {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
+        let command = match engine.as_deref().unwrap_or("system") {
+            "system" => Command::new(scene_speech_helper_path()?),
+            "turbo" => {
+                if voice_id != turbo::VOICE_ID || rate != 1.0 {
+                    return Err("SCENE_SPEECH_VOICE_UNAVAILABLE: Choose Chatterbox Default at its natural speaking rate.".into());
+                }
+                turbo::command(&app)?
+            },
+            _ => return Err("SCENE_SPEECH_VOICE_UNAVAILABLE: Unknown speech engine.".into()),
+        };
         let process = Arc::clone(&state.scene_speech.process);
         let spawn_lock = Arc::clone(&state.scene_speech.spawn_lock);
         tauri::async_runtime::spawn_blocking(move || {
@@ -1070,6 +1091,7 @@ async fn scene_speech_speak(
                     process,
                     spawn_lock,
                 },
+                command,
                 text,
                 voice_id,
                 rate,
@@ -1082,7 +1104,7 @@ async fn scene_speech_speak(
 
     #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
     {
-        let _ = (state, text, voice_id, rate, request_id);
+        let _ = (app, engine, state, text, voice_id, rate, request_id);
         Err("SCENE_SPEECH_UNSUPPORTED: Local system speech requires macOS on Apple Silicon.".to_string())
     }
 }
@@ -1126,11 +1148,17 @@ fn open_microphone_settings() -> Result<(), String> {
 fn open_system_voice_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
-            .arg("x-apple.systempreferences:com.apple.Accessibility-Settings.extension?SpokenContent")
-            .spawn()
-            .map(|_| ())
-            .map_err(|error| format!("Could not open system voice settings: {error}"))
+        // macOS pane URLs change between releases. Open the app reliably and
+        // show the Read & Speak navigation steps in Quickque.
+        let status = Command::new("open")
+            .args(["-b", "com.apple.systempreferences"])
+            .status()
+            .map_err(|error| format!("Could not open System Settings: {error}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err("macOS could not open System Settings.".to_string())
+        }
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -1196,9 +1224,13 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
+        .manage(turbo::InstallState::default())
         .manage(local_library::LocalLibraryState::default())
         .invoke_handler(tauri::generate_handler![
             flow_command,
+            turbo::turbo_status,
+            turbo::turbo_install,
+            turbo::turbo_cancel_install,
             scene_speech_next_request_id,
             scene_speech_list_local_voices,
             scene_speech_speak,
@@ -1226,6 +1258,7 @@ pub fn run() {
             let state = handle.state::<AppState>();
             state.flow.shutdown();
             let _ = state.scene_speech.stop();
+            let _ = turbo::cancel(&handle.state::<turbo::InstallState>());
             state.remote.stop();
         }
     });

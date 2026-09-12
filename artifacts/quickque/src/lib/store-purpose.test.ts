@@ -98,3 +98,11 @@ test('preflight reports every unassigned or empty turn and unavailable partner v
   script.sections[0].characterId = null;
   assert.equal(getSceneSetupIssues(script, new Set()).length, 0);
 });
+
+test('rehearsal accepts installed Chatterbox and blocks it until downloaded', () => {
+  const script = performance();
+  script.actor!.enabled = true;
+  script.actor!.characters[0].voice = { engine: 'turbo', voiceId: 'chatterbox-turbo:default-en', rate: 1 };
+  assert.deepEqual(getSceneSetupIssues(script, new Set(['chatterbox-turbo:default-en'])), []);
+  assert.equal(getSceneSetupIssues(script, new Set()).length, 1);
+});

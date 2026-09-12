@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import { FlowDebugOverlay } from '@/components/flow-debug-overlay';
 import { WelcomeWizard } from '@/components/welcome-wizard';
 import { recordFlowDebug } from '@/lib/flow/diagnostics';
 import { isDesktop } from '@/lib/desktop';
@@ -52,6 +53,7 @@ function App() {
           </WouterRouter>
           <Toaster />
         </TooltipProvider>
+        <FlowDebugOverlay />
       </div>
     </StoreProvider>
   );

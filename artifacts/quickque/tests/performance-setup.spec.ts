@@ -242,3 +242,45 @@ test('Matilda sample opens as an independent performance with roles, colours and
   await expect(page.getByRole('textbox', { name: 'Script Title', exact: true })).toHaveValue('Matilda · Classroom sample');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('quickque_scripts')!).scripts.length)).toBe(2);
 });
+
+test('voice preview explains missing selection and refresh confirms the installed list', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { configurable: true, value: class { text: string; constructor(text: string) { this.text = text; } } });
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
+      getVoices: () => [{ voiceURI: 'test-local', name: 'Local test voice', lang: 'en-GB', localService: true }],
+      speak: (utterance: any) => { queueMicrotask(() => utterance.onerror({ error: 'synthesis-failed' })); },
+      cancel: () => {},
+    } });
+  });
+  await openLibrary(page);
+  await createPerformance(page);
+  await page.getByRole('button', { name: 'Scene Partner setup', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Character', exact: true }).click();
+  await page.getByRole('button', { name: 'Preview voice for New Character', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'SCENE_SPEECH_VOICE_REQUIRED' })).toBeVisible();
+  await page.getByRole('button', { name: 'Refresh voices', exact: true }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: '1 installed voice found' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'SCENE_SPEECH_VOICE_REQUIRED' })).toHaveCount(0);
+  await page.getByRole('combobox', { name: 'Voice Selection', exact: true }).selectOption('test-local');
+  await page.getByRole('button', { name: 'Preview voice for New Character', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'synthesis-failed' })).toBeVisible();
+});
+
+test('free Chatterbox voice can be assigned and persists without enabling browser synthesis', async ({ page }) => {
+  await openLibrary(page);
+  await createPerformance(page);
+  await page.getByRole('button', { name: 'Scene Partner setup', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Character', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Voice Engine', exact: true }).selectOption('turbo');
+  await expect(page.getByText('Chatterbox Turbo · Free local voice', { exact: true })).toBeVisible();
+  await expect(page.getByText('Open the Quickque Mac app to download and use Chatterbox.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Voice Selection', exact: true })).toHaveValue('chatterbox-turbo:default-en');
+  await page.getByRole('button', { name: 'Preview voice for New Character', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'SCENE_SPEECH_TURBO_UNSUPPORTED' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close scene partner cast' }).click();
+  await page.reload();
+  await page.getByRole('button', { name: 'Scene Partner setup', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit New Character', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Voice Engine', exact: true })).toHaveValue('turbo');
+  await expect(page.getByRole('combobox', { name: 'Voice Selection', exact: true })).toHaveValue('chatterbox-turbo:default-en');
+});

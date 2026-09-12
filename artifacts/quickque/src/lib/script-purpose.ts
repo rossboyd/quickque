@@ -27,7 +27,7 @@ export function getSceneSetupIssues(script: Script, availableVoiceIds?: Readonly
   });
   actor.characters.forEach(character => {
     if (!assigned.has(character.id) || actor.myRoleIds.includes(character.id)) return;
-    if (character.voice.engine !== 'system' || !character.voice.voiceId ||
+    if (!character.voice.voiceId ||
       (availableVoiceIds && !availableVoiceIds.has(character.voice.voiceId))) {
       issues.push({ characterId: character.id, message: `${character.name}: choose an available local voice in Scene Partner setup.` });
     }

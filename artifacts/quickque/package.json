@@ -1,7 +1,6 @@
 {
   "name": "@workspace/quickque",
   "version": "0.0.0",
-
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -11,8 +10,8 @@
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "native:build": "sh scripts/build-flow-helper.sh",
     "native:test": "cd native && swift test",
-    "desktop:dev": "pnpm native:build && tauri dev --config src-tauri/tauri.conf.json",
-    "desktop:build": "pnpm icons:check && pnpm native:build && pnpm desktop:test-native && tauri build --config src-tauri/tauri.conf.json && sh scripts/check-mac-icon.sh",
+    "desktop:dev": "pnpm native:build && pnpm turbo:build && tauri dev --config src-tauri/tauri.conf.json",
+    "desktop:build": "pnpm icons:check && pnpm native:build && pnpm turbo:build && pnpm desktop:test-native && tauri build --config src-tauri/tauri.conf.json && sh scripts/check-mac-icon.sh",
     "icons:prepare": "python3 scripts/prepare-icons.py",
     "icons:check": "node scripts/check-icons.mjs",
     "desktop:check-icon": "sh scripts/check-mac-icon.sh",
@@ -29,7 +28,9 @@
     "test:scene-speech": "node --test src/lib/scene-speech.test.ts",
     "test:reader-browser": "playwright test tests/reader-regression.spec.ts tests/presentation-timing.spec.ts tests/performance-setup.spec.ts --reporter=line",
     "test:resume": "node --test src/lib/reader-resume-position.test.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "turbo:build": "sh scripts/build-turbo-runtime.sh",
+    "turbo:test": "python3 -m unittest discover -s turbo -p 'test_*.py'"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

@@ -1,6 +1,7 @@
+import { ChatterboxSetup } from './chatterbox-setup';
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash, Users, User, Mic, Volume2, AlertCircle, Square, RefreshCw } from 'lucide-react';
-import { listLocalVoices, createSceneSpeech, type LocalVoice } from '@/lib/scene-speech';
+import { listLocalVoices, createSceneSpeech, voiceFailureMessage, type LocalVoice } from '@/lib/scene-speech';
 import type { ActorCharacter, ActorMode, ScriptSection } from '@/lib/types';
 import { CHARACTER_COLORS, getCharacterColor, nextCharacterColor } from '@/lib/actor-colors';
 import { toast } from '@/hooks/use-toast';
@@ -32,9 +33,11 @@ export function ActorAuthoringPanel({
 }) {
   const currentActor = actor || { enabled: false, characters: [], myRoleIds: [] };
   const [voices, setVoices] = useState<LocalVoice[]>([]);
-  const [voiceLoadError, setVoiceLoadError] = useState(false);
+  const [voiceLoadError, setVoiceLoadError] = useState<string | null>(null);
+  const [voiceRefreshStatus, setVoiceRefreshStatus] = useState<string | null>(null);
+  const voiceLoadGeneration = useRef(0);
   const [loadingVoices, setLoadingVoices] = useState(true);
-  const [voiceSettingsError, setVoiceSettingsError] = useState<string | null>(null);
+  const [voiceSettingsMessage, setVoiceSettingsMessage] = useState<string | null>(null);
   const [editingCharId, setEditingCharId] = useState<string | null>(null);
   
   // Deletion state
@@ -42,31 +45,41 @@ export function ActorAuthoringPanel({
   const [reassignToId, setReassignToId] = useState<string | 'unassign'>('unassign');
 
   const loadVoices = async () => {
+    const generation = ++voiceLoadGeneration.current;
     setLoadingVoices(true);
-    setVoiceLoadError(false);
+    setVoiceLoadError(null);
+    setVoiceRefreshStatus(null);
     try {
       const localVoices = await listLocalVoices();
+      if (generation !== voiceLoadGeneration.current) return;
       setVoices(localVoices);
-    } catch {
-      setVoiceLoadError(true);
+      setPreviewError(null);
+      setVoiceRefreshStatus(`${localVoices.length} installed ${localVoices.length === 1 ? "voice" : "voices"} found. Refresh checks the list; it does not install voices. Choose a voice and preview it.`);
+    } catch (error) {
+      if (generation === voiceLoadGeneration.current) {
+        setVoices([]);
+        setVoiceLoadError(voiceFailureMessage(error));
+      }
     } finally {
-      setLoadingVoices(false);
+      if (generation === voiceLoadGeneration.current) setLoadingVoices(false);
     }
   };
 
   const handleOpenVoiceSettings = async () => {
-    setVoiceSettingsError(null);
+    setVoiceSettingsMessage(null);
     try {
       await openSystemVoiceSettings();
+      setVoiceSettingsMessage("In System Settings, choose Accessibility → Read & Speak → System voice → Manage Voices. After installing a voice, return to Quickque and refresh the list.");
     } catch {
-      setVoiceSettingsError(
+      setVoiceSettingsMessage(
         'Could not open System Settings. Open Accessibility → Read & Speak manually.',
       );
     }
   };
 
   useEffect(() => {
-    loadVoices();
+    void loadVoices();
+    return () => { voiceLoadGeneration.current += 1; };
   }, []);
 
   const speechRef = useRef(createSceneSpeech());
@@ -167,9 +180,9 @@ export function ActorAuthoringPanel({
         char.voice,
         controller.signal
       );
-    } catch {
+    } catch (error) {
       if (!controller.signal.aborted && abortControllerRef.current === controller) {
-        setPreviewError('Voice preview failed. Refresh local voices, choose an installed system voice, then retry.');
+        setPreviewError(voiceFailureMessage(error));
       }
     } finally {
       if (abortControllerRef.current === controller) {
@@ -240,7 +253,9 @@ export function ActorAuthoringPanel({
       {(
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           <p className="text-sm font-medium">1. Add cast · 2. Assign In Person or AI Partner · 3. Assign turns in the editor · 4. Preview partner voices · 5. Rehearse</p>
-          <p className="text-xs text-muted-foreground">Choose In Person for characters you or another person will perform. AI Partner reads its lines using a local system voice. Give each character a colour to recognise their turns. All In Person means silent cues; all AI Partner means a full read-through.</p>
+          <p className="text-xs text-muted-foreground">Choose In Person for characters you or another person will perform. AI Partner reads its lines using a local voice. Give each character a colour to recognise their turns. All In Person means silent cues; all AI Partner means a full read-through.</p>
+          {voiceRefreshStatus && <p role="status" className="text-xs text-muted-foreground">{voiceRefreshStatus}</p>}
+          {voiceLoadError && <p role="alert" className="text-sm text-destructive">{voiceLoadError}</p>}
           {previewError && (
             <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm">
               <p className="text-destructive">{previewError}</p>
@@ -260,12 +275,12 @@ export function ActorAuthoringPanel({
                     onClick={() => void handleOpenVoiceSettings()}
                     className="font-medium text-primary hover:underline"
                   >
-                    Open Mac voice settings
+                    Open System Settings
                   </button>
                 )}
               </div>
-              {voiceSettingsError && (
-                <p className="mt-2 text-xs text-destructive">{voiceSettingsError}</p>
+              {voiceSettingsMessage && (
+                <p role="status" className="mt-2 text-xs text-muted-foreground">{voiceSettingsMessage}</p>
               )}
             </div>
           )}
@@ -416,20 +431,18 @@ export function ActorAuthoringPanel({
                           <select
                             aria-label="Voice Engine"
                             value={char.voice.engine}
-                            onChange={(e) => handleUpdateChar(char.id, { voice: { ...char.voice, engine: e.target.value as 'system'|'turbo' } })}
+                            onChange={(e) => {
+                              const engine = e.target.value as 'system' | 'turbo';
+                              handleUpdateChar(char.id, { voice: { engine, voiceId: engine === 'turbo' ? 'chatterbox-turbo:default-en' : '', rate: 1 } });
+                            }}
                             className="w-full bg-transparent border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
                           >
                             <option value="system">System (Local)</option>
-                            <option value="turbo" disabled>Turbo (Unavailable)</option>
+                            <option value="turbo">Chatterbox Turbo (Free · Local)</option>
                           </select>
                         </div>
                         
-                        {char.voice.engine === 'turbo' && (
-                          <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-md text-xs flex gap-2">
-                            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                            <p>Turbo is unavailable: Apple Silicon performance, a rights-cleared voice pack and self-contained packaging are not verified. Choose a system voice explicitly.</p>
-                          </div>
-                        )}
+                        {char.voice.engine === 'turbo' && <ChatterboxSetup onReady={() => void loadVoices()} />}
 
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between">
@@ -449,26 +462,26 @@ export function ActorAuthoringPanel({
                             value={char.voice.voiceId}
                             onChange={(e) => handleUpdateChar(char.id, { voice: { ...char.voice, voiceId: e.target.value } })}
                             className="w-full bg-transparent border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
-                            disabled={char.voice.engine === 'turbo' || voices.length === 0 || loadingVoices}
+                            disabled={char.voice.engine === 'turbo' || voices.filter(v => v.engine === char.voice.engine).length === 0 || loadingVoices}
                           >
-                            {!loadingVoices && voices.length > 0 && !voices.some(voice => voice.id === char.voice.voiceId) &&
+                            {char.voice.engine === 'system' && !loadingVoices && voices.length > 0 && !voices.some(voice => voice.id === char.voice.voiceId) &&
                               <option value={char.voice.voiceId}>{char.voice.voiceId ? 'Saved voice unavailable — choose a voice' : 'Choose a local voice'}</option>}
-                            {loadingVoices ? (
+                            {char.voice.engine === 'turbo' ? <option value="chatterbox-turbo:default-en">Chatterbox Default (English)</option> : loadingVoices ? (
                               <option value="">Loading voices...</option>
                             ) : voices.length === 0 ? (
                               <option value="">No voices found...</option>
                             ) : (
-                              voices.map(v => (
+                              voices.filter(v => v.engine === char.voice.engine).map(v => (
                                 <option key={v.id} value={v.id}>{v.name} ({v.language})</option>
                               ))
                             )}
                           </select>
-                          {!loadingVoices && (voiceLoadError || voices.length === 0) && (
+                          {char.voice.engine === 'system' && !loadingVoices && (voiceLoadError || voices.length === 0) && (
                             <p role="status" className="text-xs text-muted-foreground">
-                              {voiceLoadError ? 'Could not list local voices. Refresh voices or check the Mac speech helper installation.' : 'No confirmed local voices are available. Install a macOS system voice, then return here and select Refresh voices.'}
+                              {voiceLoadError ? voiceLoadError : 'No confirmed local voices are available. Install a macOS system voice, then return here and select Refresh voices.'}
                             </p>
                           )}
-                          {isDesktop() && (
+                          {isDesktop() && char.voice.engine === 'system' && (
                             <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
                               <p>
                                 To install voices, open System Settings → Accessibility → Read & Speak → System voice → Manage Voices.
@@ -478,10 +491,10 @@ export function ActorAuthoringPanel({
                                 onClick={() => void handleOpenVoiceSettings()}
                                 className="mt-2 font-medium text-primary hover:underline"
                               >
-                                Open Mac voice settings
+                                Open System Settings
                               </button>
-                              {voiceSettingsError && (
-                                <p role="alert" className="mt-2 text-destructive">{voiceSettingsError}</p>
+                              {voiceSettingsMessage && (
+                                <p role="status" className="mt-2">{voiceSettingsMessage}</p>
                               )}
                             </div>
                           )}
