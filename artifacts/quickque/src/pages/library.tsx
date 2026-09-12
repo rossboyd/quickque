@@ -1,3 +1,4 @@
+import { listLocalVoices } from '@/lib/scene-speech';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocation } from 'wouter';
@@ -66,6 +67,7 @@ export default function Library() {
   
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [creatingSample, setCreatingSample] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [droppedError, setDroppedError] = useState<string | null>(null);
@@ -150,19 +152,6 @@ export default function Library() {
     );
   }, [scripts, trash, search, sortMode, customOrder, viewMode]);
 
-  const visibleItemIds = visibleItems.map(item => item.id);
-  const allSelected = visibleItemIds.length > 0 && visibleItemIds.every(id => selectedIds.includes(id));
-  const someSelected = visibleItemIds.some(id => selectedIds.includes(id));
-
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds(selectedIds.filter(id => !visibleItemIds.includes(id)));
-    } else {
-      const newSelected = new Set([...selectedIds, ...visibleItemIds]);
-      setSelectedIds(Array.from(newSelected));
-    }
-  };
-
   const handleCreate = () => setShowCreate(true);
 
   const createWithPurpose = (purpose: 'presentation' | 'performance') => {
@@ -171,6 +160,22 @@ export default function Library() {
     if (res) setShowCreate(false);
     setSearch('');
     if (res) setIsMobileEditorOpen(true);
+  };
+
+  const createSample = async () => {
+    if (creatingSample) return;
+    setCreatingSample(true);
+    try {
+      // Discover installed voices only; never download or start speech here.
+      const voices = await listLocalVoices().catch(() => []);
+      const id = createScript('performance', { kind: 'matilda', voices });
+      if (id) {
+        setViewMode('library');
+        setSearch('');
+        setShowCreate(false);
+        setIsMobileEditorOpen(true);
+      }
+    } finally { setCreatingSample(false); }
   };
 
   const handleDuplicate = (id: string) => {
@@ -391,22 +396,9 @@ export default function Library() {
         )}
 
         {viewMode === 'trash' && <p className="px-5 pb-3 text-[11px] text-muted-foreground">Kept on this device until you permanently delete them.</p>}
-        <div className={cn("flex flex-wrap gap-2 items-center justify-between px-5 py-2 text-xs border-y border-sidebar-border min-h-11", selectedIds.length > 0 && "bg-primary/5")}>
-          {visibleItems.length > 0 && (
-            <label className="flex items-center gap-2 cursor-pointer text-muted-foreground hover:text-foreground">
-              <input 
-                type="checkbox" 
-                checked={allSelected} 
-                ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
-                onChange={toggleSelectAll}
-                className="w-4 h-4 rounded border-border accent-primary cursor-pointer"
-                aria-label={allSelected ? "Deselect visible scripts" : "Select visible scripts"}
-              />
-               <span>{selectedIds.length > 0 ? `${selectedIds.length} selected` : 'Select all shown'}</span>
-            </label>
-          )}
-
-          {selectedIds.length > 0 && (
+        {selectedIds.length > 0 && (
+          <div className="flex flex-wrap gap-2 items-center justify-between px-5 py-2 text-xs border-y border-sidebar-border min-h-11 bg-primary/5">
+            <span className="text-muted-foreground">{selectedIds.length} selected</span>
             <div className="flex items-center gap-1">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -449,8 +441,8 @@ export default function Library() {
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {visibleItems.length === 0 ? (
@@ -602,24 +594,29 @@ export default function Library() {
         "flex-1 flex-col min-w-0 bg-background relative overflow-hidden",
         isMobileEditorOpen ? "flex" : "hidden md:flex"
       )}>
-        <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <Dialog open={showCreate} onOpenChange={open => { if (!creatingSample) setShowCreate(open); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>What are you preparing?</DialogTitle>
             <DialogDescription>Choose your script type. You can change it in the editor anytime.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
-            <button onClick={() => createWithPurpose('presentation')} className="rounded-xl border border-border p-5 text-left hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            <button disabled={creatingSample} onClick={() => createWithPurpose('presentation')} className="rounded-xl border border-border p-5 text-left hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
               <MonitorPlay className="mb-3 h-6 w-6 text-primary" />
               <span className="block font-semibold">Presentation</span>
               <span className="mt-2 block text-sm text-muted-foreground">Talks, meetings and videos. Organize your script into sections.</span>
             </button>
-            <button onClick={() => createWithPurpose('performance')} className="rounded-xl border border-border p-5 text-left hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            <button disabled={creatingSample} onClick={() => createWithPurpose('performance')} className="rounded-xl border border-border p-5 text-left hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
               <FileText className="mb-3 h-6 w-6 text-primary" />
               <span className="block font-semibold">Performance / Self-tape</span>
               <span className="mt-2 block text-sm text-muted-foreground">Cast your scene, choose your role and rehearse with a local scene partner.</span>
             </button>
           </div>
+          <button disabled={creatingSample} onClick={createSample} className="rounded-xl border border-primary/25 bg-primary/5 p-4 text-left hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">
+            <span className="block font-semibold">{creatingSample ? 'Preparing sample…' : 'Try Matilda sample'}</span>
+            <span className="mt-1 block text-sm text-muted-foreground">Play Matilda in person. Miss Honey, Nigel and Lavender are AI Partners, with colours and stage notes set up.</span>
+            <span className="mt-2 block text-xs text-muted-foreground">14 dialogue turns · Uses installed English voices when available. You can change roles and voices in Scene Partner.</span>
+          </button>
         </DialogContent>
       </Dialog>
       <DocumentImportDialog

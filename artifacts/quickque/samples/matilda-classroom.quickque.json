@@ -1,0 +1,157 @@
+[
+  {
+    "id": "matilda-sample-5",
+    "title": "Matilda · Classroom sample",
+    "purpose": "performance",
+    "createdAt": 1789225916000,
+    "updatedAt": 1789225916000,
+    "actor": {
+      "enabled": true,
+      "characters": [
+        {
+          "name": "Matilda",
+          "accentColor": "#c084fc",
+          "id": "matilda-sample-1",
+          "age": "",
+          "gender": "",
+          "style": "",
+          "voice": {
+            "engine": "system",
+            "voiceId": "",
+            "rate": 1
+          }
+        },
+        {
+          "name": "Miss Honey",
+          "accentColor": "#f59e0b",
+          "id": "matilda-sample-2",
+          "age": "",
+          "gender": "",
+          "style": "",
+          "voice": {
+            "engine": "system",
+            "voiceId": "",
+            "rate": 1
+          }
+        },
+        {
+          "name": "Nigel",
+          "accentColor": "#38bdf8",
+          "id": "matilda-sample-3",
+          "age": "",
+          "gender": "",
+          "style": "",
+          "voice": {
+            "engine": "system",
+            "voiceId": "",
+            "rate": 1
+          }
+        },
+        {
+          "name": "Lavender",
+          "accentColor": "#fb7185",
+          "id": "matilda-sample-4",
+          "age": "",
+          "gender": "",
+          "style": "",
+          "voice": {
+            "engine": "system",
+            "voiceId": "",
+            "rate": 1
+          }
+        }
+      ],
+      "myRoleIds": [
+        "matilda-sample-1"
+      ]
+    },
+    "sections": [
+      {
+        "id": "matilda-sample-6",
+        "title": "1. Nigel",
+        "content": "Me, me, me, oooh, oooh, me, pick me miss, I can, mememememe—",
+        "characterId": "matilda-sample-3"
+      },
+      {
+        "id": "matilda-sample-7",
+        "title": "2. Miss Honey",
+        "content": "Very well, Nigel.",
+        "characterId": "matilda-sample-2",
+        "notes": "After this line: NIGEL opens his mouth to speak, but nothing comes out."
+      },
+      {
+        "id": "matilda-sample-8",
+        "title": "3. Miss Honey",
+        "content": "Yes, I think we’d better leave it there, Nigel, we don’t want you to burst a blood vessel on your first day.",
+        "characterId": "matilda-sample-2",
+        "notes": "After this line: NIGEL droops on his desk."
+      },
+      {
+        "id": "matilda-sample-9",
+        "title": "4. Miss Honey",
+        "content": "Lavender?",
+        "characterId": "matilda-sample-2"
+      },
+      {
+        "id": "matilda-sample-10",
+        "title": "5. Lavender",
+        "content": "Is the first word... tomato?",
+        "characterId": "matilda-sample-4"
+      },
+      {
+        "id": "matilda-sample-11",
+        "title": "6. Miss Honey",
+        "content": "Um, no. But tomato is a very good word.",
+        "characterId": "matilda-sample-2"
+      },
+      {
+        "id": "matilda-sample-12",
+        "title": "7. Lavender",
+        "content": "Yessss!",
+        "characterId": "matilda-sample-4"
+      },
+      {
+        "id": "matilda-sample-13",
+        "title": "8. Miss Honey",
+        "content": "Matilda?",
+        "characterId": "matilda-sample-2"
+      },
+      {
+        "id": "matilda-sample-14",
+        "title": "9. Matilda",
+        "content": "I can now read words.",
+        "characterId": "matilda-sample-1"
+      },
+      {
+        "id": "matilda-sample-15",
+        "title": "10. Miss Honey",
+        "content": "So Matilda, you can read words?",
+        "characterId": "matilda-sample-2"
+      },
+      {
+        "id": "matilda-sample-16",
+        "title": "11. Matilda",
+        "content": "Well, I needed to learn to read words so that I could read sentences because basically a sentence is just a big bunch of words. And if you can’t read sentences you’ve got no chance with books.",
+        "characterId": "matilda-sample-1"
+      },
+      {
+        "id": "matilda-sample-17",
+        "title": "12. Miss Honey",
+        "content": "And... have you read a whole book yourself?",
+        "characterId": "matilda-sample-2"
+      },
+      {
+        "id": "matilda-sample-18",
+        "title": "13. Matilda",
+        "content": "More than one. I love books. Last week I read quite a few.",
+        "characterId": "matilda-sample-1"
+      },
+      {
+        "id": "matilda-sample-19",
+        "title": "14. Miss Honey",
+        "content": "A few? What books did you read?",
+        "characterId": "matilda-sample-2"
+      }
+    ]
+  }
+]

@@ -220,3 +220,25 @@ test('Markdown storage failure retains the draft and supports retry', async ({ p
   await page.getByRole('button', { name: 'Back to sections', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Script Title', exact: true })).toHaveValue('Keep this draft');
 });
+
+test('Matilda sample opens as an independent performance with roles, colours and notes', async ({ page }) => {
+  await openLibrary(page);
+  await page.getByRole('button', { name: 'New script', exact: true }).click();
+  await page.getByRole('button', { name: 'Try Matilda sample' }).click();
+  await expect(page.getByRole('textbox', { name: 'Script Title', exact: true })).toHaveValue('Matilda · Classroom sample');
+  await expect(page.getByRole('combobox', { name: 'Script type' })).toHaveValue('performance');
+  await expect(page.getByRole('combobox', { name: 'Character for turn 1', exact: true }).locator('option:checked')).toHaveText('Nigel · AI Partner');
+  await expect(page.getByRole('combobox', { name: 'Character for turn 9', exact: true }).locator('option:checked')).toHaveText('Matilda · In Person');
+  await expect(page.getByRole('textbox', { name: 'Turn content for "2. Miss Honey"' })).toHaveValue('Very well, Nigel.');
+  await page.getByRole('button', { name: 'Markdown', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Script Markdown' })).toHaveValue(/> After this line: NIGEL opens his mouth/);
+  await page.getByRole('button', { name: 'Back to sections', exact: true }).click();
+  await page.getByRole('button', { name: 'Scene Partner setup', exact: true }).click();
+  await expect(page.getByRole('group', { name: 'Who performs Matilda?', exact: true }).getByRole('button', { name: 'In Person', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('group', { name: 'Who performs Miss Honey?', exact: true }).getByRole('button', { name: 'AI Partner', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Colour for Matilda', { exact: true })).toHaveValue('#c084fc');
+  await page.getByRole('button', { name: 'Close scene partner cast' }).click();
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Script Title', exact: true })).toHaveValue('Matilda · Classroom sample');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('quickque_scripts')!).scripts.length)).toBe(2);
+});

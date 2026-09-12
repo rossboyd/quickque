@@ -1,5 +1,4 @@
 import { useEffect, type ReactNode } from 'react';
-import { FlowDebugOverlay } from '@/components/flow-debug-overlay';
 import { WelcomeWizard } from '@/components/welcome-wizard';
 import { recordFlowDebug } from '@/lib/flow/diagnostics';
 import { isDesktop } from '@/lib/desktop';
@@ -44,8 +43,6 @@ function App() {
     recordFlowDebug(isDesktop() ? 'ui_desktop' : 'ui_browser');
   }, []);
   return (
-    <>
-    <FlowDebugOverlay />
     <StoreProvider>
       <div className="contents" data-quickque-ready>
         <TooltipProvider>
@@ -57,7 +54,6 @@ function App() {
         </TooltipProvider>
       </div>
     </StoreProvider>
-    </>
   );
 }
 

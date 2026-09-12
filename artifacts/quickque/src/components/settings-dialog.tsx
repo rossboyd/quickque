@@ -11,6 +11,7 @@ import { downloadFile } from '@/lib/library-management';
 import { isDesktop } from '@/lib/desktop';
 import { AppearanceControls } from '@/components/appearance-controls';
 import { PresentationControls } from '@/components/presentation-controls';
+import { FlowDebugPanel } from '@/components/flow-debug-panel';
 
 export function SettingsDialog() {
   const {
@@ -266,6 +267,18 @@ export function SettingsDialog() {
                 {importFailed && error && <p className="mt-1">{error}</p>}
               </div>
             )}
+          </div>
+
+          <hr className="border-border" />
+
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Debug</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Inspect in-memory Voice Follow checkpoints. Diagnostics contain no audio or transcripts.
+              </p>
+            </div>
+            <FlowDebugPanel initiallyOpen={false} />
           </div>
 
           <hr className="border-border" />

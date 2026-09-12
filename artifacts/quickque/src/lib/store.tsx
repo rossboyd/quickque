@@ -1,3 +1,5 @@
+import { createMatildaSample } from './sample-performance.ts';
+import type { LocalVoice } from './scene-speech.ts';
 import {
   useState,
   useEffect,
@@ -80,7 +82,7 @@ type StoreContextType = {
     updates: Partial<PresentationPreferences>,
   ) => boolean;
   resetScriptPresentation: (id: string) => boolean;
-  createScript: (purpose?: Script['purpose']) => string;
+  createScript: (purpose?: Script['purpose'], sample?: { kind: 'matilda'; voices: LocalVoice[] }) => string;
   updateScript: (
     id: string,
     updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt' | 'presentation'>>,
@@ -754,7 +756,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return true;
   }, []);
 
-  const createScript = useCallback((purpose: Script['purpose'] = 'presentation') => {
+  const createScript = useCallback((purpose: Script['purpose'] = 'presentation', sample?: { kind: 'matilda'; voices: LocalVoice[] }) => {
     const usedIds = collectScriptIds(scriptsRef.current, trashRef.current);
     const newId = freshId(usedIds);
     const sectionId = freshId(usedIds);
@@ -774,6 +776,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       presentation: normalizePresentation(presentationDefaultsRef.current),
       sections: [{ id: sectionId, title: purpose === 'performance' ? 'Turn 1' : 'Section 1', content: '' }],
     };
+    if (sample) {
+      try {
+        const prepared = createMatildaSample(sample.voices, now, () => {
+          const id = freshId(usedIds);
+          if (!id) throw new Error('Could not create unique sample IDs.');
+          return id;
+        });
+        Object.assign(newScript, prepared, { id: newId, presentation: newScript.presentation });
+      } catch {
+        setError('Could not create unique sample IDs.');
+        return '';
+      }
+    }
     const nextOrder = [newId, ...customOrderRef.current.filter(id => id !== newId)];
     return commitLibrary({
       scripts: [newScript, ...scriptsRef.current],
@@ -1663,7 +1678,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setSettings((previous) => ({ ...previous, ...newSettings }));
   }, []);
 
-  const createScript = useCallback((purpose: Script['purpose'] = 'presentation') => {
+  const createScript = useCallback((purpose: Script['purpose'] = 'presentation', sample?: { kind: 'matilda'; voices: LocalVoice[] }) => {
     const newId = generateId();
     const now = Date.now();
     const newScript: Script = {
@@ -1681,7 +1696,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         },
       ],
     };
-    commitUserScripts([newScript, ...scriptsRef.current]);
+    if (sample) Object.assign(newScript, createMatildaSample(sample.voices, now), { id: newId });
+    if (!commitUserScripts([newScript, ...scriptsRef.current], true)) return '';
     setActiveScriptId(newId);
     return newId;
   }, [commitUserScripts]);

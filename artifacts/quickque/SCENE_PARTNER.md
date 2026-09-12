@@ -4,6 +4,20 @@ Quickque can read the other characters while you perform one or several roles.
 Use a phone or separate camera to make your self-tape. **Quickque does not
 record video or audio, save takes or export generated speech.**
 
+## Try the Matilda sample
+
+Choose **New script** → **Try Matilda sample** to create an editable copy of
+**Matilda · Classroom sample**. It contains the 14 dialogue turns visible in
+the user-supplied screenshot and the two Nigel stage directions as notes.
+Matilda is In Person (violet); Miss Honey (amber), Nigel (sky) and Lavender
+(rose) are AI Partners. Installed English voices are selected when available;
+otherwise choose local voices in Scene Partner before rehearsing.
+
+An existing Mac build can import `samples/matilda-classroom.quickque.json`
+through **Settings & backups** → **Import Backup JSON**. That portable file
+leaves device-specific voices unset. Each sample copy is independent of your
+other scripts; the original welcome script and existing libraries are retained.
+
 ## Set up a scene
 
 1. Choose **New script** → **Performance / Self-tape**, then open **Scene Partner**.

@@ -94,3 +94,5 @@ The requested product name is Quickque. The user wants a lightweight personal Ma
 - Cast assignments use In Person / AI Partner; the existing myRoleIds representation remains compatible. Optional six-digit accentColor persists through all actor cloning and exports.
 - Rehearsal has persistent Now / Up next cues, character accents on dialogue and explicit assignment labels, including mirrored layouts.
 - Markdown opens a full-script draft with explicit Save script: # title, ## section, **Name:** character turn, > notes. Existing cast configuration stays intact; new characters default to AI Partner with an unused palette accent. Parse or storage errors keep the draft open.
+
+- Matilda classroom sample: New script → Try Matilda sample creates a separate performance from the user-provided screenshot. Matilda is In Person; Miss Honey, Nigel and Lavender are AI Partners with distinct colours. Fourteen dialogue turns and two stage notes; selects only installed English voices. Portable import is in artifacts/quickque/samples/matilda-classroom.quickque.json.
