@@ -1,3 +1,4 @@
+import './workspace.css';
 import { listLocalVoices } from '@/lib/scene-speech';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '@/lib/store';
@@ -66,6 +67,7 @@ export default function Library() {
   } = store;
   
   const [search, setSearch] = useState('');
+  const [libraryVisible, setLibraryVisible] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [creatingSample, setCreatingSample] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -277,29 +279,29 @@ export default function Library() {
       <div className="flex flex-1 overflow-hidden relative">
         {/* SIDEBAR */}
         <div className={cn(
-          "flex-shrink-0 border-r border-border bg-sidebar flex-col z-10 shadow-sm relative transition-all duration-300",
-          "w-full md:w-[336px]",
+          "workspace-library flex-shrink-0 border-r border-border bg-sidebar flex-col z-10 relative",
+          libraryVisible ? "w-full md:w-[264px]" : "w-full md:!hidden",
           isMobileEditorOpen ? "hidden md:flex" : "flex"
         )}>
-        <div className="p-5 pb-4 space-y-5">
+        <div className="p-4 pb-4 space-y-6">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold tracking-tight text-sidebar-foreground flex items-center gap-2">
               <BrandMark className="w-6 h-5" />
               Quickque
             </h1>
-            <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Workspace</span>
+
           </div>
-          <div className="grid grid-cols-[1fr_1.2fr] gap-2">
+          <div className="flex flex-col gap-1.5">
             <button
               onClick={handleCreate}
-              className="flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+              className="flex items-center justify-center gap-2 rounded-lg bg-sidebar-accent px-3 py-2.5 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
             >
               <Plus className="h-4 w-4" />
               New script
             </button>
             <button
               onClick={() => setIsImportOpen(true)}
-              className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-sidebar-border px-2 py-2.5 text-[13px] font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Import Document"
             >
               <FileUp className="h-4 w-4" />
@@ -307,11 +309,11 @@ export default function Library() {
             </button>
           </div>
 
-          <nav aria-label="Script library" className="grid grid-cols-2 gap-1 rounded-lg bg-sidebar-accent/40 p-1">
+          <nav aria-label="Script library" className="flex flex-col gap-1">
             <button
               className={cn(
                 "flex items-center justify-center gap-2 text-sm px-2 py-2 rounded-md transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                viewMode === 'library' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                viewMode === 'library' ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               aria-current={viewMode === 'library' ? 'page' : undefined}
               onClick={() => { setViewMode('library'); setSearch(''); }}
@@ -323,7 +325,7 @@ export default function Library() {
             <button
               className={cn(
                 "flex items-center justify-center gap-2 text-sm px-2 py-2 rounded-md transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                viewMode === 'trash' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                viewMode === 'trash' ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               aria-current={viewMode === 'trash' ? 'page' : undefined}
               onClick={() => { setViewMode('trash'); setSearch(''); }}
@@ -341,7 +343,7 @@ export default function Library() {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder={viewMode === 'trash' ? 'Search Trash…' : 'Search all script content…'}
+                placeholder={viewMode === 'trash' ? 'Search Trash…' : 'Search scripts…'}
                 aria-label="Search scripts"
                 className="w-full pl-9 pr-8 py-2.5 bg-background border border-sidebar-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
               />
@@ -422,8 +424,8 @@ export default function Library() {
                   onDrop={(e) => handleDrop(e, script.id)}
                   onDragEnd={handleDragEnd}
                   className={cn(
-                    "group flex items-center justify-between p-2 rounded-lg transition-colors",
-                    isActive ? "bg-primary text-primary-foreground shadow-sm" : "hover:bg-sidebar-accent text-sidebar-foreground",
+                    "group flex items-center justify-between px-3 py-3 rounded-md transition-colors",
+                    isActive ? "bg-sidebar-accent text-sidebar-foreground" : "hover:bg-sidebar-accent text-sidebar-foreground",
                     dragOverId === script.id && "border-t-2 border-primary",
                     draggedId === script.id && "opacity-50"
                   )}
@@ -459,23 +461,9 @@ export default function Library() {
                           {script.title || 'Untitled Script'}
                         </button>
                       )}
-                      <span className="mt-1 rounded-full border border-current/20 px-2 py-0.5 text-[10px] font-semibold tracking-wide">{isPerformance ? 'Performance' : 'Presentation'}</span>
-                      {viewMode === 'library' && isPerformance ? (
-                        <div className="text-xs mt-1 opacity-90 space-y-1">
-                          <p>{getPerformanceSummary(script)}</p>
-                          <p>{!script.actor?.enabled ? 'Partner audio off' : setupIssues.length ? `${setupIssues.length} setup ${setupIssues.length === 1 ? 'issue' : 'issues'}` : 'Ready · voices checked at rehearsal'}</p>
-                        </div>
-                      ) : viewMode === 'library' ? (
-                        <div className="text-xs mt-0.5 opacity-80 flex items-center gap-2">
-                          <span>{totalWords} words</span>
-                          <span>•</span>
-                          <span>~{formatTime(timeSec)}</span>
-                        </div>
-                      ) : (
-                        <div className="text-xs mt-0.5 opacity-80">
-                          Deleted {itemInTrash ? new Date(itemInTrash.deletedAt).toLocaleDateString() : ''}
-                        </div>
-                      )}
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {viewMode === 'trash' ? `Deleted ${itemInTrash ? new Date(itemInTrash.deletedAt).toLocaleDateString() : ''}` : `${isPerformance ? 'Performance' : 'Presentation'} · ${isPerformance ? `${script.sections.length} turns` : formatTime(timeSec)}`}
+                      </p>
                     </div>
                   </div>
                   
@@ -595,6 +583,8 @@ export default function Library() {
             onChange={(updates) => updateScript(activeScript.id, updates)} 
             onPresent={handlePresent}
             onCloseMobile={() => setIsMobileEditorOpen(false)}
+            libraryVisible={libraryVisible}
+            onToggleLibrary={() => setLibraryVisible(value => !value)}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8">

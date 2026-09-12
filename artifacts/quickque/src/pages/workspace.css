@@ -1,0 +1,28 @@
+/* Quiet navigation, a narrow reading measure, and contextual editing controls. */
+.workspace-editor { background: hsl(var(--card)); }
+.editor-toolbar, .editor-canvas { background: hsl(var(--card)); }
+.workspace-library { background: hsl(var(--muted) / .55); }
+.document-heading input { padding-bottom: .25rem; }
+.document-section[style] { padding-left: 1rem; }
+.document-section input:focus-visible, .document-text:focus-visible {
+  outline: 2px solid hsl(var(--primary) / .45);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.section-notes summary { width: fit-content; }
+@media (hover: hover) and (min-width: 768px) {
+  .section-tools { opacity: .2; transition: opacity 120ms ease; }
+  .document-section:hover .section-tools,
+  .document-section:focus-within .section-tools { opacity: 1; }
+}
+@media (max-width: 767px) {
+  .editor-toolbar > div > div:first-child { flex: 1 1 100%; }
+  .editor-toolbar > div > div:last-child { margin-left: auto; }
+  .document-section[style] { padding-left: .5rem; }
+}
+.workspace-library nav button { justify-content: flex-start; padding-inline: .75rem; }
+.workspace-library nav button span { margin-left: auto; }
+@media (min-width: 768px) {
+  .section-reorder { position: absolute; left: -28px; top: 10px; }
+}
+.document-heading input:focus-visible { outline: 2px solid hsl(var(--primary) / .45); outline-offset: 4px; border-radius: 3px; }

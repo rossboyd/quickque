@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { calculateWordCount, estimateTime, formatTime, generateId } from '@/lib/utils';
-import { Play, Plus, Trash, ChevronUp, ChevronDown, ChevronLeft, Users, SplitSquareVertical } from 'lucide-react';
+import { Play, Plus, Trash, ChevronUp, ChevronDown, ChevronLeft, Users, PanelLeft, SplitSquareVertical } from 'lucide-react';
 import { Script, ScriptSection, Settings, DEFAULT_SETTINGS } from '@/lib/types';
 import { MAX_SECTIONS } from '@/lib/store-persistence';
 import { getFontFamilyCss, getTextColorCss } from '@/lib/appearance';
@@ -26,12 +26,16 @@ export function Editor({
   onChange, 
   onPresent, 
   onCloseMobile,
+  libraryVisible = true,
+  onToggleLibrary,
   settings = DEFAULT_SETTINGS,
 }: { 
   script: Script; 
   onChange: (u: Partial<Script>) => boolean; 
   onPresent: () => void; 
   onCloseMobile: () => void;
+  libraryVisible?: boolean;
+  onToggleLibrary?: () => void;
   settings?: Settings;
 }) {
   const script = baseScript as ActorScript;
@@ -69,6 +73,26 @@ export function Editor({
   const timeSec = estimateTime(totalWords);
   const [showActorPanel, setShowActorPanel] = useState(false);
   const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
+  const documentRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const grow = () => {
+      textareaRefs.current.forEach(field => {
+        field.style.height = 'auto';
+        field.style.height = `${Math.max(96, field.scrollHeight)}px`;
+      });
+    };
+    grow();
+    const document = documentRef.current;
+    if (!document) return;
+    let width = document.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (document.clientWidth === width) return;
+      width = document.clientWidth;
+      grow();
+    });
+    observer.observe(document);
+    return () => observer.disconnect();
+  }, [script.sections, settings.fontFamily]);
 
   const addSection = () => {
     onChange({
@@ -151,10 +175,10 @@ export function Editor({
   const isActorEnabled = isPerformance && (script.actor?.enabled ?? false);
 
   return (
-    <div className="flex-1 flex overflow-hidden relative">
+    <div className="workspace-editor flex-1 flex overflow-hidden relative">
       <div className="flex-1 flex flex-col overflow-hidden relative">
-        <div className="flex-shrink-0 border-b border-border bg-background z-10 px-4 md:px-8 py-4 md:py-6">
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-start justify-between gap-4 max-w-4xl mx-auto">
+        <div className="editor-toolbar flex-shrink-0 border-b border-border z-10 px-4 md:px-6 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <button 
                 onClick={onCloseMobile}
@@ -163,13 +187,45 @@ export function Editor({
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
-              <div className="flex-1 min-w-0">
-                <input 
+              <button type="button" onClick={onToggleLibrary} aria-label={libraryVisible ? 'Hide library' : 'Show library'} aria-expanded={libraryVisible} className="hidden md:inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"><PanelLeft className="h-4 w-4" /></button>
+              <span className="hidden sm:inline text-sm text-muted-foreground">Workspace <span className="mx-2 opacity-40">/</span></span>
+              <span className="truncate text-sm font-medium">{script.title || 'Untitled script'}</span>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button onClick={() => setShowMarkdown(true)} className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">Markdown</button>
+              {isPerformance && <button
+                aria-label="Scene Partner setup"
+                onClick={() => setShowActorPanel(true)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors text-sm border focus:outline-none focus:ring-2 focus:ring-primary ${
+                  isActorEnabled 
+                    ? 'bg-transparent text-foreground border-border hover:bg-muted'
+                    : 'bg-background border-border text-foreground hover:bg-muted'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span className="hidden sm:inline">Scene Partner</span>
+              </button>}
+              <button 
+                onClick={startReader}
+                disabled={checkingVoices}
+                className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+              >
+                <Play className="w-4 h-4 md:w-5 md:h-5 fill-current" />
+                {checkingVoices ? 'Checking voices…' : isPerformance ? 'Rehearse' : 'Present'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="editor-canvas flex-1 overflow-y-auto px-4 md:px-10 py-8 md:py-12">
+          <div ref={documentRef} className="editor-document max-w-[760px] mx-auto space-y-7 pb-24">
+            <div className="document-heading pb-7 border-b border-border">              <div className="flex-1 min-w-0">
+                <input
                   type="text"
                   value={script.title}
                   onChange={e => onChange({ title: e.target.value })}
                   maxLength={200}
-                  className="w-full bg-transparent text-2xl md:text-3xl font-bold text-foreground focus:outline-none placeholder:text-muted-foreground/50 truncate"
+                  className="w-full bg-transparent text-3xl md:text-[42px] leading-tight font-semibold tracking-tight text-foreground focus:outline-none placeholder:text-muted-foreground/50 truncate"
                   placeholder="Script Title"
                   aria-label="Script Title"
                 />
@@ -178,7 +234,7 @@ export function Editor({
                     const purpose = event.target.value as 'presentation' | 'performance';
                     onChange({ purpose, ...(purpose === 'performance' && !script.actor ? { actor: { enabled: true, characters: [], myRoleIds: [] } } : {}) });
                     setShowActorPanel(false);
-                  }} className="rounded-full border border-primary/20 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                  }} className="rounded-md border border-border bg-transparent px-2 py-1 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                     <option value="presentation">Presentation</option>
                     <option value="performance">Performance</option>
                   </select>
@@ -189,50 +245,19 @@ export function Editor({
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button onClick={() => setShowMarkdown(true)} className="rounded-full border border-border px-3 py-2 text-sm font-medium hover:bg-muted">Markdown</button>
-              {isPerformance && <button
-                aria-label="Scene Partner setup"
-                onClick={() => setShowActorPanel(true)}
-                className={`flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-full font-medium transition-colors text-sm border focus:outline-none focus:ring-2 focus:ring-primary ${
-                  isActorEnabled 
-                    ? 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20' 
-                    : 'bg-background border-border text-foreground hover:bg-muted'
-                }`}
-              >
-                <Users className="w-4 h-4" />
-                <span className="hidden sm:inline">Scene Partner</span>
-              </button>}
-              <button 
-                onClick={startReader}
-                disabled={checkingVoices}
-                className="flex-shrink-0 flex items-center gap-2 px-4 md:px-6 py-2.5 md:py-3 bg-primary text-primary-foreground font-medium rounded-full shadow-lg shadow-black/10 dark:shadow-black/30 hover:bg-primary/90 hover:-translate-y-0.5 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
-              >
-                <Play className="w-4 h-4 md:w-5 md:h-5 fill-current" />
-                {checkingVoices ? 'Checking voices…' : isPerformance ? 'Rehearse' : 'Present'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6">
-          <div className="max-w-4xl mx-auto space-y-6 pb-32">
-            {isPerformance && <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
-              <p className="text-sm font-medium">{getPerformanceSummary(script)}</p>
-              <p className="text-sm text-muted-foreground">Add cast → assign In Person or AI Partner → choose colours → assign dialogue → rehearse.</p>
-              <p className="text-xs text-muted-foreground">Record on another camera. Quickque never records.</p>
-              <div className="flex flex-wrap items-center gap-3 text-sm">
-                <span role="status">{!isActorEnabled ? 'Partner audio off · rehearse at your own pace' : setupIssues.length ? `${setupIssues.length} setup ${setupIssues.length === 1 ? 'issue' : 'issues'} to resolve` : 'Ready · local voices checked before rehearsal'}</span>
-                <button onClick={() => setShowActorPanel(true)} className="font-medium text-primary underline underline-offset-4">Set up cast & voices</button>
-                {isActorEnabled && setupIssues.length > 0 && <button onClick={() => setPreflightIssues(setupIssues)} className="font-medium text-primary underline underline-offset-4">Review setup</button>}
+            {isPerformance && <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+              <p>{getPerformanceSummary(script)}</p>
+              <div className="flex items-center gap-3">
+                <span role="status">{!isActorEnabled ? 'Partner audio off' : setupIssues.length ? `${setupIssues.length} setup ${setupIssues.length === 1 ? 'issue' : 'issues'}` : 'Ready to rehearse'}</span>
+                {isActorEnabled && setupIssues.length > 0 && <button onClick={() => setPreflightIssues(setupIssues)} className="font-medium text-primary hover:underline">Review setup</button>}
               </div>
             </div>}
             {script.sections.map((section, idx) => (
-              <div key={section.id} style={isPerformance ? { borderLeftWidth: 4, borderLeftColor: getCharacterColor(script.actor?.characters.find(character => character.id === section.characterId)) } : undefined} className="group relative bg-card rounded-xl border border-card-border shadow-sm focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/40 transition-all">
-                <div className="flex flex-col border-b border-card-border bg-muted/30 rounded-t-xl min-w-0">
-                  <div className="flex items-center justify-between p-3">
+              <div key={section.id} style={isPerformance ? { borderLeftWidth: 4, borderLeftColor: getCharacterColor(script.actor?.characters.find(character => character.id === section.characterId)) } : undefined} className="document-section group relative border-b border-border/70 pb-6 focus-within:border-primary/40 transition-colors">
+                <div className="flex flex-col min-w-0">
+                  <div className="flex items-center justify-between gap-2 py-2">
                     <div className="flex items-center flex-1 gap-2 min-w-0">
-                      <div className="flex flex-col text-muted-foreground flex-shrink-0">
+                      <div className="section-tools section-reorder flex flex-col text-muted-foreground flex-shrink-0">
                         <button 
                           onClick={() => moveSection(idx, -1)} 
                           disabled={idx === 0}
@@ -261,7 +286,7 @@ export function Editor({
                       />
                     </div>
                     
-                    <div className="flex items-center gap-2 transition-opacity flex-shrink-0">
+                    <div className="section-tools flex items-center gap-1 transition-opacity flex-shrink-0">
                       <button
                         onClick={() => splitSection(section.id)}
                         className="p-1.5 text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10 rounded focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
@@ -270,7 +295,7 @@ export function Editor({
                       >
                         <SplitSquareVertical className="w-4 h-4" />
                       </button>
-                      <div className="text-xs text-muted-foreground font-mono bg-background px-2 py-1 rounded border hidden sm:block">
+                      <div className="text-xs text-muted-foreground px-2 py-1 hidden sm:block">
                         {calculateWordCount(section.content)} w
                       </div>
                       {script.sections.length > 1 && (
@@ -286,7 +311,7 @@ export function Editor({
                     </div>
                   </div>
                   
-                  <div className="flex flex-wrap items-center gap-3 px-3 md:px-11 pb-3 pt-1">
+                  <div className="flex flex-wrap items-center gap-3 px-2 pb-3 pt-1">
                     {isPerformance && (
                       <div className="flex items-center gap-2">
                         <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full border border-foreground/20" style={{ backgroundColor: getCharacterColor(script.actor?.characters.find(character => character.id === section.characterId)) }} />
@@ -304,7 +329,9 @@ export function Editor({
                         </select>
                       </div>
                     )}
-                    <div className="flex-1 min-w-[200px] flex items-center gap-2">
+                    <details className="section-notes flex-1 min-w-[180px] text-xs text-muted-foreground" open={section.notes ? true : undefined}>
+                      <summary className="cursor-pointer py-1">{section.notes ? 'Notes' : 'Add a note'}</summary>
+                      <div className="flex items-center gap-2 pt-1">
                       <label className="text-xs font-medium text-muted-foreground">Notes:</label>
                       <input
                         type="text"
@@ -312,8 +339,10 @@ export function Editor({
                         onChange={(e) => updateSection(section.id, { notes: e.target.value })}
                         className="flex-1 bg-background border border-border text-sm rounded-md px-2 py-1 focus:outline-none focus:border-primary"
                         placeholder="Action, emotion, or direction..."
+                        aria-label={`Notes for ${sectionLabel} ${idx + 1}`}
                       />
-                    </div>
+                      </div>
+                    </details>
                   </div>
                 </div>
                 
@@ -325,7 +354,7 @@ export function Editor({
                   value={section.content}
                   onChange={e => updateSection(section.id, { content: e.target.value })}
                   maxLength={500000}
-                  className="w-full bg-transparent text-foreground p-4 min-h-[160px] resize-y focus:outline-none leading-relaxed"
+                  className="document-text w-full bg-transparent text-foreground px-2 py-3 min-h-[96px] resize-none overflow-hidden focus:outline-none leading-[1.85]"
                   placeholder="Type your script here..."
                   aria-label={`${isPerformance ? 'Turn' : 'Section'} content for "${section.title}"`}
                   style={{
@@ -341,7 +370,7 @@ export function Editor({
               onClick={addSection}
               disabled={script.sections.length >= MAX_SECTIONS}
               title={script.sections.length >= MAX_SECTIONS ? `Maximum 500 ${sectionLabel}s reached` : undefined}
-              className="w-full py-4 border-2 border-dashed border-border rounded-xl text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors flex items-center justify-center gap-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              className="py-2 px-3 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex items-center gap-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <Plus className="w-5 h-5" />
               Add {isPerformance ? 'Turn' : 'Section'}
