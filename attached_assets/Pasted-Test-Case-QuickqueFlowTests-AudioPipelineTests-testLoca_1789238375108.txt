@@ -1,0 +1,103 @@
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testLocaleMatchingNormalizesBCP47Separators]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testNormalizedRingKeepsNewestFramesAndReportsDiscontinuity]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testNormalizedRingKeepsNewestFramesAndReportsDiscontinuity]' passed (0.016 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testPendingAudioLevelsCoalesceToNewestTelemetry]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testPendingAudioLevelsCoalesceToNewestTelemetry]' passed (0.002 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testRawAndNormalizedBatchConstantsAreBounded]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testRawAndNormalizedBatchConstantsAreBounded]' passed (0.000 seconds).
+Test Suite 'AudioPipelineTests' passed at 2026-09-12 19:39:17.926.
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.045 (0.046) seconds
+Test Suite 'PipeReadTests' started at 2026-09-12 19:39:17.926.
+Test Case '-[QuickqueFlowTests.PipeReadTests testPipeEndOfFileReturnsNil]' started.
+Test Case '-[QuickqueFlowTests.PipeReadTests testPipeEndOfFileReturnsNil]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.PipeReadTests testShortCommandReturnsWhileWriterRemainsOpen]' started.
+Test Case '-[QuickqueFlowTests.PipeReadTests testShortCommandReturnsWhileWriterRemainsOpen]' passed (0.000 seconds).
+Test Suite 'PipeReadTests' passed at 2026-09-12 19:39:17.926.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'QuickqueFlowPackageTests.xctest' passed at 2026-09-12 19:39:17.926.
+	 Executed 26 tests, with 0 failures (0 unexpected) in 0.319 (0.321) seconds
+Test Suite 'All tests' passed at 2026-09-12 19:39:17.927.
+	 Executed 26 tests, with 0 failures (0 unexpected) in 0.319 (0.322) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
+[1/1] Planning build
+Building for production...
+[15/15] Linking QuickqueFlowPackageTests
+Build complete! (5.95s)
+Test Suite 'All tests' started at 2026-09-12 19:39:24.357.
+Test Suite 'QuickqueFlowPackageTests.xctest' started at 2026-09-12 19:39:24.358.
+Test Suite 'AudioExportTests' started at 2026-09-12 19:39:24.358.
+Test Case '-[QuickqueAudioExportTests.AudioExportTests testExportsPlayableAACInMP4AndProtectsExistingDestination]' started.
+Test Case '-[QuickqueAudioExportTests.AudioExportTests testExportsPlayableAACInMP4AndProtectsExistingDestination]' passed (0.070 seconds).
+Test Suite 'AudioExportTests' passed at 2026-09-12 19:39:24.428.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.070 (0.071) seconds
+Test Suite 'AudioInputTests' started at 2026-09-12 19:39:24.429.
+Test Case '-[QuickqueFlowTests.AudioInputTests testCopySupportsMonoStereoPlanarAndInterleavedAndRejectsShortBytes]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testCopySupportsMonoStereoPlanarAndInterleavedAndRejectsShortBytes]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizer44100StereoSineIsChunkingStableAndStreamsBeforeEOS]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizer44100StereoSineIsChunkingStableAndStreamsBeforeEOS]' passed (0.002 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerAccepts44100HzStereoAndFinishesExpectedDuration]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerAccepts44100HzStereoAndFinishesExpectedDuration]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerAccumulates48KOutputAcrossChunksAndFinish]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerAccumulates48KOutputAcrossChunksAndFinish]' passed (0.001 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerFinishIsIdempotentAndRejectsInputAfterEOS]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerFinishIsIdempotentAndRejectsInputAfterEOS]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerRejectsRouteChangesAndNonFiniteSamples]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerRejectsRouteChangesAndNonFiniteSamples]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testRejectsMoreThanOneSecondOfAudioInATap]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testRejectsMoreThanOneSecondOfAudioInATap]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testTapCopiesOnAConcurrentCallbackAndPreservesSession]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testTapCopiesOnAConcurrentCallbackAndPreservesSession]' passed (0.002 seconds).
+Test Suite 'AudioInputTests' passed at 2026-09-12 19:39:24.436.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+Test Suite 'AudioPipelineTests' started at 2026-09-12 19:39:24.436.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testAnalyzerConverterDrainsPersistentResamplingContinuously]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testAnalyzerConverterDrainsPersistentResamplingContinuously]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testAnalyzerConverterUsesCanonicalBuffersWithoutModels]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testAnalyzerConverterUsesCanonicalBuffersWithoutModels]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testAudioLevelRejectsEmptyAndNonFiniteSamples]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testAudioLevelRejectsEmptyAndNonFiniteSamples]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testAudioLevelTelemetryCannotCreateQueueGapOrDisplaceCriticalEvents]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testAudioLevelTelemetryCannotCreateQueueGapOrDisplaceCriticalEvents]' passed (0.011 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testAudioLevelUsesRMSDecibelsAndExactZeroForSilence]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testAudioLevelUsesRMSDecibelsAndExactZeroForSilence]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testClassifierProgressIsOrderedAndOnlyClassifiedTimeAdvancesSilence]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testClassifierProgressIsOrderedAndOnlyClassifiedTimeAdvancesSilence]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testCriticalEventEvictsPendingLevelAtQueueCapacity]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testCriticalEventEvictsPendingLevelAtQueueCapacity]' passed (0.011 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testDelayedClassifierCannotCreateFalseQuietStop]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testDelayedClassifierCannotCreateFalseQuietStop]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testDiscontinuityWakesAnEmptyRingBeforeNewAudio]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testDiscontinuityWakesAnEmptyRingBeforeNewAudio]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testDroppedFramesUseActualPCMRateAndLengthNotChannelsOrCapacity]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testDroppedFramesUseActualPCMRateAndLengthNotChannelsOrCapacity]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testHealthyClassifierLagStillStopsAfterClassifiedSilence]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testHealthyClassifierLagStillStopsAfterClassifiedSilence]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testLocaleMatchingNormalizesBCP47Separators]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testLocaleMatchingNormalizesBCP47Separators]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testNormalizedRingKeepsNewestFramesAndReportsDiscontinuity]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testNormalizedRingKeepsNewestFramesAndReportsDiscontinuity]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testPendingAudioLevelsCoalesceToNewestTelemetry]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testPendingAudioLevelsCoalesceToNewestTelemetry]' passed (0.002 seconds).
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testRawAndNormalizedBatchConstantsAreBounded]' started.
+Test Case '-[QuickqueFlowTests.AudioPipelineTests testRawAndNormalizedBatchConstantsAreBounded]' passed (0.000 seconds).
+Test Suite 'AudioPipelineTests' passed at 2026-09-12 19:39:24.464.
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.027 (0.028) seconds
+Test Suite 'PipeReadTests' started at 2026-09-12 19:39:24.464.
+Test Case '-[QuickqueFlowTests.PipeReadTests testPipeEndOfFileReturnsNil]' started.
+Test Case '-[QuickqueFlowTests.PipeReadTests testPipeEndOfFileReturnsNil]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.PipeReadTests testShortCommandReturnsWhileWriterRemainsOpen]' started.
+Test Case '-[QuickqueFlowTests.PipeReadTests testShortCommandReturnsWhileWriterRemainsOpen]' passed (0.000 seconds).
+Test Suite 'PipeReadTests' passed at 2026-09-12 19:39:24.464.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'QuickqueFlowPackageTests.xctest' passed at 2026-09-12 19:39:24.464.
+	 Executed 26 tests, with 0 failures (0 unexpected) in 0.105 (0.107) seconds
+Test Suite 'All tests' passed at 2026-09-12 19:39:24.464.
+	 Executed 26 tests, with 0 failures (0 unexpected) in 0.105 (0.107) seconds
+Usage: quickque-audio-export --input <audio.wav> --output <new.mp4>
+ ELIFECYCLE  Command failed with exit code 1.
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/quickque@0.0.0 desktop:build: `pnpm icons:check && pnpm native:build && pnpm turbo:build && pnpm desktop:test-native && tauri build --config src-tauri/tauri.conf.json && sh scripts/check-mac-icon.sh`
+Exit status 1
+rossboyd@Rosss-MacBook-Air-2 native % 
