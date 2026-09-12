@@ -1123,6 +1123,23 @@ fn open_microphone_settings() -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_system_voice_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.Accessibility-Settings.extension?SpokenContent")
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("Could not open system voice settings: {error}"))
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("System voice settings are available only on macOS.".to_string())
+    }
+}
+
+#[tauri::command]
 fn remote_start(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<RemoteInfo, String> {
     let info = state.remote.start()?;
     let _ = app.emit("quickque:remote", serde_json::json!({"type":"started","info":info}));
@@ -1187,6 +1204,7 @@ pub fn run() {
             scene_speech_speak,
             scene_speech_stop,
             open_microphone_settings,
+            open_system_voice_settings,
             remote_start,
             remote_stop,
             remote_approve,

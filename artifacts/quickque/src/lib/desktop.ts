@@ -215,3 +215,9 @@ export async function openMicrophoneSettings(): Promise<void> {
     await invoke('open_microphone_settings');
   }
 }
+
+export async function openSystemVoiceSettings(): Promise<void> {
+  if (isDesktop()) {
+    await invoke('open_system_voice_settings');
+  }
+}

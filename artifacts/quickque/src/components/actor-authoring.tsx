@@ -5,6 +5,7 @@ import type { ActorCharacter, ActorMode, ScriptSection } from '@/lib/types';
 import { CHARACTER_COLORS, getCharacterColor, nextCharacterColor } from '@/lib/actor-colors';
 import { toast } from '@/hooks/use-toast';
 import { generateId } from '@/lib/utils';
+import { isDesktop, openSystemVoiceSettings } from '@/lib/desktop';
 import {
   Dialog,
   DialogContent,
@@ -33,6 +34,7 @@ export function ActorAuthoringPanel({
   const [voices, setVoices] = useState<LocalVoice[]>([]);
   const [voiceLoadError, setVoiceLoadError] = useState(false);
   const [loadingVoices, setLoadingVoices] = useState(true);
+  const [voiceSettingsError, setVoiceSettingsError] = useState<string | null>(null);
   const [editingCharId, setEditingCharId] = useState<string | null>(null);
   
   // Deletion state
@@ -49,6 +51,17 @@ export function ActorAuthoringPanel({
       setVoiceLoadError(true);
     } finally {
       setLoadingVoices(false);
+    }
+  };
+
+  const handleOpenVoiceSettings = async () => {
+    setVoiceSettingsError(null);
+    try {
+      await openSystemVoiceSettings();
+    } catch {
+      setVoiceSettingsError(
+        'Could not open System Settings. Open Accessibility → Read & Speak manually.',
+      );
     }
   };
 
@@ -228,7 +241,34 @@ export function ActorAuthoringPanel({
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           <p className="text-sm font-medium">1. Add cast · 2. Assign In Person or AI Partner · 3. Assign turns in the editor · 4. Preview partner voices · 5. Rehearse</p>
           <p className="text-xs text-muted-foreground">Choose In Person for characters you or another person will perform. AI Partner reads its lines using a local system voice. Give each character a colour to recognise their turns. All In Person means silent cues; all AI Partner means a full read-through.</p>
-          {previewError && <p role="alert" className="text-sm text-destructive">{previewError}</p>}
+          {previewError && (
+            <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm">
+              <p className="text-destructive">{previewError}</p>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void loadVoices()}
+                  disabled={loadingVoices}
+                  className="flex items-center gap-1 font-medium text-primary hover:underline disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loadingVoices ? 'animate-spin' : ''}`} />
+                  Refresh voices
+                </button>
+                {isDesktop() && (
+                  <button
+                    type="button"
+                    onClick={() => void handleOpenVoiceSettings()}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    Open Mac voice settings
+                  </button>
+                )}
+              </div>
+              {voiceSettingsError && (
+                <p className="mt-2 text-xs text-destructive">{voiceSettingsError}</p>
+              )}
+            </div>
+          )}
           <div className="space-y-4">
             {currentActor.characters.map((char) => (
               <div
@@ -394,12 +434,15 @@ export function ActorAuthoringPanel({
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between">
                             <label className="text-xs font-medium">Voice Selection</label>
-                            {voiceLoadError && (
-                              <button onClick={loadVoices} className="flex items-center gap-1 text-[10px] text-destructive hover:text-destructive/80 transition-colors">
-                                <RefreshCw className="w-3 h-3" />
-                                Retry
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => void loadVoices()}
+                              disabled={loadingVoices}
+                              className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${loadingVoices ? 'animate-spin' : ''}`} />
+                              Refresh voices
+                            </button>
                           </div>
                           <select
                             aria-label="Voice Selection"
@@ -422,8 +465,25 @@ export function ActorAuthoringPanel({
                           </select>
                           {!loadingVoices && (voiceLoadError || voices.length === 0) && (
                             <p role="status" className="text-xs text-muted-foreground">
-                              {voiceLoadError ? 'Could not list local voices. Retry or check the Mac speech helper installation.' : 'No confirmed local voices are available. Assign every character as In Person for silent turn cues, switch Partner audio off to read at your own pace, or choose an installed voice in the Mac app.'}
+                              {voiceLoadError ? 'Could not list local voices. Refresh voices or check the Mac speech helper installation.' : 'No confirmed local voices are available. Install a macOS system voice, then return here and select Refresh voices.'}
                             </p>
+                          )}
+                          {isDesktop() && (
+                            <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                              <p>
+                                To install voices, open System Settings → Accessibility → Read & Speak → System voice → Manage Voices.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => void handleOpenVoiceSettings()}
+                                className="mt-2 font-medium text-primary hover:underline"
+                              >
+                                Open Mac voice settings
+                              </button>
+                              {voiceSettingsError && (
+                                <p role="alert" className="mt-2 text-destructive">{voiceSettingsError}</p>
+                              )}
+                            </div>
                           )}
                         </div>
 
