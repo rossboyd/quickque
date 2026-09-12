@@ -1,7 +1,11 @@
 import { getStripeMode, getUncachableStripeClient } from "./stripeClient";
 
 const PRODUCT_KEY = "quickque_mac_perpetual_gbp";
-const AMOUNT = 7700;
+const rawPrice = process.env.QUICKQUE_PRICE_GBP;
+if (typeof rawPrice !== 'string' || !/^[1-9]\d{0,5}(?:\.\d{1,2})?$/.test(rawPrice.trim())) {
+  throw new Error('QUICKQUE_PRICE_GBP must be a positive GBP amount with no more than two decimal places.');
+}
+const AMOUNT = Math.round(Number(rawPrice.trim()) * 100);
 const CURRENCY = "gbp";
 const VERSION = process.env.QUICKQUE_COMMERCE_VERSION || "0.1.0";
 const PRODUCT_DESCRIPTION = "Sandbox catalogue entry for the unreleased Quickque Mac app.";

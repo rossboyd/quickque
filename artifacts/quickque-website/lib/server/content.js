@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { COMMERCE_PRICE } from './commercePrice.js';
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const packageDirectory = path.resolve(moduleDirectory, '../..');
@@ -106,10 +107,10 @@ function validateConfig(config) {
     fail(`release.status must be "unavailable" (received ${String(config.release.status)}).`);
   }
   const offer = config.commerce;
-  if (!offer || offer.amount !== 7700 || offer.currency !== 'gbp' ||
+  if (!offer || offer.currency !== COMMERCE_PRICE.currency ||
       offer.billing !== 'one-time' || offer.sourceLicence !== 'MIT' ||
-      offer.displayPrice !== '£77' || typeof offer.liveEnabled !== 'boolean') {
-    fail('commerce must describe the £77 GBP one-time Mac package with MIT source.');
+      typeof offer.liveEnabled !== 'boolean') {
+    fail('commerce must describe the configured GBP one-time Mac package with MIT source.');
   }
   if (offer.liveEnabled && config.release.status === 'unavailable') {
     fail('Live purchases cannot be enabled without a verified Mac release.');
@@ -119,6 +120,11 @@ function validateConfig(config) {
   const productionOrigin = validateProductionOrigin(config.productionOrigin);
   return {
     ...config,
+    commerce: {
+      ...offer,
+      amount: COMMERCE_PRICE.amount,
+      displayPrice: COMMERCE_PRICE.displayPrice
+    },
     basePath: basePathWithSlash(basePath),
     productionOrigin
   };

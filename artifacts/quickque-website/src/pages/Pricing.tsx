@@ -92,12 +92,13 @@ export function PricingPage({ context }: { context?: any }) {
 
   const isTestMode = status?.mode === 'test';
   const isUnavailable = !status?.available || status?.mode === 'unavailable';
+  const displayPrice = commerce?.displayPrice || '';
 
   return (
     <div className="w-full min-h-screen bg-[#fafbfd] pb-32">
       <Meta 
         title="Pricing"
-        description="£77 once for the packaged Quickque Mac app. Use the purchased version forever; future major upgrades may cost extra. MIT source remains free."
+        description={`${displayPrice} once for the packaged Quickque Mac app. Use the purchased version forever; future major upgrades may cost extra. MIT source remains free.`}
         context={context} 
       />
       
@@ -129,7 +130,7 @@ export function PricingPage({ context }: { context?: any }) {
               <p className="text-[var(--text-muted)] mb-8">The packaged Mac app. Prebuilt release not yet available.</p>
               
               <div className="mb-8 flex items-baseline gap-2">
-                <span className="font-serif text-6xl tracking-tight text-[var(--foreground)]">{commerce?.displayPrice || '£77'}</span>
+                <span className="font-serif text-6xl tracking-tight text-[var(--foreground)]">{displayPrice}</span>
                 <span className="text-lg text-[var(--text-muted)]">{commerce?.billing || 'one-time'}</span>
               </div>
 
@@ -224,7 +225,7 @@ export function PricingPage({ context }: { context?: any }) {
       <section id="licence" className="max-w-3xl mx-auto px-6 pt-16 prose">
         <h2>What “forever” means</h2>
         <p>You can keep using the version you purchase without a subscription or an expiry date. Future major upgrades may cost extra; purchasing does not promise every future version or compatibility with every future macOS release.</p>
-        <p>The £77 purchase covers the packaged Mac app. Quickque-owned source code remains available under the <Link href="/license">MIT licence</Link>, with its existing permission to use, modify, and redistribute it. Payment does not remove or restrict those rights.</p>
+        <p>The {displayPrice} purchase covers the packaged Mac app. Quickque-owned source code remains available under the <Link href="/license">MIT licence</Link>, with its existing permission to use, modify, and redistribute it. Payment does not remove or restrict those rights.</p>
         <p>Live sales are closed while the Mac release is verified. Development preview checkout uses Stripe test mode only. See <Link href="/privacy">payment privacy</Link> for what Stripe processes.</p>
       </section>
     </div>

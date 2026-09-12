@@ -6,9 +6,7 @@
   "guideVersion": "Current source · 0.1.0",
   "commerce": {
     "name": "Quickque for Mac",
-    "amount": 7700,
     "currency": "gbp",
-    "displayPrice": "£77",
     "billing": "one-time",
     "licence": "Use the purchased version forever.",
     "updates": "Future major upgrades may cost extra.",

@@ -1,10 +1,11 @@
 import crypto from 'node:crypto';
+import { COMMERCE_PRICE } from './commercePrice.js';
 
 export const COMMERCE_PRODUCT_KEY = 'quickque_mac_perpetual_gbp';
 export const COMMERCE_COOKIE = 'quickque_checkout';
 export const CSRF_COOKIE = 'quickque_csrf';
-export const COMMERCE_AMOUNT = 7700;
-export const COMMERCE_CURRENCY = 'gbp';
+export const COMMERCE_AMOUNT = COMMERCE_PRICE.amount;
+export const COMMERCE_CURRENCY = COMMERCE_PRICE.currency;
 export const COMMERCE_BILLING = 'one-time';
 
 const DEFAULT_RATE_WINDOW_MS = 60_000;
@@ -386,10 +387,6 @@ export function createCommerceService({
     if (!sessionSecret || typeof sessionSecret !== 'string') {
       return { mode: 'unavailable', catalog: null, client: null, message: 'Checkout is temporarily unavailable.' };
     }
-    if (isProduction) {
-      return { mode: 'unavailable', catalog: null, client: null, message: 'Checkout is not enabled for this release.' };
-    }
-
     const activeRuntime = await currentRuntime();
     const mode = activeRuntime?.mode || 'unavailable';
     if (mode !== 'test') {

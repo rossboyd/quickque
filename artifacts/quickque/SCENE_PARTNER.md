@@ -135,11 +135,13 @@ media export. Generated speech and recognized speech stay transient; they are
 not included in backups or phone-remote messages. The remote continues to
 receive only existing transport/presentation state, not cast, dialogue or notes.
 
-**Chatterbox-Turbo is unavailable.** See `TURBO_EVALUATION.md` for immutable
-source/model evaluation pins, approximate weight size, unsupported controls,
-watermarking, rights and packaging blockers, and the predeclared Mac benchmark
-thresholds. No Turbo installer, runtime, model or reference voices are shipped.
-Do not interpret its MPS code path as verified Mac performance.
+**Chatterbox Turbo is selectable with the free Chatterbox Default English voice.**
+In cast settings choose Chatterbox Turbo, download the 2.99 GB model once, and
+preview before rehearsing. The desktop build bundles the runtime; users do not
+install Python or sign up for a service. All Chatterbox characters share the
+same default voice and natural rate. Each turn currently loads the model, so
+preparation can take time. See `turbo/README.md` for build and validation status.
+Mac playback and the rebuilt DMG still require validation on Apple Silicon.
 
 ## Verification boundary
 

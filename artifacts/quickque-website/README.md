@@ -99,12 +99,16 @@ website checks.
 
 ## Optional packaged Mac distribution
 
-The proposed packaged Mac app is **£77 as a one-time purchase**, separate from
+Set the shared `QUICKQUE_PRICE_GBP` environment variable to the GBP price, for
+example `77`. The server validates up to two decimal places and converts it to
+Stripe's integer pence amount. The proposed packaged Mac app uses that
+environment price as a one-time purchase, separate from
 the free MIT-licensed source and its available source builds. A purchased
 version is intended to remain usable forever; future major upgrades may cost
 extra. No verified release or native Mac validation is available yet, so live
-purchases remain gated. A sandbox preview checkout creates no license or
-download.
+purchases remain gated. Development and the published demo may use the
+connected Stripe test-mode catalogue; a sandbox checkout creates no licence or
+download and never requires live Stripe credentials.
 
 When checkout is enabled, billing and payment data goes to
 [Stripe's privacy policy](https://stripe.com/privacy). The website backend

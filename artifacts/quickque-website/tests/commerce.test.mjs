@@ -1,8 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCommerceService, readStripeCatalog } from '../lib/server/commerce.js';
+import { readCommercePrice } from '../lib/server/commercePrice.js';
 
 process.env.SESSION_SECRET = 'commerce-test-secret-long-enough';
+
+test('GBP environment price is validated and converted to integer pence', () => {
+  assert.deepEqual(readCommercePrice('77'), {
+    amount: 7700,
+    currency: 'gbp',
+    displayPrice: '£77'
+  });
+  assert.deepEqual(readCommercePrice('77.50'), {
+    amount: 7750,
+    currency: 'gbp',
+    displayPrice: '£77.50'
+  });
+  assert.throws(() => readCommercePrice('0'));
+  assert.throws(() => readCommercePrice('77.999'));
+  assert.throws(() => readCommercePrice('not-a-price'));
+});
 
 const config = {
   productionOrigin: null,
@@ -126,17 +143,18 @@ function makeClient() {
   return client;
 }
 
-function service(client = makeClient(), runtime = {}) {
+function service(client = makeClient(), runtime = {}, options = {}) {
   return createCommerceService({
-    config,
+    config: options.config || config,
     basePath: '/website',
+    isProduction: Boolean(options.isProduction),
     runtime: {
       mode: 'test',
       client,
       catalog: catalog(),
       ...runtime
     },
-    trustedOrigin: 'https://quickque.test',
+    trustedOrigin: options.trustedOrigin || 'https://quickque.test',
     sessionSecret: process.env.SESSION_SECRET
   });
 }
@@ -192,6 +210,34 @@ test('status gate exposes sandbox only for a test catalogue', async () => {
   assert.equal(status.available, true);
   assert.equal(status.mode, 'test');
   assert.ok(status.csrfToken);
+});
+
+test('production demo exposes only the validated sandbox checkout', async () => {
+  const productionConfig = {
+    ...config,
+    productionOrigin: 'https://quickque.example'
+  };
+  const production = service(makeClient(), {}, {
+    config: productionConfig,
+    isProduction: true,
+    trustedOrigin: productionConfig.productionOrigin
+  });
+  const statusResponse = response();
+  const status = await production.status(request(), statusResponse);
+
+  assert.equal(status.available, true);
+  assert.equal(status.mode, 'test');
+  assert.equal(status.message, 'Sandbox checkout is available.');
+  assert.ok(status.csrfToken);
+
+  const liveRuntime = service(makeClient(), { mode: 'live' }, {
+    config: productionConfig,
+    isProduction: true,
+    trustedOrigin: productionConfig.productionOrigin
+  });
+  const liveStatus = await liveRuntime.status(request(), response());
+  assert.equal(liveStatus.available, false);
+  assert.equal(liveStatus.mode, 'live');
 });
 
 test('checkout requires terms and CSRF, and uses only the server-owned amount/currency price', async () => {

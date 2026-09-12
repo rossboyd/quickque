@@ -3,6 +3,8 @@
 import assert from 'node:assert/strict';
 import { readSiteConfigSync } from '../lib/server/content.js';
 import { getUncachableStripeClient } from '../lib/server/stripeClient.js';
+import { COMMERCE_AMOUNT, COMMERCE_CURRENCY } from '../lib/server/commerce.js';
+import { COMMERCE_PRICE } from '../lib/server/commercePrice.js';
 
 if (!process.env.REPLIT_DEV_DOMAIN || process.env.NODE_ENV === 'production') {
   throw new Error('Run this check only in the development workspace.');
@@ -56,8 +58,8 @@ try {
   const session = await stripe.checkout.sessions.retrieve(createdSessionId);
   assert.equal(session.livemode, false);
   assert.equal(session.mode, 'payment');
-  assert.equal(session.amount_total, 7700);
-  assert.equal(session.currency, 'gbp');
+  assert.equal(session.amount_total, COMMERCE_AMOUNT);
+  assert.equal(session.currency, COMMERCE_CURRENCY);
   assert.equal(session.payment_status, 'unpaid');
   const verified = await fetch(`${base}session?session_id=${encodeURIComponent(createdSessionId)}`, { headers: headers() });
   assert.equal(verified.status, 200);
@@ -67,7 +69,7 @@ try {
   assert.equal(result.downloadUrl, null);
   const unbound = await fetch(`${base}session?session_id=${encodeURIComponent(createdSessionId)}`, { headers: { origin } });
   assert.equal((await unbound.json()).status, 'invalid');
-  console.log('Checkout smoke check passed: £77 GBP, one-time, test-only, unpaid, browser-bound, no download.');
+  console.log(`Checkout smoke check passed: ${COMMERCE_PRICE.displayPrice} GBP, one-time, test-only, unpaid, browser-bound, no download.`);
 } finally {
   if (stripe && createdSessionId) {
     await stripe.checkout.sessions.expire(createdSessionId);

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createServer as createHttpServer } from 'node:http';
 import { loadSiteDataSync, getBasePath, pathWithinBase, serializeSiteData } from './lib/server/content.js';
-import { createCommerceService } from './lib/server/commerce.js';
+import { COMMERCE_AMOUNT, COMMERCE_CURRENCY, createCommerceService } from './lib/server/commerce.js';
 import { initializeStripeRuntime } from './lib/server/stripeBootstrap.js';
 import { processStripeWebhook } from './lib/server/stripeClient.js';
 
@@ -308,8 +308,8 @@ export async function createServer(
       return sendJson(res, {
         status: 'invalid',
         mode: 'unavailable',
-        amount: 7700,
-        currency: 'gbp',
+        amount: COMMERCE_AMOUNT,
+        currency: COMMERCE_CURRENCY,
         version: null,
         downloadUrl: null,
         message: 'Checkout session is invalid.'

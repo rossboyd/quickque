@@ -87,7 +87,7 @@ The requested product name is Quickque. The user wants a lightweight personal Ma
 - Website authoring, source-only release readiness, indexing configuration, and verification commands are documented in `artifacts/quickque-website/README.md`.
 - Quickque-owned code and docs use the root MIT license. Third-party/model terms remain separate; see `THIRD_PARTY_NOTICES.md`.
 - Optional actor mode stays within Quickque. External-camera use, turn controls and privacy are described in `artifacts/quickque/SCENE_PARTNER.md`.
-- Turbo is deliberately unavailable pending a reproducible arm64 runtime, rights-cleared voice assets and real Apple Silicon measurements. See `artifacts/quickque/TURBO_EVALUATION.md`; do not enable upstream convenience downloads as a fallback.
+- The user explicitly requested enabling open-source Chatterbox with a free voice on their M2/24 GB Mac. Chatterbox Default now uses the upstream MIT-labelled default conditioning, a verified explicit 2.99 GB model download, and a bundled Python/Perth/MPS worker built on Mac. See `artifacts/quickque/turbo/README.md`. No user Python, cloud API, recording or hidden runtime downloads. Mac runtime/audio/latency and a new DMG remain unverified on this Linux host. Earlier commissioned-voice-pack requirements are superseded for this default voice.
 
 ### Rehearsal cues and Markdown authoring
 

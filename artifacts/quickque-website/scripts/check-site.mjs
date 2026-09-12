@@ -65,7 +65,7 @@ if (!process.argv.includes('--content-only')) {
       assert.equal(cloneBlocks.length, 1, 'Installation must have one complete clone/build sequence');
     }
     if (route === 'pricing/') {
-      assert.match(html, /£77/, 'Pricing is server rendered');
+      assert.ok(html.includes(config.commerce.displayPrice), 'Pricing is server rendered');
       assert.match(html, /major upgrades/i, 'Forever licence excludes promised free major upgrades');
       assert.match(html, /MIT/, 'Paid package does not replace the MIT source licence');
     }

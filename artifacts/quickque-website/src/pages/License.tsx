@@ -25,7 +25,7 @@ export function LicensePage({ context }: { context?: any }) {
       </p>
       <p className="mb-8 leading-relaxed">
         The source remains MIT-licensed and available to build yourself. A proposed optional
-        packaged Mac distribution is £77 as a one-time purchase; a purchased version is
+        packaged Mac distribution is {config?.commerce?.displayPrice} as a one-time purchase; a purchased version is
         intended to remain usable forever, while future major upgrades may cost extra. Live
         purchases are gated because there is no verified release or native Mac validation yet,
         and a sandbox checkout creates no license or download. If enabled, checkout sends

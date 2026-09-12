@@ -37,10 +37,12 @@ browser binding. Browser input cannot select a price, amount, or Stripe mode.
 this deployment. A successful test payment is only a payment-flow check and
 does not make the Mac app available.
 
-Development can expose the hosted Stripe Checkout only when the synced
-catalog is a complete test-mode product and the trusted development origin is
-configured. A successful test payment is reported explicitly as a test
-result; it never grants a licence or download.
+Development and the published demo can expose hosted Stripe Checkout only when
+the connected runtime and validated catalogue are both in Stripe test mode and
+the appropriate trusted origin is configured. The published demo intentionally
+uses the same sandbox checkout and does not require live Stripe credentials.
+A successful test payment is reported explicitly as a test result; it never
+grants a licence or download.
 
 Live charges stay impossible until all of the following are true:
 
@@ -54,9 +56,10 @@ Live charges stay impossible until all of the following are true:
    contact, and Stripe dispute handling.
 6. A production webhook has been verified end to end without exposing secrets.
 
-Until then `liveEnabled` remains `false`, release status remains
-`unavailable`, and production reports commerce unavailable rather than
-presenting a sandbox CTA or accepting a live charge.
+Until then `liveEnabled` remains `false`, release status remains `unavailable`,
+and all environments reject live mode. Production may present the clearly
+labelled sandbox CTA, but it cannot accept a live charge or issue a licence or
+download.
 
 ## Payment data and operations
 

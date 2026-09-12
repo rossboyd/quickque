@@ -1,27 +1,28 @@
-# Chatterbox-Turbo: release gate, not a shipped engine
+# Chatterbox Turbo: integration and Mac validation
 
-## Decision
+## Current implementation (2026-09-12)
 
-**Unavailable in Quickque.** No Turbo runtime, weights, upstream demo voices,
-reference conditioning, or downloader ships with this change. This is an
-intentional safety gate, not a verified integration or a simulated installer.
-The system-voice scene partner does not depend on Turbo or Flow installation.
+The user explicitly requested enabling open-source Chatterbox with a free voice
+on an **M2 / 24 GB Mac**. This supersedes the earlier decision to keep Turbo
+unavailable pending a commissioned voice pack. The app now offers **Chatterbox
+Default**, the conditioning supplied in Resemble's MIT-labelled model repository.
+No additional speaker identity or independent recording-rights claim is made.
+Source/model attribution and the MIT notices are retained.
 
-The evaluation host is **Linux x86_64**, not Apple Silicon. Real synthesis,
-listening quality, unified-memory use, cancellation and Flow coexistence could
-not be measured here. All Mac measurements below are **not run / unverified**.
-No CUDA benchmark or browser result substitutes for those measurements.
+See [turbo/README.md](turbo/README.md) for the integrated worker, exact model
+checksums, resolved arm64 dependency lock, one-time download and Mac packaging.
+The initial separately-cleared-voice evaluation tool remains in `scripts/turbo`
+for developer comparisons; it is not the shipped worker.
 
-## Implementation progress (2026-09-12)
+The evaluation host is **Linux x86_64**, not Apple Silicon. Browser, adapter,
+library and worker tests pass here; no Mac synthesis, listening, latency,
+memory-pressure, packaged-runtime or DMG result is claimed. The Mac build must
+pass the frozen-runtime import/MPS/watermarker check. Audible end-to-end testing
+on the M2 remains outstanding. There is no new DMG from this Linux workspace.
 
-The user has specified an **M2 Mac with 24 GB RAM** and requested progress on
-Resemble. A developer-only [evaluation runner](scripts/turbo/README.md) now
-prepares hash-verified pinned model assets and measures the official MPS
-implementation with a separately cleared voice. Model preparation is explicit;
-normal evaluation is offline and does not save generated audio. Download,
-integrity, cancellation cleanup and voice-manifest validation have unit tests.
-No model weights were downloaded on this host, no cleared voice is available,
-and no Mac benchmark has run. This is not yet an app runtime or a release.
+The following source analysis and measurement targets were recorded before the
+integration. Previous packaging/voice-pack blockers below are historical context;
+current integration behaviour is described above and in `turbo/README.md`.
 
 ## Pinned source inspection (2026-09-12)
 
