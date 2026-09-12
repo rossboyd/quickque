@@ -7,7 +7,14 @@ import {
   useContext,
   ReactNode,
 } from 'react';
-import { Script, Settings, DEFAULT_SETTINGS, DeletedScript, SortMode } from './types';
+import {
+  Script,
+  Settings,
+  DEFAULT_SETTINGS,
+  DeletedScript,
+  SortMode,
+  PresentationPreferences,
+} from './types';
 import { generateId } from './utils';
 import {
   collectScriptIds,
@@ -39,8 +46,16 @@ import {
 } from './library-data';
 import {
   loadSettings,
+  loadPresentationDefaults,
+  persistPresentationDefaults,
   persistSettings,
+  QUICKQUE_PRESENTATION_DEFAULTS_KEY,
 } from './settings-persistence';
+import {
+  DEFAULT_PRESENTATION,
+  normalizePresentation,
+  presentationFromLegacySettings,
+} from './presentation-preferences';
 
 const SEED_SCRIPTS: Script[] = createInitialScripts();
 type StoreContextType = {
@@ -49,13 +64,21 @@ type StoreContextType = {
   customOrder: string[];
   sortMode: SortMode;
   settings: Settings;
+  presentationDefaults: PresentationPreferences;
   activeScriptId: string | null;
   setActiveScriptId: (id: string | null) => void;
   updateSettings: (newSettings: Partial<Settings>) => void;
+  updatePresentationDefaults: (updates: Partial<PresentationPreferences>) => boolean;
+  resetPresentationDefaults: () => boolean;
+  updateScriptPresentation: (
+    id: string,
+    updates: Partial<PresentationPreferences>,
+  ) => boolean;
+  resetScriptPresentation: (id: string) => boolean;
   createScript: () => string;
   updateScript: (
     id: string,
-    updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt'>>,
+    updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt' | 'presentation'>>,
   ) => void;
   deleteScript: (id: string) => void;
   deleteScripts: (ids: string[]) => boolean;
@@ -109,9 +132,17 @@ function getLocalStorage(): StorageLike | null {
   }
 }
 
+function isSettingsPersistenceError(error: string | null): boolean {
+  return error === 'Failed to save settings.' ||
+    error === 'Failed to load settings.' ||
+    error === 'Failed to save presentation defaults.' ||
+    error === 'Failed to load presentation defaults.';
+}
+
 function cloneScript(script: Script): Script {
   return {
     ...script,
+    presentation: script.presentation ? { ...script.presentation } : undefined,
     sections: script.sections.map(section => ({ ...section })),
   };
 }
@@ -150,6 +181,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [customOrder, setCustomOrder] = useState<string[]>([]);
   const [sortMode, setSortModeState] = useState<SortMode>('custom');
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [presentationDefaults, setPresentationDefaults] = useState<PresentationPreferences>(
+    DEFAULT_PRESENTATION,
+  );
   const [activeScriptId, setActiveScriptState] = useState<string | null>(null);
   const [recoveryData, setRecoveryData] = useState<string | null>(null);
   const [recoveryRequired, setRecoveryRequired] = useState(false);
@@ -160,6 +194,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [localSaveStatus, setLocalSaveStatus] = useState('Loading local library…');
 
   const settingsRef = useRef<Settings>(DEFAULT_SETTINGS);
+  const presentationDefaultsRef = useRef<PresentationPreferences>(DEFAULT_PRESENTATION);
+  const legacyPresentationRef = useRef<PresentationPreferences>(DEFAULT_PRESENTATION);
   const scriptsRef = useRef<Script[]>([]);
   const trashRef = useRef<DeletedScript[]>([]);
   const customOrderRef = useRef<string[]>([]);
@@ -215,10 +251,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     recoveryRequiredRef.current = false;
     setRecoveryRequired(false);
     setRecoveryData(null);
-    setError(null);
+    // A successful library load cannot repair an independent preferences
+    // read/write failure. Keep it visible until that preference succeeds.
+    setError(current => (
+      current === 'Failed to save settings.' ||
+      current === 'Failed to load settings.' ||
+      current === 'Failed to save presentation defaults.' ||
+      current === 'Failed to load presentation defaults.'
+        ? current
+        : null
+    ));
   }, []);
 
-  const loadCurrentLibrary = useCallback(() => {
+  const loadCurrentLibrary = useCallback((
+    presentationFallback: PresentationPreferences = presentationDefaultsRef.current,
+    legacyPresentationFallback: PresentationPreferences = legacyPresentationRef.current,
+  ) => {
     // Retry may happen after the host has restored localStorage or after a
     // transient permission error. Always reacquire the host storage handle.
     storageRef.current = getLocalStorage();
@@ -237,7 +285,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       recoveryRequiredRef.current = true;
       setRecoveryRequired(true);
       setRecoveryData(null);
-      setError(storageErrors.readLibrary);
+      setError(current => (
+        isSettingsPersistenceError(current) ? current : storageErrors.readLibrary
+      ));
       return;
     }
 
@@ -247,7 +297,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch {
       // loadLibrary supplies the user-facing read error.
     }
-    const loaded = loadLibrary(storage, SEED_SCRIPTS);
+    const loaded = loadLibrary(
+      storage,
+      SEED_SCRIPTS,
+      presentationFallback,
+      legacyPresentationFallback,
+    );
     if ('error' in loaded) {
       cancelNativeAutosaves();
       savesDisabledRef.current = true;
@@ -264,7 +319,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       recoveryRequiredRef.current = true;
       setRecoveryRequired(true);
       setRecoveryData(raw);
-      setError(loaded.error);
+      setError(current => (
+        isSettingsPersistenceError(current) ? current : loaded.error
+      ));
       return;
     }
 
@@ -280,24 +337,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           sortMode: loaded.sortMode,
         },
       );
-      if ('error' in persisted) setError(persisted.error);
+      if ('error' in persisted) {
+        setError(current => (
+          isSettingsPersistenceError(current) ? current : persisted.error
+        ));
+      }
     }
   }, [applyLoaded, cancelNativeAutosaves]);
 
   useEffect(() => {
     storageRef.current = getLocalStorage();
-    loadCurrentLibrary();
-
     const storage = storageRef.current;
     if (storage) {
       try {
         const loadedSettings = loadSettings(storage);
         settingsRef.current = loadedSettings;
         setSettings(loadedSettings);
+        // Take this snapshot before creating defaults. It is the one-time
+        // fallback for scripts from releases that had only global reader
+        // settings, including scripts which are currently in Trash.
+        const legacyPresentation = presentationFromLegacySettings(loadedSettings);
+        legacyPresentationRef.current = legacyPresentation;
+        const loadedDefaults = loadPresentationDefaults(storage, legacyPresentation);
+        presentationDefaultsRef.current = loadedDefaults;
+        setPresentationDefaults(loadedDefaults);
+        if (storage.getItem(QUICKQUE_PRESENTATION_DEFAULTS_KEY) === null) {
+          const persisted = persistPresentationDefaults(storage, loadedDefaults);
+          if (!persisted.ok) setError('Failed to save presentation defaults.');
+        }
       } catch {
         setError('Failed to load settings.');
       }
     }
+    loadCurrentLibrary(
+      presentationDefaultsRef.current,
+      legacyPresentationRef.current,
+    );
     setIsLoaded(true);
   }, [loadCurrentLibrary]);
 
@@ -340,8 +415,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             setSaveStatus('Saved to local library');
             setError(current => (
               recoveryRequiredRef.current ||
-              current === 'Failed to save settings.' ||
-              current === 'Failed to load settings.'
+               current === 'Failed to save settings.' ||
+               current === 'Failed to load settings.' ||
+               current === 'Failed to save presentation defaults.' ||
+               current === 'Failed to load presentation defaults.'
                 ? current
                 : null
             ));
@@ -430,7 +507,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
 
         const nativeScripts =
-          loaded.scriptsJson === null ? null : parseScriptsJson(loaded.scriptsJson);
+          loaded.scriptsJson === null
+            ? null
+            : parseScriptsJson(loaded.scriptsJson, legacyPresentationRef.current);
         if (loaded.scriptsJson !== null && nativeScripts === null) {
           cancelNativeAutosaves();
           const message =
@@ -559,7 +638,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // A durable library commit resolves earlier library/import failures, not
     // just quota errors. Keep independent settings failures visible.
     setError(current => (
-      current === 'Failed to save settings.' || current === 'Failed to load settings.'
+       current === 'Failed to save settings.' ||
+       current === 'Failed to load settings.' ||
+       current === 'Failed to save presentation defaults.' ||
+       current === 'Failed to load presentation defaults.'
         ? current
         : null
     ));
@@ -604,6 +686,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         : current
     ));
   }, []);
+
+  const updatePresentationDefaults = useCallback((
+    updates: Partial<PresentationPreferences>,
+  ): boolean => {
+    const storage = storageRef.current;
+    if (!storage) {
+      setError('Failed to save presentation defaults.');
+      return false;
+    }
+    const persisted = persistPresentationDefaults(storage, normalizePresentation(
+      {
+        ...presentationDefaultsRef.current,
+        ...updates,
+      },
+      presentationDefaultsRef.current,
+    ));
+    if (!persisted.ok) {
+      setError(persisted.error);
+      return false;
+    }
+    presentationDefaultsRef.current = persisted.preferences;
+    setPresentationDefaults(persisted.preferences);
+    setError(current => current === 'Failed to save presentation defaults.' ? null : current);
+    return true;
+  }, []);
+
+  const resetPresentationDefaults = useCallback((): boolean => {
+    return updatePresentationDefaults(DEFAULT_PRESENTATION);
+  }, [updatePresentationDefaults]);
 
   const updateProfile = useCallback((updates: Partial<Profile>): boolean => {
     const current = profileRef.current;
@@ -657,6 +768,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       title: 'Untitled Script',
       createdAt: now,
       updatedAt: now,
+      presentation: normalizePresentation(presentationDefaultsRef.current),
       sections: [{ id: sectionId, title: 'Section 1', content: '' }],
     };
     const nextOrder = [newId, ...customOrderRef.current.filter(id => id !== newId)];
@@ -671,7 +783,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const updateScript = useCallback((
     id: string,
-    updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt'>>,
+    updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt' | 'presentation'>>,
   ) => {
     if (!scriptsRef.current.some(script => script.id === id)) return;
     const nextScripts = scriptsRef.current.map(script => (
@@ -685,6 +797,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activeScriptId: activeScriptIdRef.current,
     });
   }, [commitLibrary]);
+
+  const updateScriptPresentation = useCallback((
+    id: string,
+    updates: Partial<PresentationPreferences>,
+  ) => {
+    const script = scriptsRef.current.find(candidate => candidate.id === id);
+    if (!script) return false;
+    const currentPresentation = normalizePresentation(
+      script.presentation,
+      presentationDefaultsRef.current,
+    );
+    const nextPresentation = normalizePresentation({
+      ...currentPresentation,
+      ...updates,
+    }, currentPresentation);
+    const nextScripts = scriptsRef.current.map(candidate => (
+      candidate.id === id
+        ? { ...candidate, presentation: nextPresentation, updatedAt: Date.now() }
+        : candidate
+    ));
+    return commitLibrary({
+      scripts: nextScripts,
+      trash: trashRef.current,
+      customOrder: customOrderRef.current,
+      sortMode: sortModeRef.current,
+      activeScriptId: activeScriptIdRef.current,
+    }).ok;
+  }, [commitLibrary]);
+
+  const resetScriptPresentation = useCallback((id: string) => {
+    return updateScriptPresentation(id, presentationDefaultsRef.current);
+  }, [updateScriptPresentation]);
 
   const deleteScripts = useCallback((ids: string[]) => {
     const next = deleteScriptsState({
@@ -747,6 +891,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       title: `${scriptToDup.title.slice(0, 193)} (Copy)`,
       createdAt: now,
       updatedAt: now,
+      presentation: normalizePresentation(
+        scriptToDup.presentation,
+        presentationDefaultsRef.current,
+      ),
       sections: newSections as Script['sections'],
     };
     const nextOrder = [newId, ...customOrderRef.current.filter(orderId => orderId !== newId)];
@@ -783,7 +931,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [commitLibrary]);
 
   const importScripts = useCallback((data: string) => {
-    const parsed = parseLibraryData(data);
+    const parsed = parseLibraryData(data, presentationDefaultsRef.current);
     if ('error' in parsed) {
       setError(parsed.error);
       return false;
@@ -817,6 +965,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       title,
       text,
       collectScriptIds(scriptsRef.current, trashRef.current),
+      undefined,
+      presentationDefaultsRef.current,
     );
     if ('error' in document) {
       setError(document.error);
@@ -888,7 +1038,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setError(storageErrors.backupTooLarge);
       return false;
     }
-    const parsed = parseLibraryData(data);
+    const parsed = parseLibraryData(data, legacyPresentationRef.current);
     if ('error' in parsed) {
       setError(parsed.error);
       return false;
@@ -1027,9 +1177,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       customOrder,
       sortMode,
       settings,
+       presentationDefaults,
       activeScriptId,
       setActiveScriptId,
       updateSettings,
+       updatePresentationDefaults,
+       resetPresentationDefaults,
+       updateScriptPresentation,
+       resetScriptPresentation,
       createScript,
       updateScript,
       deleteScript,

@@ -556,3 +556,39 @@ Native file-picker, Finder drag/drop, WKWebView module-worker/CSP behavior, and
 JSON download behavior remain **unverified on macOS** until those checks are
 performed. Browser tests and a successful desktop frontend build do not
 substitute for these checks.
+
+### Present layout: native acceptance checklist
+
+The presentation-layout changes require the following checks in the packaged
+Mac app. **Not run in this Linux environment.** Chromium geometry tests do not
+prove WKWebView scrolling, native window restoration, transparent compositing,
+or live Apple speech following.
+
+1. Open an existing library with non-default font, size, speed and opacity.
+   Confirm those choices survive migration, quitting and relaunching. Repeat
+   with a chosen-folder library and a script in Trash.
+2. Present a long, multi-section script in full mode, then compact overlay.
+   Exercise no mirror, horizontal, vertical and combined mirrors. Read through
+   a section boundary using manual scroll and Apple Voice Follow. Confirm text
+   progresses in source order, the cue follows the mirror, and controls,
+   dialogs and the paired phone remain unmirrored.
+3. Test hidden, line and side-arrow cues at 10%, 30% and 80%. Jump forward and
+   backward by toolbar, keyboard, global shortcut and approved phone remote.
+   Confirm the section start and Flow word align with the same logical cue.
+4. Mid-paragraph, change font, size, spacing, margins, cue position and mirror.
+   Resize the window and toggle compact/full. Confirm the same reading word
+   stays at the cue rather than moving to another paragraph. Repeat while
+   paused and while Voice Follow is listening.
+5. Test background/text/cue colours on light and dark app themes, including
+   low contrast. Check compact opacity at 0%, 50% and 100% over light and dark
+   external windows. Read/unread and active-word highlighting must remain
+   distinguishable; contrast guidance cannot account for every window behind
+   a transparent overlay.
+6. Open Present settings at the native minimum overlay size (360 × 260).
+   Reach all controls and resets by keyboard. Escape must close the dialog
+   without exiting Present mode; range/select arrow keys must not jump script
+   sections. Exit overlay and verify original size, position and decorations.
+7. Change size/speed from the approved phone. Verify only the presented script
+   changes, its preferences survive relaunch, and other scripts and future
+   defaults remain unchanged. Duplicate and JSON-export/import that script;
+   compare its preferences. Ordinary document imports must use current defaults.

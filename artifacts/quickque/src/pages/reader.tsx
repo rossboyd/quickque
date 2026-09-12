@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { useStore } from '@/lib/store';
-import type { Settings } from '@/lib/types';
+import type { PresentationPreferences, Settings } from '@/lib/types';
 import { useLocation, useParams } from 'wouter';
 import { 
   Play, Pause, X, Minus, Plus, Settings2, Maximize2, Minimize2, ChevronLeft, ChevronRight, Droplets, Loader2, Smartphone, Palette
 } from 'lucide-react';
 import { isDesktop, setOverlayMode, setAlwaysOnTop, startDragging } from '@/lib/desktop';
 import { useLocalFlow } from '@/hooks/use-local-flow';
-import { tokenize, NormalizedToken } from '@/lib/flow/tokenize';
+import { ReaderTokenizationCache } from '@/lib/reader-tokenization';
 import { FlowStatusPanel } from '@/components/flow-status-panel';
 import { RemoteControlDialog } from '@/components/remote-control-dialog';
 import { useReaderCommands } from '@/lib/remote/use-reader-commands';
@@ -20,13 +20,20 @@ import { getFontFamilyCss, getTextColorCss } from '@/lib/appearance';
 import {
   findNearestReaderAnchor,
   getReaderAnchorOffset,
-  restoreReaderScrollTop,
 } from '@/lib/reader-position';
 import { FlowSetupWizard } from '@/components/flow-setup-wizard';
 import { usePresentationTimer } from '@/hooks/use-presentation-timer';
 import { PresentationHUD } from '@/components/presentation-hud';
 import { getElapsedMs } from '@/lib/presentation-timer';
-import { AppearanceControls } from '@/components/appearance-controls';
+import { PresentationControls } from '@/components/presentation-controls';
+import {
+  clientDeltaToLogicalScroll,
+  getLogicalLeadingEdge,
+  getLogicalScrollCoordinate,
+  getReaderTopPaddingPx,
+  getReaderViewportTransform,
+  restoreLogicalReaderScrollTop,
+} from '@/lib/reader-geometry';
 import {
   Dialog,
   DialogContent,
@@ -40,13 +47,47 @@ type ReaderPositionSnapshot = {
   anchorId: string;
   anchorOffset: number;
   fallbackScrollTop: number;
+  verticalMirror: boolean;
 };
 
+function affectsReaderLayout(
+  updates: Partial<PresentationPreferences>,
+  current: PresentationPreferences,
+): boolean {
+  return (
+    (updates.fontSize !== undefined && updates.fontSize !== current.fontSize) ||
+    (updates.fontFamily !== undefined && updates.fontFamily !== current.fontFamily) ||
+    (updates.lineSpacing !== undefined && updates.lineSpacing !== current.lineSpacing) ||
+    (updates.horizontalMargin !== undefined &&
+      updates.horizontalMargin !== current.horizontalMargin) ||
+    (updates.cuePosition !== undefined && updates.cuePosition !== current.cuePosition) ||
+    (updates.cueStyle !== undefined && updates.cueStyle !== current.cueStyle) ||
+    (updates.mirrorHorizontal !== undefined &&
+      updates.mirrorHorizontal !== current.mirrorHorizontal) ||
+    (updates.mirrorVertical !== undefined && updates.mirrorVertical !== current.mirrorVertical)
+  );
+}
+
 export default function Reader() {
-  const { scripts, settings, updateSettings: persistReaderSettings } = useStore();
+  const {
+    scripts,
+    settings,
+    error,
+    presentationDefaults,
+    updateScriptPresentation,
+    resetScriptPresentation,
+    updateSettings: persistAppSettings,
+  } = useStore();
   const params = useParams();
   const [_, setLocation] = useLocation();
   const script = scripts.find(s => s.id === params.id);
+  // Presentation is document data. App settings intentionally remain limited
+  // to app/overlay concerns, so one script's prompter layout cannot alter
+  // another script or the editor.
+  const presentation = useMemo<PresentationPreferences>(() => ({
+    ...presentationDefaults,
+    ...(script?.presentation ?? {}),
+  }), [presentationDefaults, script?.presentation]);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [readMode, setReadMode] = useState<"manual" | "flow">("flow");
@@ -56,35 +97,115 @@ export default function Reader() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const textContentRef = useRef<HTMLDivElement>(null);
+  const cueRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
   const pendingReflowPositionRef = useRef<ReaderPositionSnapshot | null>(null);
+  const stableReaderPositionRef = useRef<ReaderPositionSnapshot | null>(null);
+  const stableViewportRef = useRef({ width: 0, height: 0 });
+  const [reflowRevision, setReflowRevision] = useState(0);
+  const [readerViewportHeight, setReaderViewportHeight] = useState(0);
+  const scrollMeasurementFrameRef = useRef<number>(0);
+  const exactScrollTopRef = useRef<number>(0);
+  const activeTokenSpanRef = useRef<HTMLSpanElement>(null);
 
-  // All reader settings changes, including phone font-size commands, pass here.
-  // Measure BEFORE requesting a React update: parent layout-effect cleanup can
-  // already see descendant host mutations and therefore cannot capture old text.
-  const updateSettings = useCallback((updates: Partial<Settings>) => {
-    const fontChanges =
-      (updates.fontFamily !== undefined && updates.fontFamily !== settings.fontFamily) ||
-      (updates.fontSize !== undefined && updates.fontSize !== settings.fontSize);
+  /**
+   * Capture before state is requested, never from an effect cleanup. React may
+   * have committed descendant style changes by then, which loses the old word
+   * geometry (see reader-reflow-anchoring.md).
+   */
+  const measureReaderPosition = useCallback((): ReaderPositionSnapshot | null => {
     const container = containerRef.current;
     const content = textContentRef.current;
-    if (fontChanges && container && content) {
-      const guideTop = container.getBoundingClientRect().top + container.clientHeight * 0.3;
+    const cue = cueRef.current;
+    if (container && content && cue) {
+      const verticalMirror = presentation.mirrorVertical;
+      const guideTop = getLogicalLeadingEdge(cue.getBoundingClientRect(), verticalMirror);
       const anchors = Array.from(
         content.querySelectorAll<HTMLElement>('[data-reader-anchor]'),
       ).map(element => ({
         id: element.dataset.readerAnchor ?? '',
-        top: element.getBoundingClientRect().top,
+        top: getLogicalLeadingEdge(element.getBoundingClientRect(), verticalMirror),
       }));
       const nearest = findNearestReaderAnchor(anchors, guideTop);
-      pendingReflowPositionRef.current = {
+      return {
         anchorId: nearest?.id ?? '',
         anchorOffset: nearest ? getReaderAnchorOffset(nearest.top, guideTop) : 0,
         fallbackScrollTop: container.scrollTop,
+        verticalMirror,
       };
     }
-    persistReaderSettings(updates);
-  }, [persistReaderSettings, settings.fontFamily, settings.fontSize]);
+    return null;
+  }, [presentation.mirrorVertical]);
+
+  const captureReaderPosition = useCallback(() => {
+    const snapshot = measureReaderPosition();
+    if (snapshot) {
+      stableReaderPositionRef.current = snapshot;
+      pendingReflowPositionRef.current = snapshot;
+    }
+  }, [measureReaderPosition]);
+
+  // Wheel/trackpad scrolling does not rerender. Cache the currently read word
+  // on the next frame so a later ResizeObserver starts from the user's actual
+  // reading position, while a pending presentation reflow stays authoritative.
+  const queueStableReaderPosition = useCallback(() => {
+    if (scrollMeasurementFrameRef.current) return;
+    scrollMeasurementFrameRef.current = requestAnimationFrame(() => {
+      scrollMeasurementFrameRef.current = 0;
+      if (pendingReflowPositionRef.current) return;
+      const container = containerRef.current;
+      // Resize-generated scroll events must not replace the last pre-resize
+      // word before ResizeObserver has delivered the new dimensions.
+      if (!container || container.clientWidth !== stableViewportRef.current.width ||
+        container.clientHeight !== stableViewportRef.current.height) return;
+      const snapshot = measureReaderPosition();
+      if (snapshot) {
+        stableReaderPositionRef.current = snapshot;
+        exactScrollTopRef.current = snapshot.fallbackScrollTop;
+      }
+    });
+  }, [measureReaderPosition]);
+
+  useEffect(() => () => {
+    if (scrollMeasurementFrameRef.current) {
+      cancelAnimationFrame(scrollMeasurementFrameRef.current);
+    }
+  }, []);
+
+  // Remote speed/font commands use this exact path and only mutate the
+  // current script's presentation, never app-wide defaults.
+  const updatePresentation = useCallback((updates: Partial<PresentationPreferences>): boolean => {
+    if (!script) return false;
+    if (affectsReaderLayout(updates, presentation)) {
+      captureReaderPosition();
+    } else {
+      // A colour/opacity-only commit does not run the reflow layout effect.
+      // Do not leave an old snapshot around to interfere with a later resize.
+      pendingReflowPositionRef.current = null;
+    }
+    const saved = updateScriptPresentation(script.id, updates);
+    if (!saved) {
+      pendingReflowPositionRef.current = null;
+    }
+    return saved;
+  }, [captureReaderPosition, presentation, script, updateScriptPresentation]);
+
+  const resetCurrentPresentation = useCallback((): boolean => {
+    if (!script) return false;
+    captureReaderPosition();
+    const saved = resetScriptPresentation(script.id);
+    if (!saved) {
+      pendingReflowPositionRef.current = null;
+    }
+    return saved;
+  }, [captureReaderPosition, resetScriptPresentation, script]);
+
+  const updateAppSettings = useCallback((updates: Partial<Settings>) => {
+    if (updates.compactMode !== undefined && updates.compactMode !== settings.compactMode) {
+      captureReaderPosition();
+    }
+    persistAppSettings(updates);
+  }, [captureReaderPosition, persistAppSettings, settings.compactMode]);
 
   useEffect(() => {
     if (readMode === 'flow') {
@@ -102,52 +223,14 @@ export default function Reader() {
 
   const [desktopError, setDesktopError] = useState<string | null>(null);
 
-  // Pre-process tokens for Flow aligner
-  const { tokens, enrichedSections } = useMemo(() => {
-    if (!script) return { tokens: [], enrichedSections: [] };
-
-    let globalIdx = 0;
-    const allTokens: NormalizedToken[] = [];
-
-    const sections = script.sections.map((sec, secIdx) => {
-      const secTokens = tokenize(sec.content);
-      const enriched = secTokens.map(t => ({
-        ...t,
-        sectionIdx: secIdx,
-        globalTokenIdx: globalIdx++
-      }));
-      allTokens.push(...enriched);
-      
-      const spans: { type: 'text' | 'token'; text: string; startTokenIdx?: number; endTokenIdx?: number }[] = [];
-      let lastEnd = 0;
-      for (const token of enriched) {
-        if (token.start > lastEnd) {
-          spans.push({ type: 'text', text: sec.content.slice(lastEnd, token.start) });
-        }
-        if (token.end > lastEnd) {
-          spans.push({ 
-            type: 'token', 
-            text: token.source, 
-            startTokenIdx: token.globalTokenIdx, 
-            endTokenIdx: token.globalTokenIdx 
-          });
-          lastEnd = token.end;
-        } else {
-          // One-to-many token mapped to the same span
-          if (spans.length > 0 && spans[spans.length - 1].type === 'token') {
-             spans[spans.length - 1].endTokenIdx = token.globalTokenIdx;
-          }
-        }
-      }
-      if (lastEnd < sec.content.length) {
-        spans.push({ type: 'text', text: sec.content.slice(lastEnd) });
-      }
-      
-      return { ...sec, spans, firstTokenIdx: enriched.length > 0 ? enriched[0].globalTokenIdx : null };
-    });
-    
-    return { tokens: allTokens, enrichedSections: sections };
-  }, [script]);
+  // commitLibrary defensively clones every script section for a presentation
+  // edit. A structural cache, rather than a `useMemo([script.sections])`,
+  // keeps the exact Flow token array/aligner input stable in that case.
+  const tokenizationCacheRef = useRef(new ReaderTokenizationCache());
+  const { tokens, enrichedSections } = tokenizationCacheRef.current.get(
+    script?.id ?? '',
+    script?.sections ?? [],
+  );
 
   const flow = useLocalFlow({ tokens, enabled: readMode === "flow" });
 
@@ -190,7 +273,7 @@ export default function Reader() {
 
   const toggleCompactMode = useCallback(async () => {
     const newMode = !settings.compactMode;
-    updateSettings({ compactMode: newMode });
+    updateAppSettings({ compactMode: newMode });
 
     try {
       if (newMode) {
@@ -206,14 +289,14 @@ export default function Reader() {
       }
     } catch (err: any) {
       setDesktopError(`Failed to toggle overlay mode: ${err.message || String(err)}`);
-      updateSettings({ compactMode: !newMode });
+      updateAppSettings({ compactMode: !newMode });
       if (!newMode) {
         document.documentElement.classList.add('is-overlay');
       } else {
         document.documentElement.classList.remove('is-overlay');
       }
     }
-  }, [settings.compactMode, updateSettings]);
+  }, [settings.compactMode, updateAppSettings]);
 
   const exitReader = useCallback(async () => {
     setIsPlaying(false);
@@ -231,35 +314,90 @@ export default function Reader() {
     setLocation('/');
   }, [setLocation, flow]);
 
-  const exactScrollTopRef = useRef<number>(0);
-  const activeTokenSpanRef = useRef<HTMLSpanElement>(null);
   // Restore the pre-update word measurement after the new font has reflowed.
   useLayoutEffect(() => {
     const container = containerRef.current;
-    const pending = pendingReflowPositionRef.current;
+    // Do not snapshot the temporary, zero-padding first render or a resize
+    // whose viewport-relative spacer has not yet committed.
+    if (!container || readerViewportHeight === 0 ||
+      readerViewportHeight !== container.clientHeight) return;
+    // Defaults can change outside this component. In that case there was no
+    // event handler in which to synchronously capture, so use the prior
+    // layout-effect measurement rather than accepting a reading-position jump.
+    const pending = pendingReflowPositionRef.current ?? stableReaderPositionRef.current;
     if (container && pending) {
       const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
       let targetScrollTop = Math.min(pending.fallbackScrollTop, maxScrollTop);
       const anchor = Array.from(
         textContentRef.current?.querySelectorAll<HTMLElement>('[data-reader-anchor]') ?? [],
       ).find(element => element.dataset.readerAnchor === pending.anchorId);
-      if (anchor) {
-        const containerRect = container.getBoundingClientRect();
-        const guideTop = containerRect.top + container.clientHeight * 0.3;
-        targetScrollTop = restoreReaderScrollTop(
+      const cue = cueRef.current;
+      if (anchor && cue) {
+        const guideTop = getLogicalLeadingEdge(
+          cue.getBoundingClientRect(),
+          presentation.mirrorVertical,
+        );
+        targetScrollTop = restoreLogicalReaderScrollTop(
           container.scrollTop,
-          anchor.getBoundingClientRect().top,
+          getLogicalLeadingEdge(anchor.getBoundingClientRect(), presentation.mirrorVertical),
           guideTop,
           pending.anchorOffset,
           maxScrollTop,
+          presentation.mirrorVertical,
+          pending.verticalMirror,
         );
       }
       container.scrollTop = targetScrollTop;
       exactScrollTopRef.current = targetScrollTop;
       pendingReflowPositionRef.current = null;
     }
+    const stable = measureReaderPosition();
+    if (stable) stableReaderPositionRef.current = stable;
+    stableViewportRef.current = {
+      width: container.clientWidth,
+      height: container.clientHeight,
+    };
 
-  }, [settings.fontFamily, settings.fontSize]);
+  }, [
+    presentation.fontFamily,
+    presentation.fontSize,
+    presentation.lineSpacing,
+    presentation.horizontalMargin,
+    presentation.cuePosition,
+    presentation.cueStyle,
+    presentation.mirrorHorizontal,
+    presentation.mirrorVertical,
+    settings.compactMode,
+    measureReaderPosition,
+    reflowRevision,
+    readerViewportHeight,
+  ]);
+
+  // A resize has already changed layout by the time ResizeObserver runs. Keep
+  // a previously cached word measurement so resizing, compact mode, or a
+  // transform toggle can still restore the same logical reading position.
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+    setReaderViewportHeight(container.clientHeight);
+    const observer = new ResizeObserver(() => {
+      if (container.clientWidth === stableViewportRef.current.width &&
+        container.clientHeight === stableViewportRef.current.height) return;
+      // Promote the old snapshot BEFORE scheduling any React layout change.
+      // A deferred rAF here races scroll measurements from the resized DOM.
+      if (scrollMeasurementFrameRef.current) {
+        cancelAnimationFrame(scrollMeasurementFrameRef.current);
+        scrollMeasurementFrameRef.current = 0;
+      }
+      pendingReflowPositionRef.current ??= stableReaderPositionRef.current;
+      setReaderViewportHeight(container.clientHeight);
+      setReflowRevision(revision => revision + 1);
+    });
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+    };
+  }, [script?.id]);
 
   // Manual Scrolling logic
   useEffect(() => {
@@ -278,7 +416,7 @@ export default function Reader() {
       lastTimeRef.current = time;
 
       if (containerRef.current && textContentRef.current) {
-        const pxPerSecond = (settings.speed / 50) * (settings.fontSize * 1.5);
+        const pxPerSecond = (presentation.speed / 50) * (presentation.fontSize * 1.5);
         const pxPerFrame = (pxPerSecond * deltaTime) / 1000;
         
         const maxScroll = containerRef.current.scrollHeight - containerRef.current.clientHeight;
@@ -297,7 +435,7 @@ export default function Reader() {
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       lastTimeRef.current = 0;
     };
-  }, [isPlaying, readMode, settings.speed, settings.fontSize]);
+  }, [isPlaying, readMode, presentation.speed, presentation.fontSize]);
 
   // Flow Smooth scroll following active token ONLY on confident matching
   useEffect(() => {
@@ -311,15 +449,21 @@ export default function Reader() {
         const span = activeTokenSpanRef.current;
         const container = containerRef.current;
         
-        const spanRect = span.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        
-        // Target is to keep the span at 30% of the container height
-        const targetViewportY = containerRect.top + containerRect.height * 0.3;
-        const delta = spanRect.top - targetViewportY;
+        const cue = cueRef.current;
+        if (!cue) {
+          req = requestAnimationFrame(loop);
+          return;
+        }
+        const delta = getLogicalLeadingEdge(
+          span.getBoundingClientRect(),
+          presentation.mirrorVertical,
+        ) - getLogicalLeadingEdge(cue.getBoundingClientRect(), presentation.mirrorVertical);
         
         if (Math.abs(delta) > 5) {
-          container.scrollTop += delta * 0.05;
+          container.scrollTop += clientDeltaToLogicalScroll(
+            delta * 0.05,
+            presentation.mirrorVertical,
+          );
           exactScrollTopRef.current = container.scrollTop;
         }
       }
@@ -332,23 +476,40 @@ export default function Reader() {
     flow.status,
     flow.isFollowing,
     flow.anchor,
-    settings.fontFamily,
-    settings.fontSize,
+    presentation.fontFamily,
+    presentation.fontSize,
+    presentation.cuePosition,
+    presentation.mirrorVertical,
   ]);
 
   // Section tracking during scroll (only in manual mode or paused)
   useEffect(() => {
     const handleScroll = () => {
       if (!containerRef.current) return;
+      exactScrollTopRef.current = containerRef.current.scrollTop;
+      queueStableReaderPosition();
       if (readMode === 'flow' && ['listening', 'loading'].includes(flow.status)) return;
-      
-      const scrollY = containerRef.current.scrollTop;
-      const viewportMid = scrollY + containerRef.current.clientHeight / 3;
+      const cue = cueRef.current;
+      if (!cue) return;
+      const container = containerRef.current;
+      const verticalMirror = presentation.mirrorVertical;
+      const viewportRect = container.getBoundingClientRect();
+      const guideCoordinate = getLogicalScrollCoordinate(
+        container.scrollTop,
+        viewportRect,
+        getLogicalLeadingEdge(cue.getBoundingClientRect(), verticalMirror),
+        verticalMirror,
+      );
 
       let currentIdx = 0;
       for (let i = 0; i < sectionRefs.current.length; i++) {
         const el = sectionRefs.current[i];
-        if (el && el.offsetTop <= viewportMid) {
+        if (el && getLogicalScrollCoordinate(
+          container.scrollTop,
+          viewportRect,
+          getLogicalLeadingEdge(el.getBoundingClientRect(), verticalMirror),
+          verticalMirror,
+        ) <= guideCoordinate) {
           currentIdx = i;
         }
       }
@@ -364,7 +525,14 @@ export default function Reader() {
       return () => container.removeEventListener('scroll', handleScroll);
     }
     return undefined;
-  }, [activeSectionIdx, readMode, flow.status]);
+  }, [
+    activeSectionIdx,
+    readMode,
+    flow.status,
+    presentation.cuePosition,
+    presentation.mirrorVertical,
+    queueStableReaderPosition,
+  ]);
 
   // Auto-advance section tracking in Flow mode
   useEffect(() => {
@@ -404,8 +572,23 @@ export default function Reader() {
     
     const el = sectionRefs.current[idx];
     if (el && containerRef.current) {
-      const offset = el.offsetTop - (containerRef.current.clientHeight * 0.3);
-      const targetTop = offset > 0 ? offset : 0;
+      const cue = cueRef.current;
+      if (!cue) return;
+      const delta = getLogicalLeadingEdge(
+        el.getBoundingClientRect(),
+        presentation.mirrorVertical,
+      ) - getLogicalLeadingEdge(cue.getBoundingClientRect(), presentation.mirrorVertical);
+      const maxScrollTop = Math.max(
+        0,
+        containerRef.current.scrollHeight - containerRef.current.clientHeight,
+      );
+      const targetTop = Math.max(0, Math.min(
+        maxScrollTop,
+        containerRef.current.scrollTop + clientDeltaToLogicalScroll(
+          delta,
+          presentation.mirrorVertical,
+        ),
+      ));
       exactScrollTopRef.current = targetTop;
       containerRef.current.scrollTo({ top: targetTop, behavior: 'auto' });
       setActiveSectionIdx(idx);
@@ -417,7 +600,7 @@ export default function Reader() {
         }
       }
     }
-  }, [script, readMode, enrichedSections]);
+  }, [script, readMode, enrichedSections, presentation.mirrorVertical]);
 
   const flowRef = useRef(flow);
   flowRef.current = flow;
@@ -427,8 +610,8 @@ export default function Reader() {
   isPlayingRef.current = isPlaying;
   const activeSectionIdxRef = useRef(activeSectionIdx);
   activeSectionIdxRef.current = activeSectionIdx;
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
+  const presentationRef = useRef(presentation);
+  presentationRef.current = presentation;
 
   // Single authoritative presentation timer hook replacing independent elapsedRef accumulation
   const isTimerActive = readMode === 'manual' ? isPlaying : flow.status === 'listening';
@@ -445,8 +628,8 @@ export default function Reader() {
       flowStatus: flowRef.current.status,
       activeSectionIdx: activeSectionIdxRef.current,
       sectionCount: script.sections.length,
-      speed: settingsRef.current.speed,
-      fontSize: settingsRef.current.fontSize
+       speed: presentationRef.current.speed,
+       fontSize: presentationRef.current.fontSize
     });
 
     if (!effect) return;
@@ -467,12 +650,14 @@ export default function Reader() {
         jumpToSection(effect.index);
         break;
       case 'setSpeed':
-        settingsRef.current = { ...settingsRef.current, speed: effect.speed };
-        updateSettings({ speed: effect.speed });
+        if (updatePresentation({ speed: effect.speed })) {
+          presentationRef.current = { ...presentationRef.current, speed: effect.speed };
+        }
         break;
       case 'setFontSize':
-        settingsRef.current = { ...settingsRef.current, fontSize: effect.fontSize };
-        updateSettings({ fontSize: effect.fontSize });
+        if (updatePresentation({ fontSize: effect.fontSize })) {
+          presentationRef.current = { ...presentationRef.current, fontSize: effect.fontSize };
+        }
         break;
       case 'adjustPosition':
         if (containerRef.current) {
@@ -494,7 +679,7 @@ export default function Reader() {
         }
         break;
     }
-  }, [script, jumpToSection, updateSettings, enrichedSections]);
+  }, [script, jumpToSection, updatePresentation, enrichedSections]);
 
   useReaderCommands(dispatchCommand);
 
@@ -509,12 +694,12 @@ export default function Reader() {
       sectionCount: script.sections.length,
       elapsedMs: getElapsedMs(timerStateRef.current, performance.now()),
       playing: readModeRef.current === 'manual' ? isPlaying : flowRef.current.status === 'listening',
-      fontSize: settings.fontSize,
-      scrollSpeed: settings.speed,
+      fontSize: presentation.fontSize,
+      scrollSpeed: presentation.speed,
       position: exactScrollTopRef.current
     };
     invoke('remote_publish_state', { snapshot }).catch(() => {});
-  }, [script, isRunning, isApproved, activeSectionIdx, isPlaying, settings.fontSize, settings.speed]);
+  }, [script, isRunning, isApproved, activeSectionIdx, isPlaying, presentation.fontSize, presentation.speed]);
 
   useEffect(() => {
     publishSnapshot();
@@ -612,8 +797,13 @@ export default function Reader() {
 
   const readerSurface = getReaderSurfacePresentation(
     settings.compactMode,
-    settings.backgroundOpacity,
+    presentation.backgroundOpacity,
+    presentation.backgroundColor,
   );
+  const viewportTransform = getReaderViewportTransform({
+    horizontal: presentation.mirrorHorizontal,
+    vertical: presentation.mirrorVertical,
+  });
 
   return (
     <div 
@@ -679,45 +869,41 @@ export default function Reader() {
                   <button
                     type="button"
                     className="p-2 rounded-full transition-colors backdrop-blur-md hover:bg-black/10 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    title="Script appearance"
-                    aria-label="Open script appearance settings"
+                     title="Present settings"
+                     aria-label="Open present settings"
                   >
                     <Palette className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </DialogTrigger>
                 <DialogContent className="max-w-[min(92vw,32rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto p-4 sm:p-6">
                   <DialogHeader>
-                    <DialogTitle>Script appearance</DialogTitle>
+                     <DialogTitle>Present settings</DialogTitle>
                     <DialogDescription>
-                      Choose the font and text colour for script copy in the
-                      editor and reader.
+                       Adjust this script's reader layout and appearance.
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="flex items-center justify-between gap-3" role="group" aria-label="Script text size">
-                    <span className="font-medium">Text size</span>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        aria-label="Decrease script text size"
-                        disabled={settings.fontSize <= 16}
-                        onClick={() => dispatchCommand({ action: 'fontSize', value: -4 })}
-                        className="rounded-md border border-border p-2 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <Minus className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                      <output className="min-w-[4ch] text-center font-mono text-sm">{settings.fontSize}px</output>
-                      <button
-                        type="button"
-                        aria-label="Increase script text size"
-                        disabled={settings.fontSize >= 120}
-                        onClick={() => dispatchCommand({ action: 'fontSize', value: 4 })}
-                        className="rounded-md border border-border p-2 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <Plus className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                  <AppearanceControls settings={settings} updateSettings={updateSettings} />
+                   {error && (
+                     <p
+                       role="alert"
+                       className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                     >
+                       {error}
+                     </p>
+                   )}
+                   <PresentationControls
+                     value={presentation}
+                     onChange={updates => updatePresentation(updates as Partial<PresentationPreferences>)}
+                     globalDarkTheme={settings.darkTheme}
+                   />
+                   <div className="flex justify-end border-t border-border pt-4">
+                     <button
+                       type="button"
+                       onClick={resetCurrentPresentation}
+                       className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                     >
+                       Reset this script to defaults
+                     </button>
+                   </div>
                 </DialogContent>
               </Dialog>
             </div>
@@ -746,7 +932,7 @@ export default function Reader() {
               >
                 <Minus className="w-3 h-3" />
               </button>
-              <span className="font-mono min-w-[3ch] text-center text-xs">{settings.fontSize}</span>
+               <span className="font-mono min-w-[3ch] text-center text-xs">{presentation.fontSize}</span>
               <button 
                 onClick={() => dispatchCommand({ action: 'fontSize', value: 4 })}
                 className="p-1 hover:text-primary transition-colors"
@@ -763,9 +949,9 @@ export default function Reader() {
                 type="range" 
                 min="10" 
                 max="150" 
-                value={settings.speed}
+                 value={presentation.speed}
                 title="Scroll Speed"
-                onChange={e => dispatchCommand({ action: 'scrollSpeed', value: parseInt(e.target.value) - settings.speed })}
+                 onChange={e => dispatchCommand({ action: 'scrollSpeed', value: parseInt(e.target.value) - presentation.speed })}
                 className="w-12 md:w-20 accent-primary"
                 disabled={readMode === 'flow'}
                 style={{ opacity: readMode === 'flow' ? 0.5 : 1 }}
@@ -780,9 +966,9 @@ export default function Reader() {
                 type="range" 
                 min="0" 
                 max="100" 
-                value={settings.backgroundOpacity}
+                 value={presentation.backgroundOpacity}
                 title="Background Opacity"
-                onChange={e => updateSettings({ backgroundOpacity: parseInt(e.target.value) })}
+                 onChange={e => updatePresentation({ backgroundOpacity: parseInt(e.target.value) })}
                 className="w-12 md:w-20 accent-primary"
               />
             </div>
@@ -799,61 +985,84 @@ export default function Reader() {
         onResetTimer={resetTimer}
       />
 
+      {error && (
+        <div role="alert" className="relative z-50 shrink-0 border-b border-destructive/30 bg-background px-4 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       {/* Reader Content Area */}
       <div className="flex-1 relative overflow-hidden">
-        {/* Read Marker (Resume here marker) */}
-        <div className="absolute left-0 right-0 top-[30%] h-[2px] bg-primary/70 z-30 pointer-events-none flex items-center">
-          <div className="w-3 h-3 bg-primary rounded-full ml-4" />
-          {readMode === 'manual' && !isPlaying && (
-            <div className="ml-3 px-2 py-0.5 rounded text-xs font-bold bg-primary text-primary-foreground shadow-sm uppercase tracking-wider animate-in fade-in zoom-in duration-200">
-              Paused - Space to resume
-            </div>
-          )}
-          {readMode === 'flow' && ['paused', 'silence-stopped', 'stopped', 'ready'].includes(flow.status) && (
-            <div className="ml-3 px-2 py-0.5 rounded text-xs font-bold bg-primary text-primary-foreground shadow-sm uppercase tracking-wider animate-in fade-in zoom-in duration-200">
-              {flow.status === 'ready' ? 'Ready - Start to begin' : flow.status === 'silence-stopped' ? '30 seconds of silence — stopped' : 'Paused - Space to resume'}
-            </div>
-          )}
-          {readMode === 'flow' && flow.status === 'loading' && (
-            <div className="ml-3 px-2 py-0.5 rounded text-xs font-bold bg-primary text-primary-foreground shadow-sm uppercase tracking-wider animate-in fade-in zoom-in duration-200">
-              Preparing Apple speech...
-            </div>
-          )}
-          {readMode === 'flow' && flow.status === 'listening' && (
-            <div className="ml-3 px-2 py-0.5 rounded text-xs font-bold bg-primary text-primary-foreground shadow-sm uppercase tracking-wider animate-in fade-in zoom-in duration-200">
-              {flow.isFollowing ? 'Following' : 'Listening — waiting for script'}
-            </div>
-          )}
-        </div>
-
-        {/* Scrollable Container */}
-        <div 
-          ref={containerRef}
-          className="absolute inset-0 overflow-y-auto px-6 md:px-24 pb-[80vh]"
-          style={{ 
-            paddingTop: '30vh',
-            fontSize: `${settings.fontSize}px`,
-            lineHeight: 1.5
+        {/*
+          Only this viewport and its cue are transformed. Header, dialogs, and
+          transport controls are intentionally siblings so they stay usable in
+          every H/V mirror combination.
+        */}
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: viewportTransform,
+            transformOrigin: 'center',
           }}
         >
+          {/* Read Marker / Flow guide. It shares the transformed coordinate
+              space with copy, which makes cue, jumps, Flow, and tracking agree. */}
           <div
-            ref={textContentRef}
-            className="max-w-4xl mx-auto space-y-[10vh]"
+            ref={cueRef}
+            className={`absolute left-0 right-0 h-0 z-30 pointer-events-none flex items-center ${
+              presentation.cueStyle === 'hidden' ? 'invisible' : ''
+            }`}
+            style={{ top: `${presentation.cuePosition}%`, color: presentation.cueColor, opacity: presentation.cueOpacity / 100 }}
+          >
+            {presentation.cueStyle === 'arrows' ? (
+              <div className="w-full flex items-center justify-between px-4 text-xl leading-none" aria-hidden="true">
+                <span>›</span><span>‹</span>
+              </div>
+            ) : (
+              <div className="w-full h-[2px]" style={{ backgroundColor: presentation.cueColor }} />
+            )}
+          </div>
+
+          {/* Scrollable Container: scrollTop remains a normal logical document
+              coordinate even while its painted viewport is mirrored. */}
+          <div
+            ref={containerRef}
+            className="absolute inset-0 overflow-y-auto"
             style={{
-              fontFamily: getFontFamilyCss(settings.fontFamily),
-              color: getTextColorCss(settings.textColor),
+              paddingLeft: `${presentation.horizontalMargin}%`,
+              paddingRight: `${presentation.horizontalMargin}%`,
+              fontSize: `${presentation.fontSize}px`,
+              lineHeight: presentation.lineSpacing,
             }}
           >
+            <div
+              ref={textContentRef}
+              className="max-w-4xl mx-auto space-y-[10vh] [overflow-wrap:anywhere]"
+              style={{
+                // Spacers belong to content, not the measured scroll viewport.
+                // At small overlay heights viewport padding can exceed its
+                // available height, creating a ResizeObserver feedback loop.
+                paddingTop: `${getReaderTopPaddingPx(
+                  readerViewportHeight,
+                  presentation.cuePosition,
+                )}px`,
+                paddingBottom: `${readerViewportHeight}px`,
+                fontFamily: getFontFamilyCss(presentation.fontFamily),
+                color: getTextColorCss(presentation.textColor),
+              }}
+            >
             {enrichedSections.map((section, idx) => (
-              <div 
+              <div
                 key={section.id} 
                 ref={el => { sectionRefs.current[idx] = el; }}
-                className={`transition-opacity duration-500 ${activeSectionIdx === idx ? 'opacity-100' : 'opacity-30'}`}
+                // Never fade whole inactive sections: custom foreground colours
+                // can become unreadable at 30% alpha over a camera/background.
+                className="transition-opacity duration-500 opacity-100"
               >
                 {enrichedSections.length > 1 && (
-                  <h3 
-                    className="font-bold text-primary mb-6 flex items-center gap-4"
-                    style={{ fontSize: `${settings.fontSize * 0.75}px` }}
+                  <h3
+                    className="font-bold mb-6 flex items-center gap-4"
+                     style={{ fontSize: `${presentation.fontSize * 0.75}px` }}
                   >
                     <span className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-mono tracking-tighter">
                       {idx + 1}
@@ -878,12 +1087,17 @@ export default function Reader() {
                       const isRead = flow.anchor > span.endTokenIdx!;
                       const isActive = flow.anchor >= span.startTokenIdx! && flow.anchor <= span.endTokenIdx!;
                       
-                      let className = "transition-colors duration-200 ";
+                       let className = "transition-colors duration-200 ";
                       if (readMode === "flow") {
                         if (isActive) {
-                          className += "text-primary bg-primary/20 rounded px-1 py-0.5 shadow-sm";
+                           // This is an explicit contrast pair, independent of
+                           // a user's reader background or foreground colour.
+                           className += "bg-primary text-primary-foreground rounded px-1 py-0.5 shadow-sm";
                         } else if (isRead) {
-                          className += "text-muted-foreground opacity-60";
+                           // Retain the chosen reader text colour. Underline and
+                           // a modest alpha change communicate progress without
+                           // swapping to a theme colour that may not contrast.
+                           className += "opacity-80 underline decoration-current/40 underline-offset-4";
                         }
                       }
                       
@@ -902,6 +1116,7 @@ export default function Reader() {
                 </div>
               </div>
             ))}
+            </div>
           </div>
         </div>
       </div>

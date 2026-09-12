@@ -1,16 +1,28 @@
-import type { Script, ScriptSection } from './types';
+import type {
+  PresentationPreferences,
+  Script,
+  ScriptSection,
+} from './types';
+import {
+  DEFAULT_PRESENTATION,
+  normalizePresentation,
+} from './presentation-preferences.ts';
 
 /**
  * The first-run document is intentionally kept here, rather than in the
  * store's hydration code, so that every source of library data uses the same
  * shape and the first install can never grow another implicit seed.
  */
-export function createWelcomeScript(now = Date.now()): Script {
+export function createWelcomeScript(
+  now = Date.now(),
+  presentation: PresentationPreferences = DEFAULT_PRESENTATION,
+): Script {
   return {
     id: 'seed-1',
     title: 'Welcome to Quickque',
     createdAt: now,
     updatedAt: now,
+    presentation: normalizePresentation(presentation),
     sections: [
       {
         id: 's1',
@@ -31,8 +43,11 @@ export function createWelcomeScript(now = Date.now()): Script {
   };
 }
 
-export function createInitialScripts(now = Date.now()): Script[] {
-  return [createWelcomeScript(now)];
+export function createInitialScripts(
+  now = Date.now(),
+  presentation: PresentationPreferences = DEFAULT_PRESENTATION,
+): Script[] {
+  return [createWelcomeScript(now, presentation)];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -73,11 +88,27 @@ export function isValidScripts(value: unknown): value is Script[] {
  * Parses the on-disk/cache format. `null` is deliberate: callers must be
  * able to distinguish an invalid source from an empty, valid script array.
  */
-export function parseScriptsJson(json: unknown): Script[] | null {
+function stampPresentation(
+  scripts: Script[],
+  fallback: PresentationPreferences,
+): Script[] {
+  return scripts.map(script => ({
+    ...script,
+    sections: script.sections.map(section => ({ ...section })),
+    presentation: normalizePresentation(script.presentation, fallback),
+  }));
+}
+
+export function parseScriptsJson(
+  json: unknown,
+  presentationFallback: PresentationPreferences = DEFAULT_PRESENTATION,
+): Script[] | null {
   if (typeof json !== 'string') return null;
   try {
     const parsed: unknown = JSON.parse(json);
-    return isValidScripts(parsed) ? parsed : null;
+    return isValidScripts(parsed)
+      ? stampPresentation(parsed, presentationFallback)
+      : null;
   } catch {
     return null;
   }
@@ -126,12 +157,17 @@ export function isImportableScripts(value: unknown): value is ImportableScript[]
   );
 }
 
-export function parseImportJson(json: unknown): ImportableScript[] | null {
+export function parseImportJson(
+  json: unknown,
+  presentationFallback: PresentationPreferences = DEFAULT_PRESENTATION,
+): ImportableScript[] | null {
   if (typeof json !== 'string') return null;
   try {
     const parsed: unknown = JSON.parse(json);
     if (Array.isArray(parsed)) {
-      return isImportableScripts(parsed) ? parsed : null;
+      return isImportableScripts(parsed)
+        ? stampPresentation(parsed as Script[], presentationFallback)
+        : null;
     }
     if (
       !isRecord(parsed) ||
@@ -144,7 +180,9 @@ export function parseImportJson(json: unknown): ImportableScript[] | null {
     ) {
       return null;
     }
-    return isImportableScripts(parsed.scripts) ? parsed.scripts : null;
+    return isImportableScripts(parsed.scripts)
+      ? stampPresentation(parsed.scripts as Script[], presentationFallback)
+      : null;
   } catch {
     return null;
   }
@@ -160,14 +198,17 @@ export type ScriptRecovery = {
  * mistaken for an unsaved edit. Invalid recovery is returned as null and is
  * never rewritten by this helper.
  */
-export function parseRecoveryJson(json: unknown): ScriptRecovery | null {
+export function parseRecoveryJson(
+  json: unknown,
+  presentationFallback: PresentationPreferences = DEFAULT_PRESENTATION,
+): ScriptRecovery | null {
   if (typeof json !== 'string') return null;
   try {
     const parsed: unknown = JSON.parse(json);
     if (!isRecord(parsed) || typeof parsed.scriptsJson !== 'string') {
       return null;
     }
-    const scripts = parseScriptsJson(parsed.scriptsJson);
+    const scripts = parseScriptsJson(parsed.scriptsJson, presentationFallback);
     return scripts
       ? { scripts, serialized: parsed.scriptsJson }
       : null;

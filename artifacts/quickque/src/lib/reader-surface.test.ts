@@ -34,3 +34,12 @@ test('full reader remains an opaque full-height surface', () => {
   assert.equal(presentation.style.borderColor, 'transparent');
   assert.equal(presentation.className, 'h-[100dvh] w-full');
 });
+
+test('selected reader background receives alpha without fading descendants', () => {
+  const presentation = getReaderSurfacePresentation(true, 45, '#112233');
+
+  assert.equal(
+    presentation.style.backgroundColor,
+    'color-mix(in srgb, #112233 45%, transparent)',
+  );
+});

@@ -10,6 +10,7 @@ import {
   resolveNativeHydration,
   serializeScripts,
 } from './library-data.ts';
+import { DEFAULT_PRESENTATION } from './presentation-preferences.ts';
 
 test('a new install contains exactly one unchanged welcome script', () => {
   const scripts = createInitialScripts(123);
@@ -33,6 +34,7 @@ test('valid existing scripts are preserved and malformed source is rejected', ()
       title: 'My script',
       createdAt: 10,
       updatedAt: 20,
+      presentation: { ...DEFAULT_PRESENTATION },
       sections: [{ id: 'section', title: 'Part one', content: 'Keep this.' }],
     },
   ];
@@ -40,6 +42,22 @@ test('valid existing scripts are preserved and malformed source is rejected', ()
   assert.deepEqual(parseScriptsJson(serialized), existing);
   assert.equal(parseScriptsJson('{"scripts":[]}'), null);
   assert.equal(parseScriptsJson('not json'), null);
+});
+
+test('native and recovery parsing stamp legacy scripts using the current defaults', () => {
+  const legacy = [{
+    id: 'native',
+    title: 'Native',
+    createdAt: 1,
+    updatedAt: 1,
+    sections: [{ id: 'native-section', title: 'Section', content: 'Text' }],
+  }];
+  const defaults = { ...DEFAULT_PRESENTATION, fontSize: 72 };
+  assert.deepEqual(parseScriptsJson(JSON.stringify(legacy), defaults)?.[0].presentation, defaults);
+  const recovery = parseRecoveryJson(JSON.stringify({
+    scriptsJson: JSON.stringify(legacy),
+  }), defaults);
+  assert.deepEqual(recovery?.scripts[0].presentation, defaults);
 });
 
 test('accepts the native local-library wrapper and rejects other formats', () => {

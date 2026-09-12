@@ -10,6 +10,11 @@ export type Script = {
   sections: ScriptSection[];
   createdAt: number;
   updatedAt: number;
+  /**
+   * Presentation styling is stored with each script. Optional keeps older
+   * exports and native libraries source-compatible while they are migrated.
+   */
+  presentation?: PresentationPreferences;
 };
 
 export type Settings = {
@@ -25,6 +30,25 @@ export type Settings = {
 };
 
 export type FontFamily = 'system' | 'arial' | 'georgia' | 'monospace';
+
+export type CueStyle = 'hidden' | 'line' | 'arrows';
+
+export type PresentationPreferences = {
+  fontSize: number;
+  speed: number;
+  backgroundOpacity: number;
+  fontFamily: FontFamily;
+  textColor: string | null;
+  backgroundColor: string;
+  lineSpacing: number;
+  horizontalMargin: number;
+  mirrorHorizontal: boolean;
+  mirrorVertical: boolean;
+  cueStyle: CueStyle;
+  cuePosition: number;
+  cueColor: string;
+  cueOpacity: number;
+};
 
 export const DEFAULT_SETTINGS: Settings = {
   fontSize: 48,

@@ -24,6 +24,8 @@
     "test:library": "node --test src/lib/library-data.test.ts src/lib/library-management.test.ts src/lib/store-*.test.ts",
     "test:reader-surface": "node --test src/lib/reader-surface.test.ts",
     "test:appearance": "node --test src/lib/settings-persistence.test.ts src/lib/reader-position.test.ts src/lib/brand-contrast.test.ts",
+    "test:presentation-layout": "node --test src/lib/presentation-preferences.test.ts src/lib/reader-geometry.test.ts src/lib/reader-tokenization.test.ts src/lib/reader-position.test.ts src/lib/reader-surface.test.ts",
+    "test:reader-browser": "playwright test tests/reader-regression.spec.ts --reporter=line",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -36,6 +38,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.4",
     "@radix-ui/react-alert-dialog": "^1.1.7",

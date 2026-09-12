@@ -12,10 +12,14 @@ import {
 } from './appearance.ts';
 import {
   loadSettings,
+  loadPresentationDefaults,
+  persistPresentationDefaults,
+  QUICKQUE_PRESENTATION_DEFAULTS_KEY,
   persistSettings,
   QUICKQUE_SETTINGS_KEY,
   serializeSettings,
 } from './settings-persistence.ts';
+import { DEFAULT_PRESENTATION } from './presentation-preferences.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -124,4 +128,30 @@ test('a failed settings write does not report success', () => {
     ok: false,
     error: 'Failed to save settings.',
   });
+});
+
+test('presentation defaults use their own key and normalize without changing settings', () => {
+  const storage = new MemoryStorage();
+  storage.put(QUICKQUE_SETTINGS_KEY, JSON.stringify({
+    ...DEFAULT_SETTINGS,
+    fontSize: 36,
+    darkTheme: false,
+  }));
+  const legacyFallback = {
+    ...DEFAULT_PRESENTATION,
+    fontSize: 36,
+    backgroundColor: '#FFFFFF',
+  };
+  assert.deepEqual(loadPresentationDefaults(storage, legacyFallback), legacyFallback);
+  const saved = persistPresentationDefaults(storage, {
+    ...legacyFallback,
+    lineSpacing: 2,
+    cueColor: '#a1b2c3',
+  });
+  assert.equal(saved.ok, true);
+  assert.equal(
+    JSON.parse(storage.getItem(QUICKQUE_PRESENTATION_DEFAULTS_KEY) as string).cueColor,
+    '#A1B2C3',
+  );
+  assert.equal(loadSettings(storage).fontSize, 36);
 });

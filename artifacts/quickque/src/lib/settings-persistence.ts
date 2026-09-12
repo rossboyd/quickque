@@ -7,8 +7,14 @@ import {
   normalizeFontFamily,
   normalizeTextColor,
 } from './appearance.ts';
+import {
+  DEFAULT_PRESENTATION,
+  normalizePresentation,
+} from './presentation-preferences.ts';
+import type { PresentationPreferences } from './types.ts';
 
 export const QUICKQUE_SETTINGS_KEY = 'quickque_settings';
+export const QUICKQUE_PRESENTATION_DEFAULTS_KEY = 'quickque_presentation_defaults';
 
 export interface SettingsStorageLike {
   getItem(key: string): string | null;
@@ -82,6 +88,38 @@ export function persistSettings(
     return { ok: false, error: 'Failed to save settings.' };
   }
   return { ok: true, settings: nextSettings };
+}
+
+/**
+ * Presentation defaults are deliberately separate from app/editor settings.
+ * `fallback` lets first-run migration snapshot legacy reader settings before
+ * a later preference edit can affect existing scripts.
+ */
+export function loadPresentationDefaults(
+  storage: SettingsStorageLike | null,
+  fallback: PresentationPreferences = DEFAULT_PRESENTATION,
+): PresentationPreferences {
+  if (!storage) return normalizePresentation(fallback);
+  try {
+    const raw = storage.getItem(QUICKQUE_PRESENTATION_DEFAULTS_KEY);
+    if (raw === null) return normalizePresentation(fallback);
+    return normalizePresentation(JSON.parse(raw), fallback);
+  } catch {
+    return normalizePresentation(fallback);
+  }
+}
+
+export function persistPresentationDefaults(
+  storage: SettingsStorageLike,
+  preferences: PresentationPreferences,
+): { ok: true; preferences: PresentationPreferences } | { ok: false; error: string } {
+  const next = normalizePresentation(preferences);
+  try {
+    storage.setItem(QUICKQUE_PRESENTATION_DEFAULTS_KEY, JSON.stringify(next));
+  } catch {
+    return { ok: false, error: 'Failed to save presentation defaults.' };
+  }
+  return { ok: true, preferences: next };
 }
 
 // Descriptive aliases keep callers/tests from needing to know the storage

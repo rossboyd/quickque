@@ -1,5 +1,15 @@
-import type { DeletedScript, Script, SortMode } from './types.ts';
+import type {
+  DeletedScript,
+  PresentationPreferences,
+  Script,
+  SortMode,
+} from './types.ts';
 import { generateId } from './utils.ts';
+import {
+  DEFAULT_PRESENTATION,
+  isValidPresentation,
+  normalizePresentation,
+} from './presentation-preferences.ts';
 
 export const QUICKQUE_SCRIPTS_KEY = 'quickque_scripts';
 export const QUICKQUE_ACTIVE_SCRIPT_KEY = 'quickque_active_script';
@@ -103,7 +113,9 @@ function isValidTimestamp(value: unknown): value is number {
  * application. This deliberately accepts empty script titles because the
  * editor has always allowed users to clear a title.
  */
-export function isValidScript(value: unknown): value is Script {
+function isValidScriptFields(value: unknown): value is Omit<Script, 'presentation'> & {
+  presentation?: unknown;
+} {
   if (!isRecord(value)) return false;
   if (!isValidId(value.id)) return false;
   if (!isBoundedString(value.title, MAX_TITLE_LENGTH)) return false;
@@ -125,6 +137,11 @@ export function isValidScript(value: unknown): value is Script {
   });
 }
 
+/** Persisted/current scripts must always have a fully valid presentation. */
+export function isValidScript(value: unknown): value is Script {
+  return isValidScriptFields(value) && isValidPresentation(value.presentation);
+}
+
 function isValidScripts(value: unknown): value is Script[] {
   if (!Array.isArray(value) || value.length > MAX_SCRIPTS) return false;
   const ids = new Set<string>();
@@ -135,6 +152,34 @@ function isValidScripts(value: unknown): value is Script[] {
   });
 }
 
+function normalizeScriptPresentation(
+  value: unknown,
+  fallback: PresentationPreferences,
+): Script | null {
+  if (!isValidScriptFields(value)) return null;
+  return {
+    ...value,
+    sections: value.sections.map(section => ({ ...section })),
+    presentation: normalizePresentation(value.presentation, fallback),
+  };
+}
+
+function normalizeScriptsPresentation(
+  value: unknown,
+  fallback: PresentationPreferences,
+): Script[] | null {
+  if (!Array.isArray(value) || value.length > MAX_SCRIPTS) return null;
+  const scripts = value.map(script => normalizeScriptPresentation(script, fallback));
+  if (scripts.some(script => script === null)) return null;
+  const finalScripts = scripts as Script[];
+  const ids = new Set<string>();
+  return finalScripts.every(script => {
+    if (ids.has(script.id)) return false;
+    ids.add(script.id);
+    return true;
+  }) ? finalScripts : null;
+}
+
 function isValidTrash(value: unknown): value is DeletedScript[] {
   if (!Array.isArray(value) || value.length > MAX_TRASH) return false;
   return value.every(entry => (
@@ -142,6 +187,19 @@ function isValidTrash(value: unknown): value is DeletedScript[] {
     isValidScript(entry.script) &&
     isValidTimestamp(entry.deletedAt)
   ));
+}
+
+function normalizeTrashPresentation(
+  value: unknown,
+  fallback: PresentationPreferences,
+): DeletedScript[] | null {
+  if (!Array.isArray(value) || value.length > MAX_TRASH) return null;
+  const trash = value.map(entry => {
+    if (!isRecord(entry) || !isValidTimestamp(entry.deletedAt)) return null;
+    const script = normalizeScriptPresentation(entry.script, fallback);
+    return script ? { script, deletedAt: entry.deletedAt } : null;
+  });
+  return trash.some(entry => entry === null) ? null : trash as DeletedScript[];
 }
 
 function isSortMode(value: unknown): value is SortMode {
@@ -292,6 +350,7 @@ function parseLibraryValue(
   parsed: unknown,
   legacyActiveId?: unknown,
   repairCollisions = true,
+  presentationFallback: PresentationPreferences = DEFAULT_PRESENTATION,
 ): ParsedLibrary | null {
   let scripts: Script[];
   let activeScriptId: string | null | undefined;
@@ -300,8 +359,9 @@ function parseLibraryValue(
   let sortMode: SortMode = 'custom';
 
   if (Array.isArray(parsed)) {
-    scripts = parsed;
-    if (!isValidScripts(scripts)) return null;
+    const normalizedScripts = normalizeScriptsPresentation(parsed, presentationFallback);
+    if (!normalizedScripts) return null;
+    scripts = normalizedScripts;
     const legacySelection = activeIdForScripts(
       legacyActiveId,
       scripts,
@@ -315,10 +375,18 @@ function parseLibraryValue(
     if (!isRecord(parsed) ||
       (parsed.version !== QUICKQUE_STORAGE_VERSION && parsed.version !== LEGACY_STORAGE_VERSION)
     ) return null;
-    scripts = parsed.scripts as Script[];
-    if (!isValidScripts(scripts)) return null;
+    const normalizedScripts = normalizeScriptsPresentation(
+      parsed.scripts,
+      presentationFallback,
+    );
+    if (!normalizedScripts) return null;
+    scripts = normalizedScripts;
     activeScriptId = activeIdForScripts(parsed.activeScriptId, scripts, false);
-    if (parsed.trash !== undefined) trash = parsed.trash as DeletedScript[];
+    if (parsed.trash !== undefined) {
+      const normalizedTrash = normalizeTrashPresentation(parsed.trash, presentationFallback);
+      if (!normalizedTrash) return null;
+      trash = normalizedTrash;
+    }
     if (parsed.customOrder !== undefined) customOrder = parsed.customOrder as string[];
     if (parsed.sortMode !== undefined) sortMode = parsed.sortMode as SortMode;
   }
@@ -354,7 +422,10 @@ function byteLength(value: string): number {
  * Parse a backup without touching storage. Both legacy arrays and v1
  * envelopes are accepted, while malformed metadata is rejected as a whole.
  */
-export function parseLibraryData(data: string): { ok: true; library: ParsedLibrary } | {
+export function parseLibraryData(
+  data: string,
+  presentationFallback: PresentationPreferences = DEFAULT_PRESENTATION,
+): { ok: true; library: ParsedLibrary } | {
   ok: false;
   error: string;
 } {
@@ -367,7 +438,12 @@ export function parseLibraryData(data: string): { ok: true; library: ParsedLibra
   } catch {
     return { ok: false, error: MALFORMED_LIBRARY_ERROR };
   }
-  const library = parseLibraryValue(parsed);
+  const library = parseLibraryValue(
+    parsed,
+    undefined,
+    true,
+    presentationFallback,
+  );
   return library
     ? { ok: true, library }
     : { ok: false, error: MALFORMED_LIBRARY_ERROR };
@@ -381,6 +457,8 @@ export function parseLibraryData(data: string): { ok: true; library: ParsedLibra
 export function loadLibrary(
   storage: StorageLike,
   seedScripts: Script[],
+  presentationFallback: PresentationPreferences = DEFAULT_PRESENTATION,
+  legacyPresentationFallback: PresentationPreferences = presentationFallback,
 ): LoadedLibrary {
   let storedScripts: string | null;
   try {
@@ -390,20 +468,28 @@ export function loadLibrary(
   }
 
   if (storedScripts === null) {
-    const metadata = defaultMetadata(seedScripts);
+    // Seeds represent a newly created library rather than restored user data,
+    // so they intentionally inherit today's defaults even if their source
+    // fixture was built with the module default.
+    const normalizedSeeds = normalizeScriptsPresentation(
+      seedScripts.map(script => ({ ...script, presentation: undefined })),
+      presentationFallback,
+    );
+    if (!normalizedSeeds) return { ok: false, error: MALFORMED_LIBRARY_ERROR };
+    const metadata = defaultMetadata(normalizedSeeds);
     if (!validateState(
-      seedScripts,
+      normalizedSeeds,
       metadata.trash,
       metadata.customOrder,
       metadata.sortMode,
-      seedScripts[0]?.id ?? null,
+      normalizedSeeds[0]?.id ?? null,
     )) {
       return { ok: false, error: MALFORMED_LIBRARY_ERROR };
     }
     return {
       ok: true,
-      scripts: seedScripts,
-      activeScriptId: seedScripts[0]?.id ?? null,
+      scripts: normalizedSeeds,
+      activeScriptId: normalizedSeeds[0]?.id ?? null,
       ...metadata,
       needsMigration: false,
       wasMissing: true,
@@ -433,6 +519,7 @@ export function loadLibrary(
     Array.isArray(parsed) ? (storedActiveId === null ? undefined : storedActiveId) : undefined,
     Array.isArray(parsed) ||
       (isRecord(parsed) && parsed.version === LEGACY_STORAGE_VERSION),
+    legacyPresentationFallback,
   );
   if (!library) return { ok: false, error: MALFORMED_LIBRARY_ERROR };
   return {
@@ -445,12 +532,23 @@ export function loadLibrary(
       parsed.trash === undefined ||
       parsed.customOrder === undefined ||
       parsed.sortMode === undefined ||
+      !hasValidPresentations(
+        Array.isArray(parsed) ? parsed : parsed.scripts,
+        Array.isArray(parsed) ? [] : ((parsed.trash as unknown) ?? []),
+      ) ||
       !hasUniqueIdentities(
         Array.isArray(parsed) ? parsed : (parsed.scripts as Script[]),
         Array.isArray(parsed) ? [] : ((parsed.trash as DeletedScript[] | undefined) ?? []),
       ),
     wasMissing: false,
   };
+}
+
+function hasValidPresentations(scripts: unknown, trash: unknown): boolean {
+  return Array.isArray(scripts) && scripts.every(isValidScript) &&
+    Array.isArray(trash) && trash.every(entry => (
+      isRecord(entry) && isValidScript(entry.script)
+    ));
 }
 
 export type PersistOptions = Partial<LibraryMetadata>;
@@ -567,6 +665,7 @@ export function createDocumentScript(
   text: unknown,
   usedIds: Set<string>,
   idFactory: () => string = generateId,
+  presentationFallback: PresentationPreferences = DEFAULT_PRESENTATION,
 ): DocumentImportResult {
   const validation = validateDocumentImport(title, text);
   if ('error' in validation) return validation;
@@ -585,6 +684,7 @@ export function createDocumentScript(
       title: title as string,
       createdAt: now,
       updatedAt: now,
+      presentation: normalizePresentation(presentationFallback),
       sections: [
         {
           id: sectionId,

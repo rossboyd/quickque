@@ -11,6 +11,7 @@ import {
   storageErrors,
 } from './store-persistence.ts';
 import type { Script } from './types.ts';
+import { DEFAULT_PRESENTATION } from './presentation-preferences.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -38,6 +39,7 @@ function script(id: string, title = 'Old script'): Script {
     title,
     createdAt: 1,
     updatedAt: 1,
+    presentation: { ...DEFAULT_PRESENTATION },
     sections: [{ id: `${id}-section`, title: 'Section 1', content: 'content' }],
   };
 }
@@ -235,6 +237,21 @@ test('document imports preserve exact text and allow duplicate titles with fresh
   }]);
 });
 
+test('document imports receive a copy of the supplied presentation defaults', () => {
+  const defaults = { ...DEFAULT_PRESENTATION, horizontalMargin: 22 };
+  const result = createDocumentScript(
+    'Imported.txt',
+    'Text',
+    new Set<string>(),
+    undefined,
+    defaults,
+  );
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.script.presentation, defaults);
+  assert.notEqual(result.script.presentation, defaults);
+});
+
 test('document title and text validation enforces nonblank and size limits', () => {
   const ids = new Set<string>();
   assert.equal(createDocumentScript('   ', 'text', ids).ok, false);
@@ -275,6 +292,53 @@ test('legacy arrays tolerate a stale active selection key', () => {
   assert.equal(loaded.ok, true);
   if (!loaded.ok) return;
   assert.equal(loaded.activeScriptId, 'a');
+});
+
+test('legacy scripts and Trash are stamped with the supplied presentation snapshot', () => {
+  const storage = new MemoryStorage();
+  const active = script('active');
+  const deleted = script('deleted');
+  delete active.presentation;
+  delete deleted.presentation;
+  storage.put(QUICKQUE_SCRIPTS_KEY, JSON.stringify({
+    version: 2,
+    scripts: [active],
+    activeScriptId: 'active',
+    trash: [{ script: deleted, deletedAt: 2 }],
+    customOrder: ['active'],
+    sortMode: 'custom',
+  }));
+  const currentDefaults = {
+    ...DEFAULT_PRESENTATION,
+    fontSize: 80,
+  };
+  const fallback = {
+    ...DEFAULT_PRESENTATION,
+    fontSize: 66,
+    speed: 150,
+    backgroundColor: '#FFFFFF',
+  };
+  const loaded = loadLibrary(storage, [], currentDefaults, fallback);
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) return;
+  assert.equal(loaded.needsMigration, true);
+  assert.deepEqual(loaded.scripts[0].presentation, fallback);
+  assert.deepEqual(loaded.trash[0].script.presentation, fallback);
+  assert.equal(persistLibrary(storage, loaded.scripts, loaded.activeScriptId, {
+    trash: loaded.trash,
+    customOrder: loaded.customOrder,
+    sortMode: loaded.sortMode,
+  }).ok, true);
+  const saved = JSON.parse(storage.getItem(QUICKQUE_SCRIPTS_KEY) as string);
+  assert.deepEqual(saved.trash[0].script.presentation, fallback);
+  const reloaded = loadLibrary(storage, [], currentDefaults, {
+    ...DEFAULT_PRESENTATION,
+    speed: 1,
+  });
+  assert.equal(reloaded.ok, true);
+  if (!reloaded.ok) return;
+  assert.equal(reloaded.scripts[0].presentation?.speed, 150);
+  assert.equal(reloaded.trash[0].script.presentation?.speed, 150);
 });
 
 test('rejects malformed metadata without writing', () => {

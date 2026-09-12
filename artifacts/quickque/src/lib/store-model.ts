@@ -1,5 +1,6 @@
 import type { DeletedScript, Script, SortMode } from './types.ts';
 import { generateId } from './utils.ts';
+import { normalizePresentation } from './presentation-preferences.ts';
 
 export type LibraryState = {
   scripts: Script[];
@@ -71,6 +72,7 @@ export function mergeImportedLibrary(
     return {
       ...source,
       id: scriptId,
+      presentation: normalizePresentation(source.presentation),
       sections: sections.filter(
         (section): section is Script['sections'][number] => section !== null,
       ),

@@ -9,6 +9,7 @@ import {
   type LibraryState,
 } from './store-model.ts';
 import type { Script } from './types.ts';
+import { DEFAULT_PRESENTATION } from './presentation-preferences.ts';
 
 function script(id: string): Script {
   return {
@@ -16,6 +17,7 @@ function script(id: string): Script {
     title: id,
     createdAt: 1,
     updatedAt: 1,
+    presentation: { ...DEFAULT_PRESENTATION },
     sections: [{ id: `${id}-section`, title: 'Section', content: id }],
   };
 }
@@ -88,4 +90,22 @@ test('portable/full import merge regenerates colliding script and section identi
   ];
   assert.equal(new Set(allIds).size, allIds.length);
   assert.deepEqual(merged.order, ['fresh-script']);
+});
+
+test('import remapping preserves each script presentation without sharing it', () => {
+  const destination = state();
+  const source = script('imported');
+  source.presentation = {
+    ...DEFAULT_PRESENTATION,
+    lineSpacing: 2.5,
+    cueStyle: 'hidden',
+  };
+  const merged = mergeImportedLibrary({
+    scripts: [source],
+    trash: [],
+    customOrder: ['imported'],
+  }, destination.scripts, destination.trash);
+  assert.ok(merged);
+  assert.deepEqual(merged.scripts[0].presentation, source.presentation);
+  assert.notEqual(merged.scripts[0].presentation, source.presentation);
 });
