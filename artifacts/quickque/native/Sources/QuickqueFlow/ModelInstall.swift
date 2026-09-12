@@ -1,171 +1,324 @@
-import CryptoKit
-import FluidAudio
 import Foundation
+import Speech
+
+/// The only locale policy used by Flow. The script matcher currently ships
+/// English text, so an equivalent English locale is selected explicitly
+/// rather than silently falling back to another language or to the network.
+let flowRequestedLocale = Locale(identifier: "en-GB")
+
+private final class AssetInstallProgress: @unchecked Sendable {
+    let request: AssetInstallationRequest
+
+    init(_ request: AssetInstallationRequest) {
+        self.request = request
+    }
+}
+
+struct AppleSpeechModules {
+    let locale: Locale
+    let transcriber: SpeechTranscriber
+    let modules: [any SpeechModule]
+}
+
+private func boundedAssetProgress(_ value: Double) -> Double {
+    guard value.isFinite else { return 0 }
+    return max(0, min(1, value))
+}
+
+func flowLocaleMatches(_ lhs: Locale, _ rhs: Locale) -> Bool {
+    lhs.identifier
+        .replacingOccurrences(of: "_", with: "-")
+        .caseInsensitiveCompare(
+            rhs.identifier.replacingOccurrences(of: "_", with: "-")
+        ) == .orderedSame
+}
 
 extension FlowService {
-    func modelsAreComplete() -> Bool {
-        guard let installed = try? String(contentsOf: marker, encoding: .utf8)
-            .split(separator: "\n").map(String.init),
-              installed.count == 3, installed[0] == modelRevision,
-              installed[1] == vadRevision, installed[2] == installationDigest()
-        else { return false }
-        let required = [
-            eouDirectory.appendingPathComponent("streaming_encoder.mlmodelc"),
-            eouDirectory.appendingPathComponent("decoder.mlmodelc"),
-            eouDirectory.appendingPathComponent("joint_decision.mlmodelc"),
-            eouDirectory.appendingPathComponent("vocab.json"), vadDirectory,
-        ]
-        return required.allSatisfy { nonempty($0) }
-    }
-
-    private func installationDigest() -> String {
-        let files = [eouDirectory, vadDirectory].flatMap { directory -> [URL] in
-            guard let enumerator = FileManager.default.enumerator(
-                at: directory, includingPropertiesForKeys: [.isRegularFileKey])
-            else { return [] }
-            return enumerator.compactMap {
-                guard let url = $0 as? URL,
-                      (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
-                else { return nil }
-                return url
-            }
-        }.sorted { $0.path < $1.path }
-        guard !files.isEmpty else { return "" }
-        var digest = SHA256()
-        for file in files {
-            digest.update(data: Data(file.path.utf8))
-            guard let stream = InputStream(url: file) else { return "" }
-            stream.open()
-            var buffer = [UInt8](repeating: 0, count: 1024 * 1024)
-            while stream.hasBytesAvailable {
-                let count = stream.read(&buffer, maxLength: buffer.count)
-                guard count >= 0 else {
-                    stream.close()
-                    return ""
-                }
-                if count == 0 { break }
-                digest.update(data: Data(buffer[0..<count]))
-            }
-            stream.close()
+    func makeSpeechModules() async throws -> AppleSpeechModules {
+        guard SpeechTranscriber.isAvailable else {
+            throw FlowFailure.unsupported
         }
-        return digest.finalize().map { String(format: "%02x", $0) }.joined()
+        guard let locale = await SpeechTranscriber.supportedLocale(
+            equivalentTo: flowRequestedLocale
+        ) else {
+            throw FlowFailure.unsupportedLocale
+        }
+
+        let transcriber = SpeechTranscriber(
+            locale: locale,
+            preset: .progressiveTranscription
+        )
+        return AppleSpeechModules(
+            locale: locale,
+            transcriber: transcriber,
+            modules: [transcriber]
+        )
     }
 
-    private func nonempty(_ url: URL) -> Bool {
-        var directory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &directory) else {
+    func emitSpeechAssetStatus(expectedGeneration: UInt64) async {
+        guard generation == expectedGeneration else { return }
+        do {
+            emitDiagnostic(.appleSupportCheckBegin)
+            let modules = try await makeSpeechModules()
+            guard generation == expectedGeneration, !Task.isCancelled else { return }
+            emitDiagnostic(.appleSupportCheckComplete)
+            emitDiagnostic(.appleAssetsCheckBegin)
+            let status = await AssetInventory.status(forModules: modules.modules)
+            guard generation == expectedGeneration, !Task.isCancelled else { return }
+            switch status {
+            case .installed:
+                emitDiagnostic(.appleAssetsCheckComplete)
+                let installedLocales = await SpeechTranscriber.installedLocales
+                guard generation == expectedGeneration, !Task.isCancelled else {
+                    return
+                }
+                if installedLocales.contains(where: {
+                    flowLocaleMatches($0, modules.locale)
+                }) {
+                    await emitStatus(
+                        "ready",
+                        message: "Apple SpeechAnalyzer ready for \(modules.locale.identifier)."
+                    )
+                } else {
+                    await emitStatus(
+                        "needs-model",
+                        message: "Install Apple speech assets for \(modules.locale.identifier)."
+                    )
+                }
+            case .supported:
+                emitDiagnostic(.appleAssetsCheckComplete)
+                await emitStatus(
+                    "needs-model",
+                    message: "Install Apple speech assets for \(modules.locale.identifier)."
+                )
+            case .downloading:
+                emitDiagnostic(.appleAssetsCheckComplete)
+                await emitStatus(
+                    "downloading",
+                    message: "Apple speech assets are downloading for \(modules.locale.identifier)."
+                )
+                startAssetStatusPolling(expectedGeneration)
+            case .unsupported:
+                emitDiagnostic(.appleAssetsCheckComplete)
+                await emitStatus(
+                    "unsupported",
+                    message: FlowFailure.assetUnavailable.localizedDescription
+                )
+            @unknown default:
+                emitDiagnostic(.appleAssetsCheckComplete)
+                await emitStatus(
+                    "unsupported",
+                    message: FlowFailure.assetUnavailable.localizedDescription
+                )
+            }
+        } catch let failure as FlowFailure {
+            guard generation == expectedGeneration, !Task.isCancelled else { return }
+            await emitStatus("unsupported", message: failure.localizedDescription)
+        } catch {
+            guard generation == expectedGeneration, !Task.isCancelled else { return }
+            await emitStatus(
+                "unsupported",
+                message: "Apple speech assets are unavailable on this Mac."
+            )
+        }
+    }
+
+    private func startAssetStatusPolling(_ expectedGeneration: UInt64) {
+        guard assetStatusTask == nil else { return }
+        assetStatusTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .milliseconds(500))
+                } catch {
+                    return
+                }
+                guard let self,
+                      await self.generationMatches(expectedGeneration)
+                else {
+                    return
+                }
+                guard await self.refreshDownloadingAssetStatus(expectedGeneration)
+                else {
+                    return
+                }
+            }
+        }
+    }
+
+    private func refreshDownloadingAssetStatus(
+        _ expectedGeneration: UInt64
+    ) async -> Bool {
+        guard generation == expectedGeneration, !Task.isCancelled else {
             return false
         }
-        if !directory.boolValue {
-            return ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) > 0
-        }
-        guard let enumerator = FileManager.default.enumerator(
-            at: url, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey])
-        else { return false }
-        for case let file as URL in enumerator {
-            let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-            if values?.isRegularFile == true && (values?.fileSize ?? 0) > 0 { return true }
-        }
-        return false
-    }
-
-    func download() async {
-        guard supported() else {
-            await emitStatus("unsupported", message: FlowFailure.unsupported.localizedDescription)
-            return
-        }
         do {
-            ModelHub.offlineMode = true
-            let asr = try await immutableManifest(
-                repository: "FluidInference/parakeet-realtime-eou-120m-coreml",
-                revision: modelRevision).filter {
-                    $0.type == "file" && ($0.path == "160ms/vocab.json"
-                        || $0.path.hasPrefix("160ms/streaming_encoder.mlmodelc/")
-                        || $0.path.hasPrefix("160ms/decoder.mlmodelc/")
-                        || $0.path.hasPrefix("160ms/joint_decision.mlmodelc/"))
+            let modules = try await makeSpeechModules()
+            let status = await AssetInventory.status(forModules: modules.modules)
+            guard generation == expectedGeneration, !Task.isCancelled else {
+                return false
+            }
+            switch status {
+            case .downloading:
+                await emitStatus(
+                    "downloading",
+                    message: "Apple speech assets are downloading for \(modules.locale.identifier)."
+                )
+                return true
+            case .installed:
+                let installedLocales = await SpeechTranscriber.installedLocales
+                guard generation == expectedGeneration, !Task.isCancelled else {
+                    return false
                 }
-            let vad = try await immutableManifest(
-                repository: "FluidInference/silero-vad-coreml", revision: vadRevision
-            ).filter {
-                $0.type == "file"
-                    && $0.path.hasPrefix("silero-vad-unified-256ms-v6.2.1.mlmodelc/")
+                if installedLocales.contains(where: {
+                    flowLocaleMatches($0, modules.locale)
+                }) {
+                    await emitStatus(
+                        "ready",
+                        message: "Apple SpeechAnalyzer ready for \(modules.locale.identifier)."
+                    )
+                } else {
+                    await emitStatus(
+                        "needs-model",
+                        message: "Install Apple speech assets for \(modules.locale.identifier)."
+                    )
+                }
+                return false
+            case .supported:
+                await emitStatus(
+                    "needs-model",
+                    message: "Install Apple speech assets for \(modules.locale.identifier)."
+                )
+                return false
+            case .unsupported:
+                await emitStatus(
+                    "unsupported",
+                    message: FlowFailure.assetUnavailable.localizedDescription
+                )
+                return false
+            @unknown default:
+                await emitStatus(
+                    "unsupported",
+                    message: FlowFailure.assetUnavailable.localizedDescription
+                )
+                return false
             }
-            guard !asr.isEmpty, !vad.isEmpty else { throw FlowFailure.missingModel }
-            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            try? FileManager.default.removeItem(at: marker)
-            let total = asr.reduce(0) { $0 + $1.size } + vad.reduce(0) { $0 + $1.size }
-            await emitStatus("downloading", progress: 0, totalBytes: total)
-            var completed = 0
-            completed = try await install(
-                asr, repository: "FluidInference/parakeet-realtime-eou-120m-coreml",
-                revision: modelRevision, destination: eouDirectory, strippingPrefix: "160ms/",
-                completedBytes: completed, totalBytes: total)
-            completed = try await install(
-                vad, repository: "FluidInference/silero-vad-coreml", revision: vadRevision,
-                destination: vadDirectory.deletingLastPathComponent(), strippingPrefix: "",
-                completedBytes: completed, totalBytes: total)
-            try Task.checkCancellation()
-            let manager = StreamingEouAsrManager(chunkSize: .ms160, debugFeatures: false)
-            try await manager.loadModels(to: modelsRoot)
-            _ = try await VadManager(modelDirectory: root)
-            let digest = installationDigest()
-            guard !digest.isEmpty else { throw FlowFailure.missingModel }
-            try Data("\(modelRevision)\n\(vadRevision)\n\(digest)\n".utf8)
-                .write(to: marker, options: .atomic)
-            await manager.cleanup()
-            await emitStatus("ready", progress: 1, totalBytes: total)
-        } catch is CancellationError {
         } catch {
-            try? FileManager.default.removeItem(at: marker)
-            await emitError("Model download or integrity verification failed: \(error.localizedDescription)")
-            await emitStatus("needs-model", message: "Retry the model download.")
-        }
-    }
-
-    private func immutableManifest(repository: String, revision: String) async throws -> [RemoteFile] {
-        let url = URL(string:
-            "https://huggingface.co/api/models/\(repository)/tree/\(revision)?recursive=true")!
-        let (data, response) = try await URLSession.shared.data(from: url)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw NSError(domain: "QuickqueFlow", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Could not read the immutable model manifest."
-            ])
-        }
-        return try JSONDecoder().decode([RemoteFile].self, from: data)
-    }
-
-    private func install(
-        _ files: [RemoteFile], repository: String, revision: String, destination: URL,
-        strippingPrefix prefix: String, completedBytes: Int, totalBytes: Int
-    ) async throws -> Int {
-        var completedBytes = completedBytes
-        for file in files.sorted(by: { $0.path < $1.path }) {
-            try Task.checkCancellation()
-            let relative = prefix.isEmpty ? file.path : String(file.path.dropFirst(prefix.count))
-            let target = destination.appendingPathComponent(relative)
-            try FileManager.default.createDirectory(
-                at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let escaped = file.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!
-            let url = URL(string:
-                "https://huggingface.co/\(repository)/resolve/\(revision)/\(escaped)")!
-            let (temporary, response) = try await URLSession.shared.download(from: url)
-            guard (response as? HTTPURLResponse)?.statusCode == 200,
-                  ((try? temporary.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1) == file.size
-            else {
-                throw NSError(domain: "QuickqueFlow", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: "An immutable model file failed size verification."
-                ])
-            }
-            let partial = target.appendingPathExtension("partial")
-            try? FileManager.default.removeItem(at: partial)
-            try FileManager.default.moveItem(at: temporary, to: partial)
-            try? FileManager.default.removeItem(at: target)
-            try FileManager.default.moveItem(at: partial, to: target)
-            completedBytes += file.size
             await emitStatus(
-                "downloading", progress: Double(completedBytes) / Double(max(1, totalBytes)),
-                totalBytes: totalBytes)
+                "unsupported",
+                message: "Apple speech asset status could not be refreshed."
+            )
+            return false
         }
-        return completedBytes
+    }
+
+    func downloadSpeechAssets(expectedGeneration: UInt64) async {
+        guard generation == expectedGeneration else { return }
+        do {
+            emitDiagnostic(.appleSupportCheckBegin)
+            let modules = try await makeSpeechModules()
+            guard generation == expectedGeneration, !Task.isCancelled else { return }
+            emitDiagnostic(.appleSupportCheckComplete)
+            emitDiagnostic(.appleAssetsCheckBegin)
+            let status = await AssetInventory.status(forModules: modules.modules)
+            guard generation == expectedGeneration, !Task.isCancelled else { return }
+            emitDiagnostic(.appleAssetsCheckComplete)
+            switch status {
+            case .installed:
+                let installedLocales = await SpeechTranscriber.installedLocales
+                guard generation == expectedGeneration, !Task.isCancelled else {
+                    return
+                }
+                if installedLocales.contains(where: {
+                    flowLocaleMatches($0, modules.locale)
+                }) {
+                    await emitStatus(
+                        "ready",
+                        message: "Apple SpeechAnalyzer ready for \(modules.locale.identifier).",
+                        progress: 1
+                    )
+                } else {
+                    await emitStatus(
+                        "needs-model",
+                        message: "Install Apple speech assets for \(modules.locale.identifier)."
+                    )
+                }
+                return
+            case .unsupported:
+                throw FlowFailure.assetUnavailable
+            case .supported, .downloading:
+                break
+            @unknown default:
+                throw FlowFailure.assetUnavailable
+            }
+
+            guard let request = try await AssetInventory.assetInstallationRequest(
+                supporting: modules.modules
+            ) else {
+                guard generation == expectedGeneration, !Task.isCancelled else {
+                    return
+                }
+                let downloading: Bool
+                if case .downloading = status {
+                    downloading = true
+                } else {
+                    downloading = false
+                }
+                await emitStatus(
+                    downloading ? "downloading" : "needs-model",
+                    message: downloading
+                        ? "Apple speech assets are already downloading."
+                        : "Apple speech assets require installation."
+                )
+                return
+            }
+
+            let installProgress = AssetInstallProgress(request)
+            await emitStatus(
+                "downloading",
+                message: "Installing Apple speech assets for \(modules.locale.identifier).",
+                progress: boundedAssetProgress(
+                    installProgress.request.progress.fractionCompleted
+                )
+            )
+            let progressTask = Task { [weak self, installProgress] in
+                while !Task.isCancelled {
+                    guard await self?.generationMatches(expectedGeneration) == true else {
+                        return
+                    }
+                    let fraction = boundedAssetProgress(
+                        installProgress.request.progress.fractionCompleted
+                    )
+                    await self?.emitStatus("downloading", progress: fraction)
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+            }
+            defer { progressTask.cancel() }
+
+            emitDiagnostic(.appleAssetsDownloadBegin)
+            try await request.downloadAndInstall()
+            guard generation == expectedGeneration, !Task.isCancelled else { return }
+            emitDiagnostic(.appleAssetsDownloadComplete)
+            await emitStatus(
+                "ready",
+                message: "Apple SpeechAnalyzer ready for \(modules.locale.identifier).",
+                progress: 1
+            )
+        } catch is CancellationError {
+        } catch let failure as FlowFailure {
+            guard generation == expectedGeneration, !Task.isCancelled else { return }
+            await emitError(failureCode(failure), failure.localizedDescription)
+            await emitStatus("needs-model", message: "Retry Apple speech asset installation.")
+        } catch {
+            guard generation == expectedGeneration, !Task.isCancelled else { return }
+            await emitError(
+                "unsupported_platform",
+                "Apple speech assets could not be installed. Check network access and retry."
+            )
+            await emitStatus("needs-model", message: "Retry Apple speech asset installation.")
+        }
+    }
+
+    private func generationMatches(_ expectedGeneration: UInt64) -> Bool {
+        generation == expectedGeneration
     }
 }

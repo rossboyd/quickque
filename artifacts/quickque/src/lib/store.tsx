@@ -28,79 +28,17 @@ import {
   mergeImportedLibrary,
   LibraryState,
 } from './store-model';
+import { getLocalLibrary, chooseLocalDirectory, saveLocalLibrary } from './local-library';
+import {
+  createInitialScripts,
+  parseRecoveryJson,
+  parseScriptsJson,
+  serializeScripts,
+  mergeNativeHydration,
+  canWriteNativeLibrary,
+} from './library-data';
 
-const SEED_SCRIPTS: Script[] = [
-  {
-    id: 'seed-1',
-    title: 'Welcome to Quickque',
-    createdAt: Date.now() - 3000,
-    updatedAt: Date.now() - 3000,
-    sections: [
-      {
-        id: 'seed-1-s1',
-        title: 'Introduction',
-        content: 'Welcome to Quickque. This is a personal teleprompter designed for live meetings.\n\nIt helps you stay on track while presenting, without feeling like you are reading a script.'
-      },
-      {
-        id: 'seed-1-s2',
-        title: 'Key Features',
-        content: "If you need to pause for an interruption, just press the Space bar.\n\nYou won't lose your place. A clear marker shows exactly where you left off.\n\nUse the left and right arrow keys to jump between sections."
-      },
-      {
-        id: 'seed-1-s3',
-        title: 'Desktop Mode',
-        content: 'If you are using the desktop app, you can enable compact overlay mode. This lets Quickque float above your other windows, like Zoom or Google Meet, with a transparent background.'
-      }
-    ]
-  },
-  {
-    id: 'seed-2',
-    title: 'Weekly Team Update',
-    createdAt: Date.now() - 2000,
-    updatedAt: Date.now() - 2000,
-    sections: [
-      {
-        id: 'seed-2-s1',
-        title: 'Opening',
-        content: "Hi everyone, thanks for joining the weekly sync.\n\nLet's dive right into our metrics for the past week."
-      },
-      {
-        id: 'seed-2-s2',
-        title: 'Metrics',
-        content: 'Engagement is up by fifteen percent across all major channels.\n\nOur new onboarding flow seems to be the primary driver for this increase.'
-      },
-      {
-        id: 'seed-2-s3',
-        title: 'Blockers & Q&A',
-        content: 'The only major blocker right now is the database migration scheduled for Thursday.\n\nDoes anyone have questions about the migration timeline or the metrics?'
-      }
-    ]
-  },
-  {
-    id: 'seed-3',
-    title: 'Product Walkthrough',
-    createdAt: Date.now() - 1000,
-    updatedAt: Date.now() - 1000,
-    sections: [
-      {
-        id: 'seed-3-s1',
-        title: 'Context',
-        content: "Today I'm going to walk you through the new dashboard interface.\n\nWe've completely redesigned the layout based on your feedback."
-      },
-      {
-        id: 'seed-3-s2',
-        title: 'Navigation Changes',
-        content: 'Notice how the main navigation has moved from the top bar to the left sidebar.\n\nThis gives us more vertical space for your data and allows for nested menus.'
-      },
-      {
-        id: 'seed-3-s3',
-        title: 'Next Steps',
-        content: "I'll share a link to this prototype after the meeting.\n\nPlease take some time to click around and leave comments directly in the file."
-      }
-    ]
-  }
-];
-
+const SEED_SCRIPTS: Script[] = createInitialScripts();
 type StoreContextType = {
   scripts: Script[];
   trash: DeletedScript[];
@@ -111,7 +49,10 @@ type StoreContextType = {
   setActiveScriptId: (id: string | null) => void;
   updateSettings: (newSettings: Partial<Settings>) => void;
   createScript: () => string;
-  updateScript: (id: string, updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt'>>) => void;
+  updateScript: (
+    id: string,
+    updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt'>>,
+  ) => void;
   deleteScript: (id: string) => void;
   deleteScripts: (ids: string[]) => boolean;
   restoreScripts: (ids: string[]) => boolean;
@@ -128,15 +69,32 @@ type StoreContextType = {
   retryLoadLibrary: () => void;
   error: string | null;
   clearError: () => void;
+  profile: Profile;
+  updateProfile: (updates: Partial<Profile>) => boolean;
+  libraryDirectory: string | null;
+  chooseLibraryDirectory: () => Promise<string | null>;
+  localSaveStatus: string;
 };
 
 const StoreContext = createContext<StoreContextType | null>(null);
+
+function getStorage(): Storage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 type ImportDocumentResult =
   | { ok: true; id: string }
   | { ok: false; error: string };
 
 type LibrarySnapshot = LibraryState;
+type LibraryCommitResult =
+  | { ok: true }
+  | { ok: false; error: string };
 
 function getLocalStorage(): StorageLike | null {
   try {
@@ -193,6 +151,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [recoveryRequired, setRecoveryRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [profile, setProfile] = useState<Profile>(() => readStoredProfile());
+  const [libraryDirectory, setLibraryDirectory] = useState<string | null>(null);
+  const [localSaveStatus, setLocalSaveStatus] = useState('Loading local library…');
 
   const settingsRef = useRef<Settings>(DEFAULT_SETTINGS);
   const scriptsRef = useRef<Script[]>([]);
@@ -203,6 +164,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const recoveryRequiredRef = useRef(false);
   const storageRef = useRef<StorageLike | null>(null);
   const savesDisabledRef = useRef(false);
+  const profileRef = useRef(profile);
+  const localSaveStatusRef = useRef(localSaveStatus);
+  const nativeDirectoryRef = useRef<string | null>(null);
+  const nativeReadyRef = useRef(false);
+  const nativeAutosaveBlockedRef = useRef(false);
+  const nativePickerOpenRef = useRef(false);
+  const nativeSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nativeSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const nativeGenerationRef = useRef(0);
+  const nativeSaveSessionRef = useRef(0);
+  const scriptMutationRevisionRef = useRef(0);
+  const commitLibraryRef = useRef<
+    ((snapshot: LibrarySnapshot) => LibraryCommitResult) | null
+  >(null);
+
+  profileRef.current = profile;
+  localSaveStatusRef.current = localSaveStatus;
+  const setSaveStatus = useCallback((status: string) => {
+    localSaveStatusRef.current = status;
+    setLocalSaveStatus(status);
+  }, []);
+
+  const cancelNativeAutosaves = useCallback(() => {
+    nativeSaveSessionRef.current += 1;
+    nativeReadyRef.current = false;
+    nativeAutosaveBlockedRef.current = true;
+    if (nativeSaveTimerRef.current !== null) {
+      clearTimeout(nativeSaveTimerRef.current);
+      nativeSaveTimerRef.current = null;
+    }
+  }, []);
 
   const applyLoaded = useCallback((loaded: Extract<ReturnType<typeof loadLibrary>, { ok: true }>) => {
     scriptsRef.current = loaded.scripts.map(cloneScript);
@@ -228,6 +220,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     storageRef.current = getLocalStorage();
     const storage = storageRef.current;
     if (!storage) {
+      cancelNativeAutosaves();
       savesDisabledRef.current = true;
       scriptsRef.current = [];
       trashRef.current = [];
@@ -252,6 +245,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     const loaded = loadLibrary(storage, SEED_SCRIPTS);
     if ('error' in loaded) {
+      cancelNativeAutosaves();
       savesDisabledRef.current = true;
       scriptsRef.current = [];
       trashRef.current = [];
@@ -284,7 +278,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       if ('error' in persisted) setError(persisted.error);
     }
-  }, [applyLoaded]);
+  }, [applyLoaded, cancelNativeAutosaves]);
 
   useEffect(() => {
     storageRef.current = getLocalStorage();
@@ -319,6 +313,213 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [settings, isLoaded]);
 
+  const enqueueNativeSave = useCallback(
+    (
+      serialized: string,
+      expectedDirectory: string,
+      expectedSession: number,
+    ): Promise<void> => {
+      const operation = nativeSaveChainRef.current.then(async () => {
+        if (!canWriteNativeLibrary(
+          expectedDirectory,
+          nativeDirectoryRef.current,
+          expectedSession,
+          nativeSaveSessionRef.current,
+          recoveryRequiredRef.current,
+          nativePickerOpenRef.current,
+          nativeReadyRef.current,
+          nativeAutosaveBlockedRef.current,
+        )) {
+          return;
+        }
+
+        setSaveStatus('Saving to local library…');
+        try {
+          // Capture the directory at enqueue time so a folder change cannot
+          // retarget a write that is already waiting in the queue.
+          await saveLocalLibrary(serialized, expectedDirectory);
+          if (nativeDirectoryRef.current === expectedDirectory) {
+            setSaveStatus('Saved to local library');
+            setError(current => (
+              recoveryRequiredRef.current ||
+              current === 'Failed to save settings.' ||
+              current === 'Failed to load settings.'
+                ? current
+                : null
+            ));
+          }
+        } catch (saveError) {
+          setSaveStatus('Native save failed — your latest edits are cached locally');
+          setError(current => current ?? describeError(
+            saveError,
+            'Could not save scripts to the local library. Your latest edits are cached locally.',
+          ));
+          throw saveError;
+        }
+      });
+
+      // A failed native save must not poison later saves. Browser storage is
+      // still the transactional source of truth for the complete library.
+      nativeSaveChainRef.current = operation.catch(() => undefined);
+      return operation;
+    },
+    [setSaveStatus],
+  );
+
+  const scheduleNativeSave = useCallback(
+    (serialized: string) => {
+      const directory = nativeDirectoryRef.current;
+      const session = nativeSaveSessionRef.current;
+      if (!directory || !canWriteNativeLibrary(
+        directory,
+        nativeDirectoryRef.current,
+        session,
+        nativeSaveSessionRef.current,
+        recoveryRequiredRef.current,
+        nativePickerOpenRef.current,
+        nativeReadyRef.current,
+        nativeAutosaveBlockedRef.current,
+      )) {
+        return;
+      }
+
+      if (nativeSaveTimerRef.current !== null) {
+        clearTimeout(nativeSaveTimerRef.current);
+      }
+      nativeSaveTimerRef.current = setTimeout(() => {
+        nativeSaveTimerRef.current = null;
+        if (!canWriteNativeLibrary(
+          directory,
+          nativeDirectoryRef.current,
+          session,
+          nativeSaveSessionRef.current,
+          recoveryRequiredRef.current,
+          nativePickerOpenRef.current,
+          nativeReadyRef.current,
+          nativeAutosaveBlockedRef.current,
+        )) {
+          return;
+        }
+        void enqueueNativeSave(serialized, directory, session).catch(() => undefined);
+      }, AUTOSAVE_DELAY_MS);
+    },
+    [enqueueNativeSave],
+  );
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    let cancelled = false;
+    const hydrationGeneration = nativeGenerationRef.current;
+    const hydrationRevision = scriptMutationRevisionRef.current;
+    setSaveStatus('Loading local library…');
+
+    void getLocalLibrary()
+      .then((loaded) => {
+        if (cancelled || hydrationGeneration !== nativeGenerationRef.current) return;
+        const directory =
+          typeof loaded.directory === 'string' && loaded.directory.length > 0
+            ? loaded.directory
+            : null;
+        setLibraryDirectory(directory);
+        nativeDirectoryRef.current = directory;
+
+        if (!directory) {
+          cancelNativeAutosaves();
+          nativeReadyRef.current = false;
+          nativeAutosaveBlockedRef.current = false;
+          setSaveStatus('No local library selected');
+          return;
+        }
+
+        const nativeScripts =
+          loaded.scriptsJson === null ? null : parseScriptsJson(loaded.scriptsJson);
+        if (loaded.scriptsJson !== null && nativeScripts === null) {
+          cancelNativeAutosaves();
+          const message =
+            'The selected local library is invalid. Your cached scripts are shown; reselect the folder to resume native saves.';
+          setSaveStatus(message);
+          setError(current => current ?? message);
+          return;
+        }
+
+        if (recoveryRequiredRef.current) {
+          cancelNativeAutosaves();
+          setSaveStatus('Local library recovery is required before native saves');
+          return;
+        }
+
+        nativeReadyRef.current = true;
+        nativeAutosaveBlockedRef.current = false;
+        if (nativeScripts === null) {
+          setSaveStatus('Loaded local library');
+          scheduleNativeSave(serializeScripts(scriptsRef.current));
+          return;
+        }
+
+        const decision = mergeNativeHydration(
+          hydrationRevision,
+          scriptMutationRevisionRef.current,
+          scriptsRef.current,
+          nativeScripts,
+          collectScriptIds([], trashRef.current),
+        );
+        if (decision.source === 'local') {
+          setSaveStatus('Using cached scripts; saving local edits');
+          scheduleNativeSave(serializeScripts(decision.scripts));
+          return;
+        }
+
+        const commit = commitLibraryRef.current;
+        if (!commit) return;
+        const nextScripts = decision.scripts.map(cloneScript);
+        const nextScriptIds = new Set(nextScripts.map(script => script.id));
+        const nextActiveScriptId =
+          activeScriptIdRef.current && nextScriptIds.has(activeScriptIdRef.current)
+            ? activeScriptIdRef.current
+            : nextScripts[0]?.id ?? null;
+        const committed = commit({
+          scripts: nextScripts,
+          trash: trashRef.current,
+          customOrder: nextScripts.map(script => script.id),
+          sortMode: sortModeRef.current,
+          activeScriptId: nextActiveScriptId,
+        });
+        if (!committed.ok) {
+          cancelNativeAutosaves();
+          setSaveStatus('Native library was not adopted; your cached scripts remain active');
+          return;
+        }
+        setSaveStatus('Loaded local library');
+      })
+      .catch((loadError) => {
+        if (cancelled || hydrationGeneration !== nativeGenerationRef.current) return;
+        cancelNativeAutosaves();
+        nativeDirectoryRef.current = null;
+        setLibraryDirectory(null);
+        const message = describeError(
+          loadError,
+          'Could not access the selected local library. Your cached scripts are shown; reselect the folder to resume native saves.',
+        );
+        setSaveStatus(message);
+        setError(current => current ?? message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    cancelNativeAutosaves,
+    isLoaded,
+    recoveryRequired,
+    scheduleNativeSave,
+    setSaveStatus,
+  ]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    scheduleNativeSave(serializeScripts(scripts));
+  }, [isLoaded, scheduleNativeSave, scripts]);
+
   const commitLibrary = useCallback((snapshot: LibrarySnapshot) => {
     if (savesDisabledRef.current) {
       const message = storageErrors.writeLibrary;
@@ -346,6 +547,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return persisted;
     }
 
+    scriptMutationRevisionRef.current += 1;
     scriptsRef.current = next.scripts;
     trashRef.current = next.trash;
     customOrderRef.current = next.customOrder;
@@ -365,6 +567,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ));
     return { ok: true as const };
   }, []);
+  commitLibraryRef.current = commitLibrary;
 
   const setActiveScriptId = useCallback((id: string | null) => {
     if (id !== null && !scriptsRef.current.some(script => script.id === id)) {
@@ -401,6 +604,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ? null
         : current
     ));
+  }, []);
+
+  const updateProfile = useCallback((updates: Partial<Profile>): boolean => {
+    const current = profileRef.current;
+    const next: Profile = {
+      name: updates.name ?? current.name,
+      onboardingComplete:
+        updates.onboardingComplete ?? current.onboardingComplete,
+    };
+    if (
+      typeof next.name !== 'string' ||
+      typeof next.onboardingComplete !== 'boolean'
+    ) {
+      setError('Could not save your profile: the profile data is invalid.');
+      return false;
+    }
+
+    const storage = getStorage();
+    if (!storage) {
+      setError('Could not save your profile: local storage is unavailable.');
+      return false;
+    }
+    try {
+      storage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(next));
+    } catch (profileError) {
+      setError(
+        describeError(
+          profileError,
+          'Could not save your profile. Onboarding changes may not survive a reload.',
+        ),
+      );
+      return false;
+    }
+
+    profileRef.current = next;
+    setProfile(next);
+    return true;
   }, []);
 
   const createScript = useCallback(() => {
@@ -683,9 +923,103 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     loadCurrentLibrary();
   }, [loadCurrentLibrary]);
 
+  const chooseLibraryDirectory = useCallback(async (): Promise<string | null> => {
+    if (nativePickerOpenRef.current) {
+      setError('A local library chooser is already open.');
+      return null;
+    }
+    if (recoveryRequiredRef.current) {
+      setError('Recover your browser library before choosing a local folder.');
+      return null;
+    }
+
+    const previousDirectory = nativeDirectoryRef.current;
+    const previousReady = nativeReadyRef.current;
+    const previousBlocked = nativeAutosaveBlockedRef.current;
+    const generation = nativeGenerationRef.current + 1;
+    nativeGenerationRef.current = generation;
+    nativeSaveSessionRef.current += 1;
+    nativePickerOpenRef.current = true;
+    if (nativeSaveTimerRef.current !== null) {
+      clearTimeout(nativeSaveTimerRef.current);
+      nativeSaveTimerRef.current = null;
+    }
+    setSaveStatus('Choosing a local library…');
+
+    // Wait for an older write before changing the destination. This prevents
+    // a queued save from landing in a folder the user has just left.
+    await nativeSaveChainRef.current.catch(() => undefined);
+
+    const restorePreviousSelection = (status: string) => {
+      nativeSaveSessionRef.current += 1;
+      nativePickerOpenRef.current = false;
+      nativeDirectoryRef.current = previousDirectory;
+      nativeReadyRef.current = previousReady;
+      nativeAutosaveBlockedRef.current = previousBlocked;
+      setLibraryDirectory(previousDirectory);
+      setSaveStatus(status);
+      if (previousDirectory && previousReady && !previousBlocked) {
+        scheduleNativeSave(serializeScripts(scriptsRef.current));
+      }
+    };
+
+    try {
+      const chosen = await chooseLocalDirectory();
+      if (generation !== nativeGenerationRef.current) return null;
+      const directory =
+        typeof chosen === 'string' && chosen.length > 0 ? chosen : null;
+      if (!directory) {
+        restorePreviousSelection(
+          previousDirectory
+            ? 'Previous local library restored'
+            : 'No local library selected',
+        );
+        return null;
+      }
+
+      nativeDirectoryRef.current = directory;
+      nativeReadyRef.current = true;
+      nativeAutosaveBlockedRef.current = false;
+      nativePickerOpenRef.current = false;
+      setLibraryDirectory(directory);
+      setSaveStatus('Saving to local library…');
+      try {
+        await enqueueNativeSave(
+          serializeScripts(scriptsRef.current),
+          directory,
+          nativeSaveSessionRef.current,
+        );
+      } catch {
+        nativeReadyRef.current = false;
+        nativeAutosaveBlockedRef.current = true;
+        setSaveStatus(
+          'Native save failed — local autosave is blocked; your latest edits are cached locally',
+        );
+      }
+      return directory;
+    } catch (chooseError) {
+      restorePreviousSelection(
+        previousDirectory
+          ? 'Could not choose a local library; previous library restored'
+          : 'Could not choose a local library',
+      );
+      setError(current => current ?? describeError(
+        chooseError,
+        'Could not choose a local library. Your current scripts remain cached locally.',
+      ));
+      return null;
+    }
+  }, [enqueueNativeSave, scheduleNativeSave, setSaveStatus]);
+
   const clearError = useCallback(() => setError(null), []);
 
-  if (!isLoaded) return null;
+  if (!isLoaded) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-background text-sm text-muted-foreground">
+        Starting Quickque…
+      </div>
+    );
+  }
 
   return (
     <StoreContext.Provider value={{
@@ -715,14 +1049,908 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       retryLoadLibrary,
       error,
       clearError,
+       profile,
+       updateProfile,
+       libraryDirectory,
+       chooseLibraryDirectory,
+       localSaveStatus,
     }}>
       {children}
     </StoreContext.Provider>
   );
 }
+/*
+export function StoreProvider({ children }: { children: ReactNode }) {
+  const [bootstrap] = useState<BootstrapData>(() => readBootstrapData());
+  const [scripts, setScripts] = useState<Script[]>(bootstrap.scripts);
+  const [settings, setSettings] = useState<Settings>(bootstrap.settings);
+  const [activeScriptId, setActiveScriptId] = useState<string | null>(
+    bootstrap.activeScriptId,
+  );
+  const [profile, setProfile] = useState<Profile>(bootstrap.profile);
+  const [libraryDirectory, setLibraryDirectory] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(bootstrap.startupError);
+  const [localSaveStatus, setLocalSaveStatus] = useState(
+    'Loading local library…',
+  );
+
+  const profileRef = useRef(profile);
+  const scriptsRef = useRef(scripts);
+  scriptsRef.current = scripts;
+  const localSaveStatusRef = useRef(localSaveStatus);
+  localSaveStatusRef.current = localSaveStatus;
+  const setSaveStatus = useCallback((status: string) => {
+    localSaveStatusRef.current = status;
+    setLocalSaveStatus(status);
+  }, []);
+
+  const latestScriptsJsonRef = useRef(serializeScripts(scripts));
+  const pendingNativeJsonRef = useRef<string | null>(null);
+  const pendingNativeDirectoryRef = useRef<string | null>(null);
+  const nativeSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nativeSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const nativeDirectoryRef = useRef<string | null>(null);
+  const nativeReadyRef = useRef(false);
+  const nativeAutosaveBlockedRef = useRef(false);
+  const nativePickerOpenRef = useRef(false);
+  const nativeGenerationRef = useRef(0);
+  const scriptMutationRevisionRef = useRef(0);
+  const firstScriptsEffectRef = useRef(true);
+  const skipRecoveryEffectRef = useRef(false);
+  const preserveInvalidCacheRef = useRef(false);
+  const pendingRecoveryRef = useRef(Boolean(bootstrap.recovery));
+
+  const persistScriptsCache = useCallback(
+    (serialized: string, writeRecovery: boolean): boolean => {
+      const storage = getStorage();
+      if (!storage) {
+        setError(
+          'Could not save your scripts to local storage. Your latest edits are not protected from a reload.',
+        );
+        return false;
+      }
+
+      try {
+        storage.setItem(SCRIPTS_STORAGE_KEY, serialized);
+        if (writeRecovery) {
+          storage.setItem(
+            RECOVERY_STORAGE_KEY,
+            JSON.stringify({
+              version: 1,
+              scriptsJson: serialized,
+              updatedAt: Date.now(),
+            }),
+          );
+          pendingRecoveryRef.current = true;
+        }
+        return true;
+      } catch (storageError) {
+        setError(
+          describeError(
+            storageError,
+            'Could not save your scripts to local storage. Your latest edits are not protected from a reload.',
+          ),
+        );
+        setSaveStatus('Local recovery save failed');
+        return false;
+      }
+    },
+    [],
+  );
+
+  const removeRecoveryCopy = useCallback((serialized: string) => {
+    if (
+      latestScriptsJsonRef.current !== serialized ||
+      bootstrap.recoveryInvalid
+    ) {
+      return;
+    }
+
+    const storage = getStorage();
+    if (!storage) return;
+    try {
+      storage.removeItem(RECOVERY_STORAGE_KEY);
+      pendingRecoveryRef.current = false;
+    } catch (storageError) {
+      setError(
+        describeError(
+          storageError,
+          'The native library was saved, but its local recovery copy could not be cleared.',
+        ),
+      );
+    }
+  }, [bootstrap.recoveryInvalid]);
+
+  const enqueueNativeSave = useCallback(
+    (serialized: string, expectedDirectory: string): Promise<void> => {
+      const operation = nativeSaveChainRef.current.then(async () => {
+        if (
+          nativePickerOpenRef.current ||
+          !nativeReadyRef.current ||
+          nativeAutosaveBlockedRef.current ||
+          !expectedDirectory
+        ) {
+          return;
+        }
+
+        setSaveStatus('Saving to local library…');
+        try {
+          // The directory is intentionally captured when this operation is
+          // enqueued. Reading nativeDirectoryRef here would let a picker
+          // retarget an already-queued write.
+          await saveLocalLibrary(serialized, expectedDirectory);
+          removeRecoveryCopy(serialized);
+          if (latestScriptsJsonRef.current === serialized) {
+            setSaveStatus('Saved to local library');
+            setError(null);
+          } else {
+            setSaveStatus('Saved an edit; newer changes are waiting');
+          }
+        } catch (saveError) {
+          setSaveStatus(
+            'Native save failed — your latest edits are cached locally',
+          );
+          setError(
+            describeError(
+              saveError,
+              'Could not save scripts to the local library. Your latest edits are cached locally.',
+            ),
+          );
+          throw saveError;
+        }
+      });
+
+      // A failed save must not poison the serialized queue. The recovery copy
+      // remains until a later successful save or an explicit folder choice.
+      nativeSaveChainRef.current = operation.catch(() => undefined);
+      return operation;
+    },
+    [removeRecoveryCopy],
+  );
+
+  const scheduleNativeSave = useCallback(
+    (serialized: string) => {
+      pendingNativeJsonRef.current = serialized;
+      pendingNativeDirectoryRef.current = nativeDirectoryRef.current;
+      if (
+        nativePickerOpenRef.current ||
+        !nativeReadyRef.current ||
+        nativeAutosaveBlockedRef.current ||
+        !nativeDirectoryRef.current
+      ) {
+        return;
+      }
+
+      if (nativeSaveTimerRef.current !== null) {
+        clearTimeout(nativeSaveTimerRef.current);
+      }
+      nativeSaveTimerRef.current = setTimeout(() => {
+        nativeSaveTimerRef.current = null;
+        const pending = pendingNativeJsonRef.current;
+        const expectedDirectory = pendingNativeDirectoryRef.current;
+        pendingNativeJsonRef.current = null;
+        pendingNativeDirectoryRef.current = null;
+        if (pending !== null && expectedDirectory !== null) {
+          void enqueueNativeSave(pending, expectedDirectory).catch(() => undefined);
+        }
+      }, AUTOSAVE_DELAY_MS);
+    },
+    [enqueueNativeSave],
+  );
+
+  const commitUserScripts = useCallback((nextScripts: Script[]) => {
+    scriptMutationRevisionRef.current += 1;
+    scriptsRef.current = nextScripts;
+    const serialized = serializeScripts(nextScripts);
+    latestScriptsJsonRef.current = serialized;
+    // Persist the recovery copy synchronously with the mutation, before
+    // React can yield to a delayed native hydration response.
+    persistScriptsCache(serialized, true);
+    setScripts(nextScripts);
+  }, [persistScriptsCache]);
+
+  useEffect(() => {
+    const serialized = serializeScripts(scripts);
+    latestScriptsJsonRef.current = serialized;
+
+    const firstEffect = firstScriptsEffectRef.current;
+    firstScriptsEffectRef.current = false;
+    const skipRecovery = skipRecoveryEffectRef.current;
+    skipRecoveryEffectRef.current = false;
+    const preserveInvalidCache = preserveInvalidCacheRef.current;
+    preserveInvalidCacheRef.current = false;
+
+    // Never replace a malformed cache just because hydration happened. A
+    // valid native library may repair it later; a user edit may intentionally
+    // replace it.
+    const shouldWriteCache = !(firstEffect && bootstrap.cacheInvalid) && !preserveInvalidCache;
+    if (shouldWriteCache) {
+      persistScriptsCache(serialized, !firstEffect && !skipRecovery);
+    }
+    scheduleNativeSave(serialized);
+  }, [
+    bootstrap.cacheInvalid,
+    persistScriptsCache,
+    scheduleNativeSave,
+    scripts,
+  ]);
+
+  useEffect(() => {
+    const storage = getStorage();
+    if (!storage) return;
+    try {
+      storage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      if (typeof document !== 'undefined') {
+        document.documentElement.classList.toggle('dark', settings.darkTheme);
+      }
+    } catch (settingsError) {
+      setError(describeError(settingsError, 'Failed to save settings.'));
+    }
+  }, [settings]);
+
+  useEffect(() => {
+    const storage = getStorage();
+    if (!storage) return;
+    try {
+      storage.setItem(ACTIVE_SCRIPT_STORAGE_KEY, activeScriptId ?? '');
+    } catch {
+      // An active selection is disposable and should not block editing.
+    }
+  }, [activeScriptId]);
+
+  useEffect(() => {
+    const storage = getStorage();
+    if (!storage) return;
+    try {
+      storage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+    } catch (profileError) {
+      setError(
+        describeError(
+          profileError,
+          'Could not save your profile. Onboarding changes may not survive a reload.',
+        ),
+      );
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    if (
+      activeScriptId !== null &&
+      scripts.some((script) => script.id === activeScriptId)
+    ) {
+      return;
+    }
+    setActiveScriptId(scripts[0]?.id ?? null);
+  }, [activeScriptId, scripts]);
+
+  useEffect(() => {
+    const generation = ++nativeGenerationRef.current;
+    const hydrationRevision = scriptMutationRevisionRef.current;
+    let cancelled = false;
+
+    const adoptScripts = (nextScripts: Script[], writeCache: boolean) => {
+      const serialized = serializeScripts(nextScripts);
+      const changed = serialized !== latestScriptsJsonRef.current;
+      latestScriptsJsonRef.current = serialized;
+      if (changed) {
+        scriptsRef.current = nextScripts;
+        skipRecoveryEffectRef.current = true;
+        setScripts(nextScripts);
+      }
+      if (writeCache) {
+        persistScriptsCache(serialized, false);
+      }
+      return serialized;
+    };
+
+    const cachedFallback = (): Script[] => {
+      if (bootstrap.recovery) return bootstrap.recovery.scripts;
+      if (bootstrap.cacheValid) return scriptsRef.current;
+      return [];
+    };
+
+    const showNativeLoadError = (message: string) => {
+      nativeReadyRef.current = false;
+      nativeAutosaveBlockedRef.current = true;
+      const fallback =
+        scriptMutationRevisionRef.current !== hydrationRevision
+          ? scriptsRef.current
+          : cachedFallback();
+      if (serializeScripts(fallback) !== latestScriptsJsonRef.current) {
+        preserveInvalidCacheRef.current = bootstrap.cacheInvalid;
+        adoptScripts(fallback, false);
+      }
+      setError(message);
+      setSaveStatus(message);
+    };
+
+    const loadNativeLibrary = async () => {
+      setSaveStatus('Loading local library…');
+      try {
+        const loaded = await getLocalLibrary();
+        if (cancelled || generation !== nativeGenerationRef.current) return;
+
+        const directory =
+          typeof loaded.directory === 'string' && loaded.directory.length > 0
+            ? loaded.directory
+            : null;
+        setLibraryDirectory(directory);
+        nativeDirectoryRef.current = directory;
+
+        if (!directory) {
+          nativeReadyRef.current = false;
+          nativeAutosaveBlockedRef.current = false;
+          setSaveStatus(
+            bootstrap.cacheInvalid
+              ? 'Using cached scripts; local recovery needs attention'
+              : 'No local library selected',
+          );
+          return;
+        }
+
+        const nativeScripts =
+          loaded.scriptsJson === null
+            ? null
+            : parseScriptsJson(loaded.scriptsJson);
+        if (loaded.scriptsJson !== null && nativeScripts === null) {
+          showNativeLoadError(
+            'The selected local library is invalid. Your cached scripts are shown; reselect the folder to resume native saves.',
+          );
+          return;
+        }
+
+        nativeAutosaveBlockedRef.current = false;
+        nativeReadyRef.current = true;
+        const userEditedWhileLoading =
+          scriptMutationRevisionRef.current !== hydrationRevision;
+
+        // A recovery copy is newer than the last native save. Keep it and
+        // immediately queue it for the confirmed, valid native directory.
+        const recovery =
+          !userEditedWhileLoading && bootstrap.recovery
+            ? bootstrap.recovery
+            : null;
+        if (recovery) {
+          const serialized = adoptScripts(recovery.scripts, false);
+          pendingRecoveryRef.current = true;
+          void enqueueNativeSave(serialized, directory).catch(() => undefined);
+          return;
+        }
+
+        if (nativeScripts) {
+          const decision = resolveNativeHydration(
+            hydrationRevision,
+            scriptMutationRevisionRef.current,
+            scriptsRef.current,
+            nativeScripts,
+          );
+          if (decision.source === 'local') {
+            scheduleNativeSave(serializeScripts(decision.scripts));
+            return;
+          }
+          const serialized = adoptScripts(decision.scripts, true);
+          // A valid native file is authoritative unless a recovery edit won.
+          pendingNativeJsonRef.current = null;
+          setSaveStatus('Loaded local library');
+          latestScriptsJsonRef.current = serialized;
+          return;
+        }
+
+        // A selected folder without a scripts file is an empty, valid native
+        // library. Seed only for a genuinely new install, or preserve a valid
+        // local cache when one already exists.
+        const serialized = latestScriptsJsonRef.current;
+        // Keep a durable recovery copy before the first write to an empty
+        // folder. This also protects an existing cache if that write fails.
+        persistScriptsCache(serialized, true);
+        pendingNativeJsonRef.current = serialized;
+        void enqueueNativeSave(serialized, directory).catch(() => undefined);
+      } catch (loadError) {
+        if (cancelled || generation !== nativeGenerationRef.current) return;
+        setLibraryDirectory(null);
+        nativeDirectoryRef.current = null;
+        showNativeLoadError(
+          describeError(
+            loadError,
+            'Could not access the selected local library. Your cached scripts are shown; reselect the folder to resume native saves.',
+          ),
+        );
+      }
+    };
+
+    void loadNativeLibrary();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bootstrap.cacheInvalid,
+    bootstrap.cacheValid,
+    bootstrap.recovery,
+    enqueueNativeSave,
+    persistScriptsCache,
+    scheduleNativeSave,
+  ]);
+
+  const updateSettings = useCallback((newSettings: Partial<Settings>) => {
+    setSettings((previous) => ({ ...previous, ...newSettings }));
+  }, []);
+
+  const createScript = useCallback(() => {
+    const newId = generateId();
+    const now = Date.now();
+    const newScript: Script = {
+      id: newId,
+      title: 'Untitled Script',
+      createdAt: now,
+      updatedAt: now,
+      sections: [
+        {
+          id: generateId(),
+          title: 'Section 1',
+          content: '',
+        },
+      ],
+    };
+    commitUserScripts([newScript, ...scriptsRef.current]);
+    setActiveScriptId(newId);
+    return newId;
+  }, [commitUserScripts]);
+
+  const updateScript = useCallback(
+    (
+      id: string,
+      updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt'>>,
+    ) => {
+      let changed = false;
+      const nextScripts = scriptsRef.current.map((script) => {
+        if (script.id !== id) return script;
+        changed = true;
+        return { ...script, ...updates, updatedAt: Date.now() };
+      });
+      if (changed) {
+        commitUserScripts(nextScripts);
+      }
+    },
+    [commitUserScripts],
+  );
+
+  const deleteScript = useCallback(
+    (id: string) => {
+      const nextScripts = scriptsRef.current.filter((script) => script.id !== id);
+      if (nextScripts.length === scriptsRef.current.length) return;
+      commitUserScripts(nextScripts);
+      if (activeScriptId === id) {
+        setActiveScriptId(null);
+      }
+    },
+    [activeScriptId, commitUserScripts],
+  );
+
+  const duplicateScript = useCallback(
+    (id: string) => {
+      const scriptToDuplicate = scriptsRef.current.find((script) => script.id === id);
+      if (!scriptToDuplicate) return null;
+
+      const newId = generateId();
+      const now = Date.now();
+      const newScript: Script = {
+        ...scriptToDuplicate,
+        id: newId,
+        title: `${scriptToDuplicate.title} (Copy)`,
+        createdAt: now,
+        updatedAt: now,
+        sections: scriptToDuplicate.sections.map((section) => ({
+          ...section,
+          id: generateId(),
+        })),
+      };
+
+      commitUserScripts([newScript, ...scriptsRef.current]);
+      setActiveScriptId(newId);
+      return newId;
+    },
+    [commitUserScripts],
+  );
+
+  const importScripts = useCallback((data: string) => {
+    const parsed = parseImportJson(data);
+    if (!parsed || !isImportableScripts(parsed)) {
+      setError('Could not import scripts: the file is invalid.');
+      return false;
+    }
+
+    const imported: Script[] = parsed.map((script: ImportableScript) => ({
+      ...script,
+      id: generateId(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      sections: script.sections.map((section) => ({
+        ...section,
+        id: generateId(),
+      })),
+    }));
+    if (imported.length > 0) {
+      commitUserScripts([...imported, ...scriptsRef.current]);
+    }
+    return true;
+  }, [commitUserScripts]);
+
+  const exportScripts = useCallback(() => {
+    return JSON.stringify(scripts, null, 2);
+  }, [scripts]);
+
+  const updateProfile = useCallback((updates: Partial<Profile>): boolean => {
+    const current = profileRef.current;
+    const next: Profile = {
+      name: updates.name ?? current.name,
+      onboardingComplete:
+        updates.onboardingComplete ?? current.onboardingComplete,
+    };
+    if (
+      typeof next.name !== 'string' ||
+      typeof next.onboardingComplete !== 'boolean'
+    ) {
+      setError('Could not save your profile: the profile data is invalid.');
+      return false;
+    }
+
+    const storage = getStorage();
+    if (!storage) {
+      setError('Could not save your profile: local storage is unavailable.');
+      return false;
+    }
+    try {
+      storage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(next));
+    } catch (profileError) {
+      setError(
+        describeError(
+          profileError,
+          'Could not save your profile. Onboarding changes may not survive a reload.',
+        ),
+      );
+      return false;
+    }
+
+    profileRef.current = next;
+    setProfile(next);
+    return true;
+  }, []);
+
+  const chooseLibraryDirectory = useCallback(async (): Promise<string | null> => {
+    if (nativePickerOpenRef.current) {
+      setError('A local library chooser is already open.');
+      return null;
+    }
+
+    const previousDirectory = nativeDirectoryRef.current;
+    const previousReady = nativeReadyRef.current;
+    const previousBlocked = nativeAutosaveBlockedRef.current;
+    const previousStatus = localSaveStatusRef.current;
+    const previousLibraryDirectory = previousDirectory;
+    const previousGeneration = nativeGenerationRef.current;
+    let selectionStatus = previousStatus;
+    const generation = previousGeneration + 1;
+
+    nativePickerOpenRef.current = true;
+    nativeGenerationRef.current = generation;
+    // Preserve the newest payload while the picker is open, but never allow
+    // its debounce timer to enqueue a write during the picker interaction.
+    if (nativeSaveTimerRef.current !== null) {
+      clearTimeout(nativeSaveTimerRef.current);
+      nativeSaveTimerRef.current = null;
+    }
+    pendingNativeJsonRef.current = latestScriptsJsonRef.current;
+    pendingNativeDirectoryRef.current = previousDirectory;
+    setSaveStatus('Preparing local library selection…');
+    // Do not let an old in-flight save race a newly selected folder.
+    await nativeSaveChainRef.current.catch(() => undefined);
+    selectionStatus = localSaveStatusRef.current;
+
+    setSaveStatus('Choosing a local library…');
+
+    const restorePreviousSelection = (status = selectionStatus) => {
+      nativePickerOpenRef.current = false;
+      nativeGenerationRef.current = generation;
+      nativeDirectoryRef.current = previousDirectory;
+      nativeReadyRef.current = previousReady;
+      nativeAutosaveBlockedRef.current = previousBlocked;
+      setLibraryDirectory(previousLibraryDirectory);
+      pendingNativeJsonRef.current = latestScriptsJsonRef.current;
+      pendingNativeDirectoryRef.current = previousDirectory;
+
+      if (previousDirectory && previousReady && !previousBlocked) {
+        setSaveStatus('Resuming save to local library…');
+        scheduleNativeSave(latestScriptsJsonRef.current);
+      } else {
+        setSaveStatus(status);
+      }
+    };
+
+    try {
+      const chosen = await chooseLocalDirectory();
+      if (generation !== nativeGenerationRef.current) return null;
+      const directory =
+        typeof chosen === 'string' && chosen.length > 0 ? chosen : null;
+      if (!directory) {
+        restorePreviousSelection();
+        return null;
+      }
+
+      nativeDirectoryRef.current = directory;
+      nativeAutosaveBlockedRef.current = false;
+      nativeReadyRef.current = true;
+      nativePickerOpenRef.current = false;
+      setLibraryDirectory(directory);
+      const serialized = serializeScripts(scriptsRef.current);
+      latestScriptsJsonRef.current = serialized;
+      pendingRecoveryRef.current = true;
+      // Persist the recovery copy before attempting the first save to a new
+      // folder, so a failed selection can never lose the current edits.
+      persistScriptsCache(serialized, true);
+
+      try {
+        await enqueueNativeSave(serialized, directory);
+      } catch {
+        // The selected folder may be nonempty or may have failed access.
+        // Keep it visible but explicitly blocked; recovery remains local.
+        nativeReadyRef.current = false;
+        nativeAutosaveBlockedRef.current = true;
+        setSaveStatus(
+          'Native save failed — local autosave is blocked; your latest edits are cached locally',
+        );
+      }
+      return directory;
+    } catch (chooseError) {
+      restorePreviousSelection(
+        previousDirectory && previousReady && !previousBlocked
+          ? 'Could not choose a local library; previous library restored'
+          : 'Could not choose a local library',
+      );
+      setError(
+        describeError(
+          chooseError,
+          'Could not choose a local library. Your current scripts remain cached locally.',
+        ),
+      );
+      return null;
+    }
+  }, [enqueueNativeSave, persistScriptsCache]);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  return (
+    <StoreContext.Provider
+      value={{
+        scripts,
+        settings,
+        activeScriptId,
+        setActiveScriptId,
+        updateSettings,
+        createScript,
+        updateScript,
+        deleteScript,
+        duplicateScript,
+        importScripts,
+        exportScripts,
+        error,
+        clearError,
+        profile,
+        updateProfile,
+        libraryDirectory,
+        chooseLibraryDirectory,
+        localSaveStatus,
+      }}
+    >
+      {children}
+    </StoreContext.Provider>
+  );
+}
+*/
 
 export function useStore() {
   const ctx = useContext(StoreContext);
   if (!ctx) throw new Error('useStore must be used within StoreProvider');
   return ctx;
 }
+
+const SCRIPTS_STORAGE_KEY = 'quickque_scripts';
+
+function appendStartupError(current: string | null, next: string): string {
+  return current ? `${current} ${next}` : next;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+const DEFAULT_PROFILE: Profile = {
+  name: '',
+  onboardingComplete: false,
+};
+
+function readStoredProfile(): Profile {
+  const storage = getStorage();
+  if (!storage) return DEFAULT_PROFILE;
+  try {
+    const stored = storage.getItem(PROFILE_STORAGE_KEY);
+    if (stored === null) return DEFAULT_PROFILE;
+    const parsed: unknown = JSON.parse(stored);
+    if (
+      isRecord(parsed) &&
+      typeof parsed.name === 'string' &&
+      typeof parsed.onboardingComplete === 'boolean'
+    ) {
+      return {
+        name: parsed.name,
+        onboardingComplete: parsed.onboardingComplete,
+      };
+    }
+  } catch {
+    // Invalid profile data is isolated from the transactional library.
+  }
+  return DEFAULT_PROFILE;
+}
+
+function describeError(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return `${fallback}: ${error.message}`;
+  }
+  return fallback;
+}
+
+function readBootstrapData(): BootstrapData {
+  const storage = getStorage();
+  const firstInstallScripts = createInitialScripts();
+  let scripts = firstInstallScripts;
+  let cacheWasMissing = true;
+  let cacheValid = false;
+  let cacheInvalid = false;
+  let recovery: ReturnType<typeof parseRecoveryJson> = null;
+  let recoveryInvalid = false;
+  let startupError: string | null = null;
+
+  if (!storage) {
+    startupError =
+      'Local storage is unavailable. Your changes will not survive a reload until storage is enabled.';
+  } else {
+    try {
+      const storedScripts = storage.getItem(SCRIPTS_STORAGE_KEY);
+      cacheWasMissing = storedScripts === null;
+      if (storedScripts === null) {
+        // A truly new installation gets exactly one document. A malformed
+        // existing cache gets no replacement seed.
+        scripts = firstInstallScripts;
+      } else {
+        const parsedScripts = parseScriptsJson(storedScripts);
+        if (parsedScripts) {
+          scripts = parsedScripts;
+          cacheValid = true;
+        } else {
+          scripts = [];
+          cacheInvalid = true;
+          startupError =
+            'Your cached scripts are invalid. Existing native data was left untouched while recovery is attempted.';
+        }
+      }
+
+      const storedRecovery = storage.getItem(RECOVERY_STORAGE_KEY);
+      if (storedRecovery !== null) {
+        recovery = parseRecoveryJson(storedRecovery);
+        if (!recovery) {
+          recoveryInvalid = true;
+          startupError = appendStartupError(
+            startupError,
+            'An unsaved local recovery copy is invalid and was left untouched.',
+          );
+        }
+      }
+    } catch {
+      scripts = [];
+      cacheWasMissing = false;
+      cacheInvalid = true;
+      startupError = appendStartupError(
+        startupError,
+        'Quickque could not read its cached scripts. Existing data was left untouched.',
+      );
+    }
+  }
+
+  let profile = DEFAULT_PROFILE;
+  if (storage) {
+    try {
+      const storedProfile = storage.getItem(PROFILE_STORAGE_KEY);
+      if (storedProfile !== null) {
+        const parsedProfile: unknown = JSON.parse(storedProfile);
+        if (
+          isRecord(parsedProfile) &&
+          typeof parsedProfile.name === 'string' &&
+          typeof parsedProfile.onboardingComplete === 'boolean'
+        ) {
+          profile = {
+            name: parsedProfile.name,
+            onboardingComplete: parsedProfile.onboardingComplete,
+          };
+        } else {
+          startupError = appendStartupError(
+            startupError,
+            'Your profile data is invalid; onboarding is available again.',
+          );
+        }
+      }
+    } catch {
+      startupError = appendStartupError(
+        startupError,
+        'Your profile data could not be read; onboarding is available again.',
+      );
+    }
+  }
+
+  let settings = DEFAULT_SETTINGS;
+  if (storage) {
+    try {
+      const storedSettings = storage.getItem(SETTINGS_STORAGE_KEY);
+      if (storedSettings !== null) {
+        const parsedSettings: unknown = JSON.parse(storedSettings);
+        if (isRecord(parsedSettings)) {
+          settings = { ...DEFAULT_SETTINGS, ...parsedSettings };
+        }
+      }
+    } catch {
+      // Defaults are safe for settings. Scripts and profile errors remain
+      // explicit because silently replacing those can hide data loss.
+    }
+  }
+
+  let activeScriptId: string | null = null;
+  if (storage) {
+    try {
+      activeScriptId = storage.getItem(ACTIVE_SCRIPT_STORAGE_KEY);
+    } catch {
+      // The active selection is disposable, unlike scripts.
+    }
+  }
+  if (!activeScriptId && scripts.length > 0) {
+    activeScriptId = scripts[0].id;
+  }
+
+  return {
+    scripts,
+    cacheWasMissing,
+    cacheValid,
+    cacheInvalid,
+    recovery,
+    recoveryInvalid,
+    profile,
+    settings,
+    activeScriptId,
+    startupError,
+  };
+}
+
+const SETTINGS_STORAGE_KEY = 'quickque_settings';
+
+const AUTOSAVE_DELAY_MS = 350;
+
+const ACTIVE_SCRIPT_STORAGE_KEY = 'quickque_active_script';
+
+type BootstrapData = {
+  scripts: Script[];
+  cacheWasMissing: boolean;
+  cacheValid: boolean;
+  cacheInvalid: boolean;
+  recovery: ReturnType<typeof parseRecoveryJson>;
+  recoveryInvalid: boolean;
+  profile: Profile;
+  settings: Settings;
+  activeScriptId: string | null;
+  startupError: string | null;
+};
+
+export type Profile = {
+  name: string;
+  onboardingComplete: boolean;
+};
+
+const PROFILE_STORAGE_KEY = 'quickque_profile';
+
+const RECOVERY_STORAGE_KEY = 'quickque_scripts_recovery';

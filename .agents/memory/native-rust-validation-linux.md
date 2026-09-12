@@ -8,3 +8,13 @@ Validate platform-neutral Rust modules in a temporary minimal Cargo crate when a
 **Why:** Tauri's Linux dependency graph can fail before reaching application code, while the target product and final verification environment are macOS. Isolating a standard-library module with only its direct serialization dependencies still catches real Rust type, borrow, and unit-test failures.
 
 **How to apply:** Use this only for modules that do not depend on Tauri APIs. Keep the full macOS build and hardware behavior in the existing Mac verification work; do not treat the isolated check as a substitute for it.
+
+Check Rust item attributes explicitly after structural merges, especially
+`#[derive(...)]` and platform `#[cfg(...)]` gates.
+
+**Why:** A structural merge can retain a declaration's body while losing the
+attributes required for defaults, comparisons, or platform-only dependencies.
+A clean conflict-marker scan and passing frontend tests do not detect this.
+
+**How to apply:** Compare merged native declarations with both parents before
+closing a merge when the native compiler is unavailable.

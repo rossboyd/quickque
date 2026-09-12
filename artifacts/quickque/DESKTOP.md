@@ -6,25 +6,51 @@ ordinary app remains visually opaque because the UI supplies its background.
 Overlay opacity is likewise controlled by the UI's CSS RGBA colors, not by a
 native whole-window opacity setting.
 
+
+## Presentation timer and microphone indicator
+
+Presentations open in Voice Follow by default. Microphone capture still requires
+an explicit Start action; Manual Scroll remains available in the mode selector.
+
+The presentation screen includes an elapsed timer that runs during manual
+playback or active Flow listening. Pausing, preparing Flow, an error, or the
+30-second no-speech stop freezes the timer. Resuming continues the same elapsed
+time; section jumps preserve it. Leaving the reader and opening a new
+presentation starts at zero. The reset button resets only the elapsed timer,
+without moving the script or changing microphone capture.
+
+In Flow mode, the circular rings react to the actual microphone's loudness.
+They show incoming sound, not whether a word was recognised or matched to the
+script. Silent, paused, stopped, or stale audio settles the rings. Manual mode
+does not open a microphone. Reduced-motion settings keep the indication static.
+Only a bounded numeric level is sent to the display; no audio or transcripts
+are saved, and level updates are excluded from diagnostic history.
+
 ## Prerequisites
 
-- An Apple Silicon Mac running macOS 14 or newer. Intel Macs are unsupported
-  for local Flow and fail closed; there is no browser or cloud fallback.
-- Xcode 16 (including the Swift 6 toolchain) or a compatible newer Xcode.
-  Install its command-line tools with `xcode-select --install`.
+- An Apple Silicon Mac running macOS Tahoe 26 or newer. Intel Macs and older
+  macOS releases are unsupported for local Flow and fail closed; there is no
+  browser or cloud fallback.
+- Xcode 26 with the Swift 6.2 toolchain and the macOS 26 SDK. Install its
+  command-line tools with `xcode-select --install`.
 - The stable Rust toolchain installed with rustup
-- Node.js and pnpm
+- Node.js and pnpm 10.26 or newer
 
 From the repository root, install workspace dependencies normally, then run:
 
 ```sh
 pnpm install
+xcodebuild -version
+xcrun --sdk macosx --show-sdk-version
+xcrun --find swiftc
 pnpm --filter @workspace/quickque desktop:dev
 pnpm --filter @workspace/quickque desktop:build
 ```
 
-The final command runs the native layout test, builds the Apple Silicon helper,
-builds the desktop app, and creates:
+The version checks should report Xcode 26, Swift 6.2, and a macOS 26 SDK before
+building. The final command runs debug/release Swift tests, builds the Apple
+Silicon helper, runs the Rust bridge/library tests, builds the desktop app,
+and creates:
 
 ```text
 artifacts/quickque/src-tauri/target/release/bundle/dmg/Quickque_0.1.0_aarch64.dmg
@@ -36,20 +62,23 @@ Control-click Quickque in Applications, choose **Open**, then confirm **Open**.
 Do not bypass Gatekeeper for a DMG you did not build yourself or receive from a
 trusted source.
 
-Both desktop commands first run `native:build`. That command resolves the
-Swift package, compiles an arm64 release helper, and places the target-suffixed
+Both desktop commands first run `native:build`. That command checks the Apple
+toolchain, compiles the arm64 release helper, and places the target-suffixed
 sidecar where Tauri packages it. To build the helper by itself:
 
 ```sh
 pnpm --filter @workspace/quickque native:build
 ```
 
-The helper pins FluidAudio directly to immutable upstream commit
-`41540ea237350afe5117a082b5c28eda642d0612` (the 0.15.7 release) through Swift Package Manager and
-uses its real `StreamingEouAsrManager` with the 160 ms Parakeet EOU variant.
-The native source remains a normal Swift package, so it can also be opened or
-built directly with SwiftPM. `scripts/build-flow-helper.sh` is the supported
-packaging path because it gives the sidecar Tauri's required target suffix.
+The helper uses Apple's SpeechAnalyzer and SpeechTranscriber APIs, with
+SoundAnalysis speech classification used independently for the no-speech
+timeout. The native source remains a normal Swift package, so it can also be
+opened or built directly with SwiftPM. `scripts/build-flow-helper.sh` is the
+supported packaging path because it gives the sidecar Tauri's required target
+suffix. A confirmed Mac build works perfectly for Voice Follow as the default,
+the presentation timer, and live microphone rings. This agent did not compile
+or run that build; post-merge native validation here remains a static Linux
+review, not an exhaustive check of every supported hardware case.
 
 The desktop Vite configuration uses local port 1420 and does not need Replit's
 `PORT` or `BASE_PATH` environment variables. It produces `dist-desktop/` and
@@ -57,69 +86,91 @@ does not include the Replit development plugins. The app bundle loads packaged
 assets only; the desktop CSP does not permit arbitrary network or remote font
 loading.
 
-## Local Flow model and privacy
+## Apple on-device Flow and privacy
 
-Flow is optional. Checking model status does not request microphone permission
-and never downloads anything. The user must explicitly choose Download before
-the helper contacts these documented Hugging Face repositories:
+Flow is optional. Checking Apple speech support and language-asset status does
+not request microphone permission and never downloads anything. Voice Follow
+requires an Apple Silicon Mac running macOS Tahoe 26 or newer and uses Apple's
+on-device `SpeechAnalyzer` and `SpeechTranscriber` APIs. There is no cloud
+fallback.
 
-- `FluidInference/parakeet-realtime-eou-120m-coreml`, 160 ms variant, for
-  English streaming ASR (the integration recorded model revision
-  `40a23f4c0b333aa17ad8c0f2ea47ec2347f2f355`)
-- `FluidInference/silero-vad-coreml` for transcript-independent speech activity
-  (revision `b419383c55c110e2c9271fa6ee0ea83d03c70d96`)
-
-The helper lists and downloads only through Hugging Face URLs containing the
-immutable commit hashes above; it never uses `tree/main` or `resolve/main`.
-The progress total is calculated from that immutable manifest. Quickque checks
-every downloaded file against its immutable-manifest length, moves each
-completed temporary download atomically into the cache, then enables
-FluidAudio's offline mode and loads every required CoreML graph. It writes its installation
-marker atomically only after both ASR and VAD load successfully. The marker
-contains a SHA-256 digest over the installed model trees, which is rechecked by
-Status and Start. Missing, changed, empty, incomplete, or unloadable models fail
-closed. Cancel never marks an incomplete installation as usable. Models are durably cached under:
-
-```text
-~/Library/Application Support/Quickque/Flow/
-```
-
-The ASR cache follows FluidAudio's pinned
-`Models/parakeet-eou-streaming/160ms` layout. The VAD cache follows its pinned
-`Models/silero-vad/silero-vad-unified-256ms-v6.2.1.mlmodelc` layout. A native
-Swift test asserts both paths before the helper and DMG are built.
-
-After installation, Start forces FluidAudio offline mode. It cannot repair or
-download a model while requesting microphone access. A damaged cache produces
-an actionable error and must be repaired with another explicit Download.
-
+Quickque requests Apple-managed English `en-GB` assets and accepts Apple's
+supported equivalent English locale. Status messages name the selected locale,
+including when Apple chooses an already installed regional variant. The user
+must explicitly choose **Download language assets** when those assets are
+missing. If macOS already reports the assets as ready, setup skips the download.
+Starting listening never auto-downloads assets. Apple controls the asset
+contents and availability; Quickque promises neither a fixed download size nor
+a byte total, and it does not maintain a custom model cache, cache checksum, or
+immutable model manifest.
+An explicit installation request can schedule Apple's own background retries.
+**Stop waiting** cancels Quickque's wait, not Apple's ownership of that request;
+macOS may finish an already requested download after the helper exits. Checking
+status or starting the microphone never creates a new installation request.
 Microphone permission is requested only by Start. Audio is captured from the
 selected microphone (never system audio), processed in memory, and is not sent
 to a service or written to a recording. Transcripts are transient JSON events;
-the helper does not persist or log them. The pinned FluidAudio EOU/VAD paths
-were audited for transcript logging: they log model lifecycle, chunk counters,
-and EOU timestamps, but not audio or transcript text. Quickque explicitly
-disables FluidAudio debug-feature capture and discards the helper's diagnostic
-stderr. No transcript logger is registered.
+the helper does not persist or log them. The helper's actual stderr is captured
+separately in bounded per-process RAM (at most 8192 bytes) to make native
+failures actionable. It is not written to disk, logged to the console, or
+included in the normal Flow trace. Error details are collapsed by default and
+have a separate, explicit copy action because raw stderr may contain sensitive
+text or paths.
 
-One serial FIFO holds at most four 256 ms microphone buffers (including the
-buffer in inference), allowing ordinary CoreAudio bursts without accumulating
-an unbounded in-memory recording. Capacity overflow fails visibly, clears
-pending buffers, tears down capture, and exits the helper. A continuous utterance is finalized and resets
-native decoder context after two minutes, bounding rolling transcript state.
-Rust also caps each helper event line at 1 MiB and terminates malformed helpers.
-Native Silero VAD, not transcription
-or script matching, resets a monotonic 30-second silence deadline, including
-while the overlay is in the background. Off-script speech therefore keeps the
-session alive. Pause, Stop, cancel, a replacement generation, application exit,
-and shutdown terminate the helper process, microphone tap, inference, and any
-active download.
+The current input contract uses a bounded `AsyncStream` and a normalized
+16 kHz mono PCM ring. The ring holds at most 80,000 frames (five seconds,
+320,000 sample bytes), and the input pump drains bounded 200 ms work units.
+When the ring is full, the oldest audio is dropped and a cumulative dropped
+frame counter plus a queued-frame count bounded to 0..80,000 is reported as a
+non-blocking warning.
+An actual dropped-audio gap stops the current analysis with a recoverable error
+and **Retry listening**. It does not splice speech across the missing audio or
+silently continue the same decoder. This conservative Apple-engine recovery
+differs from automatic recovery after a brief drop: ordinary bursts are absorbed
+by the bounded queues, but a real overflow requires a fresh listening session.
+These bounds still need targeted checks on supported Macs; this Linux review does
+not establish exhaustive behavior.
 
-The app and helper communicate only through inherited stdin/stdout JSON lines.
-No TCP listener, account, API key, cloud inference, or silent fallback exists.
-Every command and event carries the frontend's generation. Rust rejects output
-from replaced helper processes, and every Start resets transcript sequence to
-zero and creates fresh utterance context.
+Speech activity for the independent 30-second no-speech timeout uses Apple's
+SoundAnalysis speech classification rather than transcript matching. The
+macOS 26 `SpeechDetector` module does not expose usable client activity events.
+SoundAnalysis supplies the independent signal instead. Its speech-confidence
+threshold is an application heuristic, not an Apple accuracy guarantee; speech,
+noise, off-script speech, and the exact silence boundary remain subject to
+validation on a supported Mac.
+
+The app and helper exchange commands/events through inherited stdin/stdout JSON
+lines, with stderr captured separately for opt-in error details. No TCP
+listener, account, API key, cloud inference, or silent fallback exists. Every
+command and event carries the frontend's generation. Rust rejects output from
+replaced helper processes, and every Start resets transcript sequence to zero
+and creates fresh utterance context.
+
+On the first desktop launch, Quickque opens a setup guide before requesting
+either language-asset download or microphone access. The guide explains local
+processing, shows available Apple asset progress without promising a total,
+requests microphone access only after Apple reports speech ready, and confirms
+setup only after listening starts. Choosing **Not now** leaves manual reading
+available. Until setup succeeds, choosing Voice Follow opens the guide again;
+afterward, **Setup Guide** in the Flow status panel reopens it. A previously
+saved setup preference does not assume assets remain installed: status still
+returns `ready` or `needs-model`, and the guide offers the explicit asset
+download when needed.
+
+Expected lifecycle failures are shown with a short fixed diagnostic code and
+retry action. Quickque writes only those non-content codes to the JavaScript or
+macOS console; it never logs event payloads, transcript text, or audio, and it
+creates no diagnostic log file. Initial status, Apple asset preparation, asset
+download, and analyzer startup have inactivity deadlines that stop the helper
+instead of leaving capture or setup indefinitely active.
+
+Tauri writes native artifacts beneath `artifacts/quickque/src-tauri/target/`.
+Release `.app` and `.dmg` outputs are normally in
+`src-tauri/target/release/bundle/macos/` and
+`src-tauri/target/release/bundle/dmg/`. A local build may be run unsigned for
+local use. Distribution to other Macs requires an Apple Developer identity,
+code signing, and normally notarization; those credentials are intentionally
+not part of this repository.
 
 ## Local phone remote
 
@@ -220,11 +271,6 @@ internet uplink disconnected **before the first phone visit and camera scan**.
 Record hardware/browser versions and actual results; do not mark the checklist
 passed based on automated tests or the browser preview.
 
-FluidAudio is Apache-2.0 licensed. The Parakeet weights are separately licensed
-under the **NVIDIA Open Model License**, not MIT or Apache-2.0. Silero VAD is
-MIT licensed. The packaged `THIRD_PARTY_NOTICES.txt` records sources, revisions,
-and license links.
-
 Tauri writes native artifacts beneath `artifacts/quickque/src-tauri/target/`.
 Release `.app` and `.dmg` outputs are normally in
 `src-tauri/target/release/bundle/macos/` and
@@ -279,6 +325,33 @@ the web version and import that file in the desktop version when migration is
 needed.
 
 
+### Native script library storage
+
+The desktop app can use a folder selected through the native directory picker for
+its local script library. Quickque stores only a small app-owned configuration
+record in its native application config directory; that record contains the
+selected folder and a deterministic, folder-specific filename. The script file
+is named `quickque-library-<folder fingerprint>.json`, and its ownership marker
+prevents Quickque from replacing an unrelated file that happens to occupy that
+name. A non-empty file without Quickque's marker is rejected with an actionable
+error rather than being claimed.
+
+Library saves are serialized in the native bridge, validate that the payload is
+a JSON array, cap the payload at 8 MiB, write a sibling temporary file, flush it,
+and atomically rename it into place. Before replacing an existing owned library,
+Quickque atomically preserves the previous document as the matching `.bak` file.
+Interrupted or failed writes therefore leave the previous library intact; the
+bridge never scans a selected folder or writes arbitrary filenames. Folder
+selection is persisted across native restarts, and cancelling the picker leaves
+the existing selection unchanged. Re-selecting the currently configured folder
+is safe. Selecting a different folder that already contains a non-empty owned
+Quickque library (including its owned backup) is rejected before configuration
+changes, with instructions to choose a new folder or import the existing
+backup. Autosaves also carry the exact folder they were queued for; a stale
+save is rejected if the configured folder changed before it writes. This
+storage contains scripts only; it does not store audio, transcripts, or Flow
+data.
+
 ### Document import
 
 **Import Document** in the library accepts one TXT, DOCX, RTF, or text-based
@@ -309,22 +382,146 @@ Neither setting is proof of functioning WKWebView file access.
 
 The Rust source and configuration can be inspected on Linux, but macOS window,
 global-shortcut, `.app`, DMG, signing, notarization, Space, and full-screen
-behavior must be validated on a Mac.
+behavior still require a supported Mac. A confirmed Mac build works
+perfectly for Voice Follow as the default, the presentation timer, and live
+microphone rings. This post-merge review remains a static Linux inspection; the
+agent did not compile or run the Mac build and makes no claim of exhaustive
+hardware or edge-case verification.
 
-This implementation has not been natively compiled or run in the Linux
-development environment. In particular, microphone authorization, helper
-packaging, model download/cancellation and offline reload, CoreML/ANE behavior,
-the exact 30-second stop boundary, helper cleanup, accuracy, latency, memory,
-CPU/ANE use, and coexistence with a meeting app remain Mac-only validation
-items. Do not treat an ordinary web build or Linux static inspection as a
-verified macOS installer.
+For a candidate, first record the toolchain versions and then run
+`desktop:build`:
 
-Upstream's model card reports the selected 160 ms model at 8.29% WER on
-LibriSpeech test-clean and 4.78× real-time throughput on an M2. Those are
-upstream benchmark figures, not measurements of Quickque or promises of
-performance. Quickque-specific accuracy, end-to-end latency, and resource use
-must be measured on supported hardware before release.
+```sh
+xcodebuild -version
+xcrun --sdk macosx --show-sdk-version
+xcrun --find swiftc
+pnpm --filter @workspace/quickque desktop:build
+```
 
+Install the newly generated DMG and verify this sequence:
+
+1. On a clean first launch, confirm the setup guide appears and **Not now**
+   leaves the app usable in manual mode.
+2. Reopen Voice Follow. If Apple reports English language assets ready, confirm
+   setup skips download. Otherwise explicitly start the Apple language-asset
+   download and confirm its status message and 0..1 progress advance without a
+   promised byte total.
+3. Start listening and confirm macOS requests Quickque permission. If
+   permission is denied, confirm the guide shows a retryable error and directs
+   the user to System Settings rather than claiming success.
+4. Read through a script, pause and restart, jump backward and forward between
+   sections, speak in short bursts, and confirm the UI remains aligned without
+   joining text across a reported dropped-audio gap.
+5. Produce a transient queue overrun if possible and confirm the non-blocking
+   cumulative warning, queued catch-up time, recoverable error, and immediate
+   **Retry listening** action. Confirm no asset reinstall action is offered.
+6. Remain silent and confirm the independent SoundAnalysis speech-activity
+   timeout stops listening after 30 seconds once native validation is complete.
+   Confirm pause, Stop, closing setup, and quitting Quickque remove the active
+   microphone indicator promptly.
+7. Quit, disconnect networking, relaunch, and confirm installed Apple language
+   assets permit Voice Follow to start without network access.
+8. Inspect Quickque's Application Support and WebKit container changes. No
+   custom model cache, checksum marker, audio recording, transcript export, or
+   Quickque diagnostic log file is expected.
+
+The confirmed Mac build result covers the default Flow presentation, timer, and
+microphone rings. Installation, already-ready assets, explicit asset download,
+offline start, pause/restart, section jumps, burst input, noise plus silence,
+queue gaps, privacy, stderr handling, cleanup, and broader hardware behavior
+still require targeted supported-Mac checks; they are not established by this
+static Linux review.
+
+If setup fails, record the visible diagnostic code. Optional Console.app or
+other native log capture may be used for investigation, but it is not required
+and must not be treated as the normal Flow trace. Normal diagnostics contain
+lifecycle codes and generations only, never speech, script text, paths, or raw
+stderr.
+
+### Welcome guide
+
+On first launch, Quickque asks for a display name and (on desktop) a local
+script folder. The guide then offers optional Voice Follow setup, explains the
+reader controls, and invites the user to try the welcome walkthrough or create
+a first script. Cancelling Voice Follow does not prevent manual reading.
+Fresh libraries have only the unchanged Welcome to Quickque script; upgrading
+does not delete or replace any existing scripts. Settings can reopen the guide
+and change the display name or library folder.
+
+Browser preview uses browser storage, explicitly cannot choose a native folder,
+and offers export/import backups instead. The display name is local app profile
+data, not an online account.
+
+### On-screen Flow debugger
+
+The subtle **DEBUG** toggle is always present at the bottom left of the app
+window, including during startup, welcome/setup guides, reading, and errors.
+When enabled, **FLOW DEBUG** overlays the UI in green. Visibility persists
+across navigation and restarts; the trace itself remains memory-only.
+The overlay traces
+listener registration, outgoing commands, Rust acknowledgements, helper
+startup and command receipt, Apple support and language-asset checks, asset
+download stages, microphone authorization, analyzer preparation, engine
+startup, queue warnings, and timeouts. Each line has a timestamp and session
+generation. The footer shows the last checkpoint and seconds since it arrived;
+a quiet panel is not itself proof of a failure.
+Hide/show using the bottom-left toggle, or use **Copy** to copy the trace
+manually. If clipboard access is unavailable, select the green text or take a
+screenshot. **Clear** clears only the trace, not Apple language assets or
+scripts.
+
+The trace holds at most 160 entries in memory and is cleared on app restart.
+It accepts fixed lifecycle labels, command names, and numeric metadata only,
+not arbitrary native messages, stderr, filesystem paths, audio, or transcript
+payloads. Copying is explicit and does not automatically upload anything.
+Diagnostic events do not extend operation deadlines or trigger downloads or
+microphone access.
+
+Useful checkpoint distinctions:
+
+- `listener_ready`: the frontend subscribed; it does **not** prove that Rust
+  or the helper has answered.
+- `rust_command_received`: Rust accepted the command.
+- `helper_command_sent`: Rust wrote to stdin; `helper_command_received`
+  separately confirms that Swift decoded it.
+- `helper_boot` / `helper_read_wait`: Swift reached main and its input read.
+- `apple_support_check_begin` / `apple_support_check_complete`: Apple speech
+  support was checked.
+- `apple_assets_check_begin` / `apple_assets_check_complete`: Apple-managed
+  language-asset availability was checked.
+- `apple_assets_download_begin` / `apple_assets_download_complete`: the
+  explicit Apple language-asset download started / completed.
+- `apple_analyzer_prepare_begin` / `apple_analyzer_prepare_complete` /
+  `apple_analyzer_ready`: analyzer preparation and readiness checkpoints.
+- `microphone_request_begin` / `microphone_authorized`: authorization
+  was checked or requested / granted.
+- `command_resolved [stop]`: Rust completed helper cleanup for that command.
+
+Browser-only visual inspection is available at `?flowDebug=1`; it explicitly
+reports that native Flow is unavailable rather than simulating native results.
+
+
+### Input-pipeline safeguards
+
+The Apple microphone tap validates and copies input into bounded native
+buffers. The current input contract normalizes to 16 kHz mono and pumps
+bounded 200 ms work units into a bounded `AsyncStream`; its ring holds at most
+80,000 frames (five seconds, 320,000 sample bytes). Invalid input and route
+changes fail explicitly. Dropped frames stop the current analysis and require
+**Retry listening**, rather than joining transcripts across missing audio.
+
+The green trace distinguishes a natural `helper_exit_code` /
+`helper_exit_signal` (numeric values only) from `helper_cleanup_forced`
+performed by Rust. A signal identifies how the process terminated, not the
+exact faulting stack frame. Raw stderr is never part of this trace.
+
+The Xcode 26 / Swift 6.2 helper and Apple SpeechAnalyzer, SpeechTranscriber,
+and SoundAnalysis behavior are native-only. The confirmed Mac build works
+perfectly for the default Flow presentation, timer, and microphone rings, but
+this agent did not compile or run it. Do not treat this static Linux inspection as
+exhaustive proof of install behavior, exact timing, queue-gap recovery,
+accuracy, latency, memory, or coexistence with a meeting app on every
+supported Mac.
 #### Mac-only import acceptance checks (not run in this Linux environment)
 
 Use the packaged Apple Silicon `.app`, not just the Vite development server:

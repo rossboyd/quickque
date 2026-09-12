@@ -1,0 +1,75 @@
+t Suite 'QuickqueFlowPackageTests.xctest' failed at 2026-09-12 00:40:13.007.
+	 Executed 9 tests, with 2 failures (0 unexpected) in 0.097 (0.098) seconds
+Test Suite 'All tests' failed at 2026-09-12 00:40:13.007.
+	 Executed 9 tests, with 2 failures (0 unexpected) in 0.097 (0.099) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
+[ELIFECYCLE] Command failed with exit code 1.
+[ELIFECYCLE] Command failed with exit code 1.
+Error: ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL
+
+  × "pnpm recursive run" failed in /Users/rossboyd/Documents/github/quickque/
+  │ artifacts/quickque
+
+rossboyd@Rosss-MacBook-Air-2 quickque % git rev-parse --short HEAD
+351f20e
+rossboyd@Rosss-MacBook-Air-2 quickque % git pull                  
+git rev-parse --short HEAD
+pnpm --filter @workspace/quickque desktop:build
+Already up to date.
+351f20e
+
+$ pnpm native:build && tauri build --config src-tauri/tauri.conf.json
+$ sh scripts/build-flow-helper.sh
+Building for debugging...
+[1/1] Write swift-version--58304C5D6DBC2206.txt
+Build complete! (0.14s)
+Test Suite 'All tests' started at 2026-09-12 00:41:20.959.
+Test Suite 'QuickqueFlowPackageTests.xctest' started at 2026-09-12 00:41:20.959.
+Test Suite 'AudioInputTests' started at 2026-09-12 00:41:20.959.
+Test Case '-[QuickqueFlowTests.AudioInputTests testCopySupportsMonoStereoPlanarAndInterleavedAndRejectsShortBytes]' started.
+/Users/rossboyd/Documents/github/quickque/artifacts/quickque/native/Tests/QuickqueFlowTests/AudioInputTests.swift:199: error: -[QuickqueFlowTests.AudioInputTests testCopySupportsMonoStereoPlanarAndInterleavedAndRejectsShortBytes] : XCTAssertNil failed: "<AVAudioPCMBuffer@0xaf30b4c80: 16/16 bytes>"
+Test Case '-[QuickqueFlowTests.AudioInputTests testCopySupportsMonoStereoPlanarAndInterleavedAndRejectsShortBytes]' failed (0.025 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerAccepts44100HzStereo]' started.
+/Users/rossboyd/Documents/github/quickque/artifacts/quickque/native/Tests/QuickqueFlowTests/AudioInputTests.swift:242: error: -[QuickqueFlowTests.AudioInputTests testNormalizerAccepts44100HzStereo] : XCTAssertTrue failed
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerAccepts44100HzStereo]' failed (0.013 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerKeepsPersistent16KOutputAcrossChunkSizes]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerKeepsPersistent16KOutputAcrossChunkSizes]' passed (0.049 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerRejectsRouteChangesAndNonFiniteSamples]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testNormalizerRejectsRouteChangesAndNonFiniteSamples]' passed (0.002 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testRejectsMoreThanOneSecondOfAudioInATap]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testRejectsMoreThanOneSecondOfAudioInATap]' passed (0.004 seconds).
+Test Case '-[QuickqueFlowTests.AudioInputTests testTapCopiesOnAConcurrentCallbackAndPreservesSession]' started.
+Test Case '-[QuickqueFlowTests.AudioInputTests testTapCopiesOnAConcurrentCallbackAndPreservesSession]' passed (0.010 seconds).
+Test Suite 'AudioInputTests' failed at 2026-09-12 00:41:21.062.
+	 Executed 6 tests, with 2 failures (0 unexpected) in 0.103 (0.103) seconds
+Test Suite 'ModelLayoutTests' started at 2026-09-12 00:41:21.062.
+Test Case '-[QuickqueFlowTests.ModelLayoutTests testLayoutMatchesPinnedFluidAudioLoaders]' started.
+Test Case '-[QuickqueFlowTests.ModelLayoutTests testLayoutMatchesPinnedFluidAudioLoaders]' passed (0.000 seconds).
+Test Suite 'ModelLayoutTests' passed at 2026-09-12 00:41:21.063.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'PipeReadTests' started at 2026-09-12 00:41:21.063.
+Test Case '-[QuickqueFlowTests.PipeReadTests testPipeEndOfFileReturnsNil]' started.
+Test Case '-[QuickqueFlowTests.PipeReadTests testPipeEndOfFileReturnsNil]' passed (0.000 seconds).
+Test Case '-[QuickqueFlowTests.PipeReadTests testShortCommandReturnsWhileWriterRemainsOpen]' started.
+Test Case '-[QuickqueFlowTests.PipeReadTests testShortCommandReturnsWhileWriterRemainsOpen]' passed (0.001 seconds).
+Test Suite 'PipeReadTests' passed at 2026-09-12 00:41:21.064.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'QuickqueFlowPackageTests.xctest' failed at 2026-09-12 00:41:21.064.
+	 Executed 9 tests, with 2 failures (0 unexpected) in 0.104 (0.105) seconds
+Test Suite 'All tests' failed at 2026-09-12 00:41:21.064.
+	 Executed 9 tests, with 2 failures (0 unexpected) in 0.104 (0.106) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
+[ELIFECYCLE] Command failed with exit code 1.
+[ELIFECYCLE] Command failed with exit code 1.
+Error: ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL
+
+  × "pnpm recursive run" failed in /Users/rossboyd/Documents/github/quickque/
+  │ artifacts/quickque
+
+rossboyd@Rosss-MacBook-Air-2 quickque % 

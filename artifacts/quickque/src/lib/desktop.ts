@@ -1,4 +1,5 @@
 import { LogicalSize } from '@tauri-apps/api/dpi';
+import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   isRegistered,
@@ -206,5 +207,11 @@ export async function minimizeWindow(): Promise<void> {
 export async function closeWindow(): Promise<void> {
   if (isDesktop()) {
     await getCurrentWindow().close();
+  }
+}
+
+export async function openMicrophoneSettings(): Promise<void> {
+  if (isDesktop()) {
+    await invoke('open_microphone_settings');
   }
 }

@@ -15,6 +15,10 @@ import { resolveCommandEffect } from '@/lib/remote/reducer';
 import type { RemoteSnapshot } from '@/lib/remote/types';
 import { invoke } from '@tauri-apps/api/core';
 import { getReaderSurfacePresentation } from '@/lib/reader-surface';
+import { FlowSetupWizard } from '@/components/flow-setup-wizard';
+import { usePresentationTimer } from '@/hooks/use-presentation-timer';
+import { PresentationHUD } from '@/components/presentation-hud';
+import { getElapsedMs } from '@/lib/presentation-timer';
 
 export default function Reader() {
   const { scripts, settings, updateSettings } = useStore();
@@ -23,21 +27,30 @@ export default function Reader() {
   const script = scripts.find(s => s.id === params.id);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [readMode, setReadMode] = useState<"manual" | "flow">("manual");
+  const [readMode, setReadMode] = useState<"manual" | "flow">("flow");
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
   const [showControls, setShowControls] = useState(true);
+  const [showWizard, setShowWizard] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const textContentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    if (readMode === 'flow') {
+      const isSetupDone = localStorage.getItem('quickque-flow-setup-done') === 'true';
+      if (!isSetupDone) {
+        setShowWizard(true);
+      }
+    } else {
+      setShowWizard(false);
+    }
+  }, [readMode]);
   
   const lastTimeRef = useRef<number>(0);
   const reqRef = useRef<number>(0);
 
   const [desktopError, setDesktopError] = useState<string | null>(null);
-
-  const elapsedRef = useRef(0);
-  const lastTickRef = useRef<number | null>(null);
 
   // Pre-process tokens for Flow aligner
   const { tokens, enrichedSections } = useMemo(() => {
@@ -333,28 +346,11 @@ export default function Reader() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
-  // Presentation Timing
-  useEffect(() => {
-    const activelyPlaying = readMode === 'manual' ? isPlaying : flow.status === 'listening';
-    let req: number;
-
-    const tick = (time: number) => {
-      if (!lastTickRef.current) lastTickRef.current = time;
-      const delta = time - lastTickRef.current;
-      lastTickRef.current = time;
-
-      if (activelyPlaying) {
-        elapsedRef.current += delta;
-      }
-      req = requestAnimationFrame(tick);
-    };
-
-    req = requestAnimationFrame(tick);
-    return () => {
-       cancelAnimationFrame(req);
-       lastTickRef.current = null;
-    };
-  }, [isPlaying, readMode, flow.status]);
+  // Single authoritative presentation timer hook replacing independent elapsedRef accumulation
+  const isTimerActive = readMode === 'manual' ? isPlaying : flow.status === 'listening';
+  const { timerState, reset: resetTimer } = usePresentationTimer(isTimerActive, script?.id || '');
+  const timerStateRef = useRef(timerState);
+  timerStateRef.current = timerState;
 
   const dispatchCommand = useCallback((cmd: any) => {
     if (!script) return;
@@ -427,7 +423,7 @@ export default function Reader() {
       mode: readModeRef.current,
       section: activeSectionIdx,
       sectionCount: script.sections.length,
-      elapsedMs: Math.floor(elapsedRef.current),
+      elapsedMs: getElapsedMs(timerStateRef.current, performance.now()),
       playing: readModeRef.current === 'manual' ? isPlaying : flowRef.current.status === 'listening',
       fontSize: settings.fontSize,
       scrollSpeed: settings.speed,
@@ -664,6 +660,15 @@ export default function Reader() {
         </div>
       </div>
 
+      <PresentationHUD
+        mode={readMode}
+        status={flow.status}
+        isFollowing={flow.isFollowing}
+        audioLevelRef={flow.audioLevelRef}
+        timerState={timerState}
+        onResetTimer={resetTimer}
+      />
+
       {/* Reader Content Area */}
       <div className="flex-1 relative overflow-hidden">
         {/* Read Marker (Resume here marker) */}
@@ -681,7 +686,7 @@ export default function Reader() {
           )}
           {readMode === 'flow' && flow.status === 'loading' && (
             <div className="ml-3 px-2 py-0.5 rounded text-xs font-bold bg-primary text-primary-foreground shadow-sm uppercase tracking-wider animate-in fade-in zoom-in duration-200">
-              Starting engine...
+              Preparing Apple speech...
             </div>
           )}
           {readMode === 'flow' && flow.status === 'listening' && (
@@ -757,10 +762,29 @@ export default function Reader() {
         </div>
       </div>
 
-      {readMode === 'flow' && (
+      {readMode === 'flow' && !showWizard && (
         <FlowStatusPanel 
           flow={flow} 
           onCancelMode={() => setReadMode('manual')} 
+          onOpenWizard={() => setShowWizard(true)}
+        />
+      )}
+
+      {showWizard && (
+        <FlowSetupWizard
+          flow={flow}
+          onComplete={() => {
+            localStorage.setItem('quickque-flow-setup-done', 'true');
+            setShowWizard(false);
+          }}
+          onCancel={() => {
+            const isSetupDone = localStorage.getItem('quickque-flow-setup-done') === 'true';
+            if (!isSetupDone) {
+              setReadMode('manual');
+              flow.stop();
+            }
+            setShowWizard(false);
+          }}
         />
       )}
 

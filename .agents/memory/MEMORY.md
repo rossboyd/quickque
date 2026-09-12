@@ -1,3 +1,6 @@
-- [Native audio integration](native-audio-integration.md) — verify streaming semantics and immutable downloads against pinned upstream source, not current README examples.
+- [Native audio integration](native-audio-integration.md) — executor-safe callbacks, AVFoundation buffer views, and live resampler test contracts.
 - [Native Rust validation on Linux](native-rust-validation-linux.md) — isolate platform-neutral Rust modules when full Tauri checks are blocked by Linux UI libraries.
 - [PDF extraction failures](pdf-extraction-failures.md) — PDF.js can resolve text extraction after catching decoder failures; completion alone does not prove a complete import.
+- [Flow diagnostic evidence](flow-diagnostic-evidence.md) — a frontend timeout does not prove a model-check stall; distinguish bridge, helper startup, input receipt, and model execution.
+- [pnpm build approvals](pnpm-build-approvals.md) — use the narrow allowBuilds map across pnpm 10.26+ and 11; legacy approval settings were removed in 11.
+- [Native library compatibility](native-library-compatibility.md) — reconcile chosen-folder scripts with browser metadata; recovery must block queued autosaves.

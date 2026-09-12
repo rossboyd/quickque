@@ -15,7 +15,6 @@ import {
   FileUp, Download, ArrowUpDown, Edit2, Code, ArrowUp, ArrowDown, ChevronDown,
   RotateCcw, X,
 } from 'lucide-react';
-
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -25,7 +24,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +34,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { tokenize } from '@/lib/flow/tokenize';
+import { useLocalFlow } from '@/hooks/use-local-flow';
+import { FlowSetupWizard } from '@/components/flow-setup-wizard';
+import { isDesktop } from '@/lib/desktop';
 
 const SORT_LABELS: Record<SortMode, string> = {
   newest: 'Newest First',
@@ -50,7 +52,7 @@ export default function Library() {
   const { 
     scripts, activeScriptId, setActiveScriptId,
     createScript, updateScript, duplicateScript,
-    error, clearError,
+    error, clearError, profile,
     trash, sortMode, customOrder,
     setSortMode, reorderScripts,
     deleteScripts, restoreScripts, permanentlyDeleteScripts,
@@ -63,6 +65,28 @@ export default function Library() {
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [droppedError, setDroppedError] = useState<string | null>(null);
   const [_, setLocation] = useLocation();
+  const [showWizard, setShowWizard] = useState(false);
+
+  useEffect(() => {
+    if (isDesktop()) {
+      const seen = localStorage.getItem('quickque-first-launch-seen');
+      const done = localStorage.getItem('quickque-flow-setup-done');
+      if (!seen && !done) {
+        setShowWizard(true);
+      }
+    }
+  }, []);
+
+  const setupTokens = useMemo(() => {
+    let globalIdx = 0;
+    return tokenize("Testing microphone permissions for Quickque Voice Follow.").map(t => ({
+      ...t,
+      sectionIdx: 0,
+      globalTokenIdx: globalIdx++
+    }));
+  }, []);
+
+  const setupFlow = useLocalFlow({ tokens: setupTokens, enabled: showWizard });
 
   const [viewMode, setViewMode] = useState<'library' | 'trash'>('library');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -108,6 +132,8 @@ export default function Library() {
   };
 
   const activeScript = scripts.find(s => s.id === activeScriptId);
+  const hasOnlySeed = scripts.length === 1 && scripts[0].id === 'seed-1';
+  const showBanner = profile?.onboardingComplete && hasOnlySeed;
 
   const visibleItems = useMemo(() => {
     const sourceList = viewMode === 'library' ? scripts : trash.map(t => t.script);
@@ -209,6 +235,23 @@ export default function Library() {
       }}
       onDrop={handleLibraryDrop}
     >
+      {showWizard && (
+        <FlowSetupWizard
+          flow={setupFlow}
+          onComplete={() => {
+            localStorage.setItem('quickque-first-launch-seen', 'true');
+            localStorage.setItem('quickque-flow-setup-done', 'true');
+            setShowWizard(false);
+            setupFlow.stop();
+          }}
+          onCancel={() => {
+            localStorage.setItem('quickque-first-launch-seen', 'true');
+            setShowWizard(false);
+            setupFlow.stop();
+          }}
+        />
+      )}
+
       {error && (
         <div className="flex-shrink-0 p-3 bg-destructive/10 text-destructive text-sm flex items-center justify-between border-b border-destructive/20 z-50" role="alert">
           <div className="flex items-center gap-2">
@@ -560,6 +603,22 @@ export default function Library() {
           }}
         />
 
+        {showBanner && (
+          <div className="flex-shrink-0 p-4 bg-primary/10 border-b border-primary/20 z-40 flex items-center justify-between animate-in slide-in-from-top-2">
+            <div>
+              <h3 className="font-semibold text-primary">Welcome to Quickque!</h3>
+              <p className="text-sm text-primary/80 mt-0.5">Try the welcome walkthrough, then create your first script.</p>
+            </div>
+            <button
+              onClick={handleCreate}
+              className="flex-shrink-0 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors shadow-sm whitespace-nowrap ml-4 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Create Script
+            </button>
+          </div>
+        )}
+
         {activeScript ? (
           <Editor 
             script={activeScript} 
@@ -642,7 +701,6 @@ export default function Library() {
     </div>
   );
 }
-
 type ScriptMenuProps = {
   viewMode: 'library' | 'trash';
   isActive: boolean;

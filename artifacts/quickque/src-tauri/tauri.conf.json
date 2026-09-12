@@ -33,12 +33,11 @@
   "bundle": {
     "active": true,
     "externalBin": ["binaries/quickque-flow"],
-    "resources": ["../native/THIRD_PARTY_NOTICES.txt"],
     "targets": ["app", "dmg"],
     "category": "Productivity",
     "shortDescription": "A focused prompt queue for presentations and recordings.",
     "macOS": {
-      "minimumSystemVersion": "14.0",
+      "minimumSystemVersion": "26.0",
       "infoPlist": "Info.plist"
     }
   }

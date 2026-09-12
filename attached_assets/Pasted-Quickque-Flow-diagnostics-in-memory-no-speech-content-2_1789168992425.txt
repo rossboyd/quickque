@@ -1,0 +1,143 @@
+Quickque Flow diagnostics (in memory; no speech content)
+23:20:52.721 ui_desktop — Desktop UI loaded
+23:21:22.864 session_begin — Flow session opened #1789168852672
+23:21:22.864 watchdog_armed — Waiting for operation (deadline in ms) #1789168852672 (30000)
+23:21:22.865 listener_begin — Registering Tauri event listener #1789168852672
+23:21:22.871 listener_ready — Tauri event listener registered #1789168852672
+23:21:22.871 command_sent — Sending command to Rust [status] #1789168852672
+23:21:22.875 rust_command_received — Rust received command #1789168852672
+23:21:22.875 status:loading — Native status: preparing #1789168852672
+23:21:22.875 watchdog_cleared — Operation deadline cleared #1789168852672
+23:21:22.875 watchdog_armed — Waiting for operation (deadline in ms) #1789168852672 (120000)
+23:21:22.876 helper_spawn_begin — Starting native helper process #1789168852672
+23:21:22.876 helper_spawned — Native helper process created #1789168852672
+23:21:22.877 helper_command_sent — Command written to helper stdin #1789168852672
+23:21:22.877 command_resolved — Rust command returned successfully [status] #1789168852672 (6)
+23:21:22.886 helper_boot — Swift helper entered main #1789168852672
+23:21:22.887 helper_read_wait — Swift helper waiting for command bytes #1789168852672
+23:21:22.887 helper_command_received — Swift helper decoded command #1789168852672
+23:21:22.887 model_check_begin — Checking model installation and integrity #1789168852672
+23:21:23.062 model_check_complete — Model installation check returned #1789168852672
+23:21:23.063 status:ready — Native status: model ready #1789168852672
+23:21:23.063 watchdog_cleared — Operation deadline cleared #1789168852672
+23:21:23.064 helper_read_wait — Swift helper waiting for command bytes #1789168852672
+23:21:29.929 watchdog_armed — Waiting for operation (deadline in ms) #1789168852673 (120000)
+23:21:29.929 command_sent — Sending command to Rust [start] #1789168852673
+23:21:29.932 rust_command_received — Rust received command #1789168852673
+23:21:29.933 helper_spawn_begin — Starting native helper process #1789168852673
+23:21:29.935 helper_spawned — Native helper process created #1789168852673
+23:21:29.935 helper_command_sent — Command written to helper stdin #1789168852673
+23:21:29.936 command_resolved — Rust command returned successfully [start] #1789168852673 (7)
+23:21:29.948 helper_boot — Swift helper entered main #1789168852673
+23:21:29.948 helper_read_wait — Swift helper waiting for command bytes #1789168852673
+23:21:29.949 helper_command_received — Swift helper decoded command #1789168852673
+23:21:29.949 helper_read_wait — Swift helper waiting for command bytes #1789168852673
+23:21:29.950 model_check_begin — Checking model installation and integrity #1789168852673
+23:21:30.074 model_check_complete — Model installation check returned #1789168852673
+23:21:30.075 microphone_request_begin — Checking/requesting macOS microphone permission #1789168852673
+23:21:32.327 microphone_authorized — macOS microphone permission granted #1789168852673
+23:21:32.329 status:loading — Native status: preparing #1789168852673
+23:21:32.329 watchdog_cleared — Operation deadline cleared #1789168852673
+23:21:32.329 watchdog_armed — Waiting for operation (deadline in ms) #1789168852673 (120000)
+23:21:32.338 asr_load_begin — Loading local speech model #1789168852673
+23:21:32.917 asr_load_complete — Local speech model loaded #1789168852673
+23:21:32.918 vad_load_begin — Loading local voice activity model #1789168852673
+23:21:32.943 vad_load_complete — Local voice activity model loaded #1789168852673
+23:21:33.040 audio_engine_start — Starting microphone audio engine #1789168852673
+23:21:33.080 audio_engine_listening — Microphone audio engine is listening #1789168852673
+23:21:33.081 status:listening — Native status: listening #1789168852673
+23:21:33.081 watchdog_cleared — Operation deadline cleared #1789168852673
+23:21:33.340 error:helper_exited — Native error code: helper_exited #1789168852673
+23:21:33.341 lifecycle_error — Flow stopped after an error — see setup error for details #1789168852674
+23:21:33.341 command_sent — Sending command to Rust [stop] #1789168852675
+23:21:33.353 stale_event — Ignored an event from an older session #1789168852675
+23:21:33.355 command_resolved — Rust command returned successfully [stop] #1789168852675 (14)
+23:21:37.695 command_sent — Sending command to Rust [stop] #1789168852677
+23:21:37.697 session_cleanup — Flow session closing #1789168852677
+23:21:37.697 command_sent — Sending command to Rust [stop] #1789168852678
+23:21:37.699 listener_removed — Tauri event listener removed #1789168852672
+23:21:37.728 command_resolved — Rust command returned successfully [stop] #1789168852677 (32)
+23:21:37.729 command_resolved — Rust command returned successfully [stop] #1789168852678 (32)
+23:21:45.403 session_begin — Flow session opened #1789168852679
+23:21:45.403 watchdog_armed — Waiting for operation (deadline in ms) #1789168852679 (30000)
+23:21:45.403 listener_begin — Registering Tauri event listener #1789168852679
+23:21:45.411 listener_ready — Tauri event listener registered #1789168852679
+23:21:45.411 command_sent — Sending command to Rust [status] #1789168852679
+23:21:45.413 rust_command_received — Rust received command #1789168852679
+23:21:45.414 status:loading — Native status: preparing #1789168852679
+23:21:45.414 watchdog_cleared — Operation deadline cleared #1789168852679
+23:21:45.414 watchdog_armed — Waiting for operation (deadline in ms) #1789168852679 (120000)
+23:21:45.415 helper_spawn_begin — Starting native helper process #1789168852679
+23:21:45.415 helper_spawned — Native helper process created #1789168852679
+23:21:45.416 helper_command_sent — Command written to helper stdin #1789168852679
+23:21:45.416 command_resolved — Rust command returned successfully [status] #1789168852679 (5)
+23:21:45.432 helper_boot — Swift helper entered main #1789168852679
+23:21:45.432 helper_read_wait — Swift helper waiting for command bytes #1789168852679
+23:21:45.433 helper_command_received — Swift helper decoded command #1789168852679
+23:21:45.433 model_check_begin — Checking model installation and integrity #1789168852679
+23:21:45.548 model_check_complete — Model installation check returned #1789168852679
+23:21:45.549 status:ready — Native status: model ready #1789168852679
+23:21:45.549 watchdog_cleared — Operation deadline cleared #1789168852679
+23:21:45.551 helper_read_wait — Swift helper waiting for command bytes #1789168852679
+23:21:47.594 watchdog_armed — Waiting for operation (deadline in ms) #1789168852680 (120000)
+23:21:47.595 command_sent — Sending command to Rust [start] #1789168852680
+23:21:47.597 rust_command_received — Rust received command #1789168852680
+23:21:47.598 helper_spawn_begin — Starting native helper process #1789168852680
+23:21:47.599 helper_spawned — Native helper process created #1789168852680
+23:21:47.599 helper_command_sent — Command written to helper stdin #1789168852680
+23:21:47.599 command_resolved — Rust command returned successfully [start] #1789168852680 (4)
+23:21:47.606 helper_boot — Swift helper entered main #1789168852680
+23:21:47.607 helper_read_wait — Swift helper waiting for command bytes #1789168852680
+23:21:47.608 helper_command_received — Swift helper decoded command #1789168852680
+23:21:47.608 model_check_begin — Checking model installation and integrity #1789168852680
+23:21:47.609 helper_read_wait — Swift helper waiting for command bytes #1789168852680
+23:21:47.729 model_check_complete — Model installation check returned #1789168852680
+23:21:47.729 microphone_request_begin — Checking/requesting macOS microphone permission #1789168852680
+23:21:47.735 microphone_authorized — macOS microphone permission granted #1789168852680
+23:21:47.735 status:loading — Native status: preparing #1789168852680
+23:21:47.735 watchdog_cleared — Operation deadline cleared #1789168852680
+23:21:47.735 watchdog_armed — Waiting for operation (deadline in ms) #1789168852680 (120000)
+23:21:47.736 asr_load_begin — Loading local speech model #1789168852680
+23:21:47.878 asr_load_complete — Local speech model loaded #1789168852680
+23:21:47.879 vad_load_begin — Loading local voice activity model #1789168852680
+23:21:47.900 vad_load_complete — Local voice activity model loaded #1789168852680
+23:21:47.992 audio_engine_start — Starting microphone audio engine #1789168852680
+23:21:48.029 audio_engine_listening — Microphone audio engine is listening #1789168852680
+23:21:48.029 status:listening — Native status: listening #1789168852680
+23:21:48.029 watchdog_cleared — Operation deadline cleared #1789168852680
+23:21:48.290 error:helper_exited — Native error code: helper_exited #1789168852680
+23:21:48.290 lifecycle_error — Flow stopped after an error — see setup error for details #1789168852681
+23:21:48.290 command_sent — Sending command to Rust [stop] #1789168852682
+23:21:48.300 stale_event — Ignored an event from an older session #1789168852682
+23:21:48.301 command_resolved — Rust command returned successfully [stop] #1789168852682 (11)
+23:22:05.729 watchdog_armed — Waiting for operation (deadline in ms) #1789168852684 (120000)
+23:22:05.729 command_sent — Sending command to Rust [start] #1789168852684
+23:22:05.732 rust_command_received — Rust received command #1789168852684
+23:22:05.733 helper_spawn_begin — Starting native helper process #1789168852684
+23:22:05.733 helper_spawned — Native helper process created #1789168852684
+23:22:05.734 helper_command_sent — Command written to helper stdin #1789168852684
+23:22:05.734 command_resolved — Rust command returned successfully [start] #1789168852684 (6)
+23:22:05.745 helper_boot — Swift helper entered main #1789168852684
+23:22:05.746 helper_read_wait — Swift helper waiting for command bytes #1789168852684
+23:22:05.746 helper_command_received — Swift helper decoded command #1789168852684
+23:22:05.747 helper_read_wait — Swift helper waiting for command bytes #1789168852684
+23:22:05.747 model_check_begin — Checking model installation and integrity #1789168852684
+23:22:05.872 model_check_complete — Model installation check returned #1789168852684
+23:22:05.873 microphone_request_begin — Checking/requesting macOS microphone permission #1789168852684
+23:22:05.879 microphone_authorized — macOS microphone permission granted #1789168852684
+23:22:05.879 status:loading — Native status: preparing #1789168852684
+23:22:05.879 watchdog_cleared — Operation deadline cleared #1789168852684
+23:22:05.879 watchdog_armed — Waiting for operation (deadline in ms) #1789168852684 (120000)
+23:22:05.880 asr_load_begin — Loading local speech model #1789168852684
+23:22:06.034 asr_load_complete — Local speech model loaded #1789168852684
+23:22:06.035 vad_load_begin — Loading local voice activity model #1789168852684
+23:22:06.058 vad_load_complete — Local voice activity model loaded #1789168852684
+23:22:06.138 audio_engine_start — Starting microphone audio engine #1789168852684
+23:22:06.175 audio_engine_listening — Microphone audio engine is listening #1789168852684
+23:22:06.176 status:listening — Native status: listening #1789168852684
+23:22:06.176 watchdog_cleared — Operation deadline cleared #1789168852684
+23:22:06.437 error:helper_exited — Native error code: helper_exited #1789168852684
+23:22:06.437 lifecycle_error — Flow stopped after an error — see setup error for details #1789168852685
+23:22:06.437 command_sent — Sending command to Rust [stop] #1789168852686
+23:22:06.446 stale_event — Ignored an event from an older session #1789168852686
+23:22:06.447 command_resolved — Rust command returned successfully [stop] #1789168852686 (11)
