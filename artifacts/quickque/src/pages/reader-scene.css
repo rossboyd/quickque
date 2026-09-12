@@ -1,6 +1,11 @@
 /* Compact scene presentation reuses the reader viewport and cue transforms.
    Extra settings stay available in the existing Present settings dialog. */
 .scene-cues .scene-cue-name { overflow-wrap: anywhere; }
+.scene-reader .scene-hud { display: block; flex-shrink: 0; }
+.scene-reader .scene-hud > div { position: static; flex-direction: row; justify-content: flex-end; align-items: center; padding: 4px 12px; gap: 8px; }
+.scene-reader [aria-label="Presentation timing"] { padding: 4px 8px; }
+.scene-reader [aria-label="Presentation timing"] > :not(:first-child) { display: none; }
+body:has(.scene-reader) [data-flow-debug-overlay] { bottom: 76px; }
 @media (max-height: 500px) {
   .scene-cues .scene-cast-summary, .scene-cues .scene-next-words { display: none; }
   .scene-cues > div > .grid { padding: 4px 8px; gap: 8px; }

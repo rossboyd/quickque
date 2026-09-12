@@ -46,7 +46,7 @@ A local-first personal teleprompter for live meetings, with an interruption-frie
 
 - New script opens a Presentation / Performance chooser. Purpose persists independently of Partner audio, including duplication, imports, backups and Trash.
 - Performance uses turns, cast setup and Rehearse. With partner audio enabled, preflight checks empty dialogue, character assignments and available local partner voices; each issue links back to setup.
-- Selecting every cast member as My role provides silent turn cues without voices. Partner audio off preserves the cast and opens the ordinary reader.
+- Assigning every cast member as In Person provides silent turn cues without voices. Partner audio off preserves the cast and opens the ordinary reader.
 - The public homepage has an interactive product illustration, local canvas mesh with motion controls, and a source-build disclosure. Guide labels track the new script chooser; release and live checkout remain unavailable.
 
 ### Reader timing and local resume
@@ -88,3 +88,9 @@ The requested product name is Quickque. The user wants a lightweight personal Ma
 - Quickque-owned code and docs use the root MIT license. Third-party/model terms remain separate; see `THIRD_PARTY_NOTICES.md`.
 - Optional actor mode stays within Quickque. External-camera use, turn controls and privacy are described in `artifacts/quickque/SCENE_PARTNER.md`.
 - Turbo is deliberately unavailable pending a reproducible arm64 runtime, rights-cleared voice assets and real Apple Silicon measurements. See `artifacts/quickque/TURBO_EVALUATION.md`; do not enable upstream convenience downloads as a fallback.
+
+### Rehearsal cues and Markdown authoring
+
+- Cast assignments use In Person / AI Partner; the existing myRoleIds representation remains compatible. Optional six-digit accentColor persists through all actor cloning and exports.
+- Rehearsal has persistent Now / Up next cues, character accents on dialogue and explicit assignment labels, including mirrored layouts.
+- Markdown opens a full-script draft with explicit Save script: # title, ## section, **Name:** character turn, > notes. Existing cast configuration stays intact; new characters default to AI Partner with an unused palette accent. Parse or storage errors keep the draft open.

@@ -9,6 +9,7 @@ export function MarkdownEditor({ script, onSave, onClose }: {
   onClose: () => void;
 }) {
   const original = useRef(script);
+  const ownSavePending = useRef(false);
   const [baseline, setBaseline] = useState(() => scriptToMarkdown(script));
   const [draft, setDraft] = useState(baseline);
   const [message, setMessage] = useState('');
@@ -30,11 +31,19 @@ export function MarkdownEditor({ script, onSave, onClose }: {
     setError(''); setBaseline(draft);
     setMessage(result.newCharacters.length ? `Saved. Added ${result.newCharacters.join(', ')} as AI Partner. Set their assignments, colours and voices in Scene Partner.` : 'Saved. Cast assignments, colours and voices are preserved.');
     // The save synchronously commits; the next render supplies that snapshot.
-    original.current = { ...script, ...result.updates };
+    ownSavePending.current = true;
   };
   useEffect(() => {
     // Accept our own committed revision, but never overwrite a dirty draft.
-    if (!dirty) original.current = script;
+    if (!dirty) {
+      if (!ownSavePending.current && original.current !== script) {
+        const latest = scriptToMarkdown(script);
+        setDraft(latest);
+        setBaseline(latest);
+      }
+      ownSavePending.current = false;
+      original.current = script;
+    }
   }, [script, dirty]);
   return <Dialog open onOpenChange={open => { if (!open) close(); }}>
     <DialogContent className="flex h-[92dvh] max-h-[92dvh] w-[96vw] max-w-5xl flex-col overflow-hidden p-4 sm:p-6" onInteractOutside={event => event.preventDefault()}>

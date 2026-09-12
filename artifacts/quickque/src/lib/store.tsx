@@ -1424,15 +1424,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [enqueueNativeSave],
   );
 
-  const commitUserScripts = useCallback((nextScripts: Script[]) => {
+  const commitUserScripts = useCallback((nextScripts: Script[], requireDurable = false) => {
+    const serialized = serializeScripts(nextScripts);
+    if (requireDurable && !persistScriptsCache(serialized, true)) return false;
     scriptMutationRevisionRef.current += 1;
     scriptsRef.current = nextScripts;
-    const serialized = serializeScripts(nextScripts);
     latestScriptsJsonRef.current = serialized;
     // Persist the recovery copy synchronously with the mutation, before
     // React can yield to a delayed native hydration response.
-    persistScriptsCache(serialized, true);
+    if (!requireDurable) persistScriptsCache(serialized, true);
     setScripts(nextScripts);
+    return true;
   }, [persistScriptsCache]);
 
   useEffect(() => {
@@ -1695,10 +1697,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         changed = true;
         return { ...script, ...updates, updatedAt: Date.now() };
       });
-      if (changed) {
-        commitUserScripts(nextScripts);
-      }
-      return changed;
+      return changed ? commitUserScripts(nextScripts, true) : false;
     },
     [commitUserScripts],
   );

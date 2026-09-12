@@ -14,9 +14,12 @@ record video or audio, save takes or export generated speech.**
    performance descriptions you choose. These free-text descriptions are
    visual reminders, not automatic voice-generation instructions or promises
    of an exact age or acting performance.
-3. Select **My role** on each character you will perform. Several roles are
-   supported. No selected roles means a full read-through. All roles selected
-   means a silent cue reader.
+3. Choose **In Person** for each character you or another person will perform,
+   and **AI Partner** for characters Quickque will read with a local system voice.
+   All AI Partner means a full read-through; all In Person means silent turn cues.
+   Choose a **Character colour** preset or custom accent for each character.
+   Colours follow the cast through turns, the editor and rehearsal; dialogue
+   stays neutral and readable. Existing My role assignments become In Person.
 4. Assign one character to each section. Each section is one dialogue turn.
    Split at the text cursor, move turns up/down, or reassign them. Splitting
    preserves the dialogue verbatim and keeps notes on the first part.
@@ -30,10 +33,33 @@ record video or audio, save takes or export generated speech.**
    voice. Voice identifiers can differ between browsers and Macs.
 
 Deleting a cast member asks whether to reassign their turns or leave them
-unassigned. It also removes that character from My roles. Cast, notes,
+unassigned. It also removes that character from the In Person assignments. Cast, notes,
 assignments and voice metadata travel with duplication, JSON exports, full
 backups, Trash/restore and native library files. Ordinary text/document imports
 are not automatically parsed or guessed into a cast.
+
+## Write the whole script in Markdown
+
+Choose **Markdown** in the editor to write in a single pane. Use `#` for the
+script title, `##` for a section or turn, `**Alex:**` to begin Alex’s dialogue,
+and `>` for notes. For example:
+
+```markdown
+# The return
+## Opening
+**Alex:** Welcome home.
+> Take a breath before speaking.
+**Jamie:** I had to come back.
+```
+
+Existing names reuse their cast settings, assignments, colours and voices.
+New names create AI Partners; finish assigning roles and voices in Scene
+Partner. Adding characters to a plain presentation opens performance setup.
+Every character name must be unique to use name-based Markdown cues.
+Prefix a markup line with a backslash to keep it as spoken text. Other text
+stays as dialogue; this editor does not render HTML or fetch embedded media.
+**Save script** updates the visual editor. Errors keep the draft open; closing
+with unsaved edits offers **Keep editing** or **Discard edits**.
 
 ## Rehearse
 
@@ -50,6 +76,11 @@ Replay repeats the current partner line. Pause cancels an interrupted partner
 line; resuming replays that line from its beginning rather than guessing a
 word-level audio position. Start over uses the normal presentation countdown.
 
+An always-visible **Now / Up next** panel shows character names, In Person or
+AI Partner assignments, colour accents and the next line. It stays visible
+when dialogue scrolls or controls fade, and follows the chosen mirror layout.
+The In Person cast is listed above it.
+
 Current-turn ownership, character context and optional notes appear beside the
 dialogue in full/compact and mirrored presentation. Hide notes when you do not
 need them. Scene mode does not use timed auto-scroll. Its elapsed clock is
@@ -57,7 +88,7 @@ active-session time (including time spent performing your role), not the length
 of a recording or a promise of an exact spoken duration.
 
 In a browser, only voices reported by the browser as local are offered. If none
-are available, select every character as **My role** for silent turn cues, or
+are available, assign every character as **In Person** for silent turn cues, or
 switch **Partner audio** off to read at your own pace. That preview does not
 contact a cloud voice service. Native macOS speech uses a separate system-voice
 helper; manual turn-taking needs no recognition model or Flow microphone access.

@@ -304,7 +304,7 @@ export function ActorAuthoringPanel({
                   </div>
                   <div role="group" aria-label={`Colour presets for ${char.name}`} className="flex flex-wrap gap-2">
                     {CHARACTER_COLORS.map(color => <button key={color.value} type="button"
-                      aria-label={color.name} aria-pressed={getCharacterColor(char).toLowerCase() === color.value}
+                      aria-label={color.name} title={color.name} aria-pressed={getCharacterColor(char).toLowerCase() === color.value}
                       onClick={() => handleUpdateChar(char.id, { accentColor: color.value })}
                       className={`h-7 w-7 rounded-full border-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${getCharacterColor(char).toLowerCase() === color.value ? 'border-foreground ring-2 ring-background ring-offset-2 ring-offset-foreground' : 'border-foreground/20'}`}
                       style={{ backgroundColor: color.value }} />)}

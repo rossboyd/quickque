@@ -65,3 +65,158 @@ test('incomplete performance blocks rehearsal with actionable setup links', asyn
   await page.getByRole('button', { name: /Add your cast in Scene Partner setup/ }).click();
   await expect(page.getByRole('button', { name: 'Add Character', exact: true })).toBeVisible();
 });
+
+for (const width of [390, 1280]) {
+  test(`Markdown, cast colours and persistent rehearsal cues at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await openLibrary(page);
+    await createPerformance(page);
+    await page.getByRole('button', { name: 'Markdown', exact: true }).click();
+    const markdown = page.getByRole('textbox', { name: 'Script Markdown' });
+    await markdown.fill('# The return\n## Opening\n**Alex:** Welcome back.\n> Take a breath.\n**Jamie:** I had to come back.');
+    await page.getByRole('button', { name: 'Save script', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Added Alex, Jamie' })).toBeVisible();
+    // A second save exercises snapshot tracking rather than stale draft rejection.
+    await markdown.fill((await markdown.inputValue()).replace('Welcome back.', 'Welcome home.'));
+    await page.getByRole('button', { name: 'Save script', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Saved. Cast assignments' })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to sections', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Turn content for "Opening"' })).toHaveValue('Welcome home.');
+    await page.getByRole('button', { name: 'Scene Partner setup', exact: true }).click();
+    await page.getByRole('group', { name: 'Who performs Alex?', exact: true }).getByRole('button', { name: 'In Person', exact: true }).click();
+    await page.getByRole('group', { name: 'Colour presets for Alex', exact: true }).getByRole('button', { name: 'Teal', exact: true }).click();
+    await page.getByRole('group', { name: 'Who performs Jamie?', exact: true }).getByRole('button', { name: 'In Person', exact: true }).click();
+    await page.getByRole('group', { name: 'Colour presets for Jamie', exact: true }).getByRole('button', { name: 'Amber', exact: true }).click();
+    await page.getByRole('button', { name: 'Close scene partner cast' }).click();
+    await page.reload();
+    if (width < 768) await page.getByRole('button', { name: 'The return', exact: true }).click();
+    await page.getByRole('button', { name: 'Scene Partner setup', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Who performs Alex?', exact: true }).getByRole('button', { name: 'In Person', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByLabel('Colour for Alex', { exact: true })).toHaveValue('#14b8a6');
+    await page.getByRole('button', { name: 'Close scene partner cast' }).click();
+    await page.getByRole('button', { name: 'Rehearse', exact: true }).click();
+    const now = page.getByLabel('Speaking now', { exact: true });
+    const next = page.getByLabel('Up next', { exact: true });
+    await expect(now).toContainText('Alex');
+    await expect(now).toContainText('In Person');
+    await expect(now).toHaveCSS('border-left-color', 'rgb(20, 184, 166)');
+    await expect(next).toContainText('Jamie');
+    await expect(next).toContainText('I had to come back.');
+    await expect(next).toHaveCSS('border-left-color', 'rgb(245, 158, 11)');
+    await page.getByRole('button', { name: 'Start or resume scene', exact: true }).click();
+    await expect(page.getByLabel('Rehearsal cues', { exact: true })).toHaveAttribute('data-scene-phase', 'waiting');
+    await page.getByTitle('Next turn (Right Arrow)', { exact: true }).click();
+    await expect(now).toContainText('Jamie');
+    await expect(next).toContainText('End of scene');
+    await page.getByRole('button', { name: 'Previous turn (Left Arrow)', exact: true }).click();
+    await expect(now).toContainText('Alex');
+    await page.getByLabel('Script reading area', { exact: true }).evaluate(element => { element.scrollTop = element.scrollHeight; });
+    await expect(now).toBeInViewport();
+    await expect(next).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `/tmp/quickque-cues-${width}.png` });
+    expect(errors).toEqual([]);
+  });
+}
+
+test('Markdown errors and cancel preserve the saved script and draft', async ({ page }) => {
+  await openLibrary(page);
+  await createPerformance(page);
+  await page.getByRole('button', { name: 'Markdown', exact: true }).click();
+  const field = page.getByRole('textbox', { name: 'Script Markdown' });
+  await field.fill('# First\n# Second');
+  await page.getByRole('button', { name: 'Save script', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Line 2' })).toBeVisible();
+  await expect(field).toHaveValue('# First\n# Second');
+  await page.getByRole('button', { name: 'Back to sections', exact: true }).click();
+  await page.getByRole('button', { name: 'Keep editing', exact: true }).click();
+  await expect(field).toHaveValue('# First\n# Second');
+  await page.getByRole('button', { name: 'Back to sections', exact: true }).click();
+  await page.getByRole('button', { name: 'Discard edits', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Script Title', exact: true })).toHaveValue('Audition rehearsal');
+});
+
+test('AI Partner speaking hands back to In Person and cues remain visible in compact mirrored mode', async ({ page }) => {
+  await page.addInitScript(() => {
+    const scope = window as any;
+    scope.__spoken = [];
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { configurable: true, value: class { text: string; constructor(text: string) { this.text = text; } } });
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
+      getVoices: () => [{ voiceURI: 'test-local', name: 'Local test voice', lang: 'en-GB', localService: true }],
+      speak: (utterance: any) => { scope.__spoken.push(utterance.text); scope.__finishSpeech = () => utterance.onend(); },
+      cancel: () => {},
+    } });
+  });
+  await openLibrary(page);
+  await page.evaluate(() => {
+    const character = (id: string, name: string, accentColor: string) => ({ id, name, accentColor, age: '', gender: '', style: '', voice: { engine: 'system', voiceId: 'test-local', rate: 1 } });
+    const script = { id: 'cue-fixture', title: 'Cue rehearsal', purpose: 'performance', createdAt: 1, updatedAt: 1,
+      actor: { enabled: true, characters: [character('alex', 'Alex', '#14b8a6'), character('jamie', 'Jamie', '#f59e0b')], myRoleIds: ['alex'] },
+      sections: [
+        { id: 'cue-one', title: 'Opening', content: 'Welcome home.', characterId: 'alex' },
+        { id: 'cue-two', title: 'Response', content: 'I had to come back.', characterId: 'jamie' },
+        { id: 'cue-three', title: 'Ending', content: 'Then let us start again.', characterId: 'alex' },
+      ],
+    };
+    localStorage.setItem('quickque_scripts', JSON.stringify([script]));
+    localStorage.setItem('quickque_active_script', script.id);
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Rehearse', exact: true }).click();
+  const now = page.getByLabel('Speaking now', { exact: true });
+  const next = page.getByLabel('Up next', { exact: true });
+  await expect(now).toContainText('In Person');
+  await expect(next).toContainText('AI Partner');
+  await page.getByRole('button', { name: 'Start or resume scene', exact: true }).click();
+    await expect(page.getByLabel('Rehearsal cues', { exact: true })).toHaveAttribute('data-scene-phase', 'waiting');
+  expect(await page.evaluate(() => (window as any).__spoken)).toEqual([]);
+  await page.getByTitle('Next turn (Right Arrow)', { exact: true }).click();
+  await expect(now).toContainText('Jamie');
+  await expect(now).toContainText('AI Partner');
+  await expect(now).toContainText('Speaking');
+  await expect(next).toContainText('Alex');
+  expect(await page.evaluate(() => (window as any).__spoken)).toEqual(['I had to come back.']);
+  await page.evaluate(() => (window as any).__finishSpeech());
+  await expect(now).toContainText('Alex');
+  await expect(now).toContainText('Your turn');
+  await page.getByRole('button', { name: 'Pause rehearsal', exact: true }).click();
+  await page.getByRole('button', { name: 'Open rehearsal settings', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Mirror Horizontal', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Mirror Vertical', exact: true }).check();
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Toggle Compact Overlay', exact: true }).click();
+  await page.setViewportSize({ width: 500, height: 400 });
+  await expect(now).toBeInViewport();
+  await expect(next).toBeInViewport();
+  await expect(page.getByLabel('Rehearsal cues').locator(':scope > div')).toHaveCSS('transform', 'matrix(-1, 0, 0, -1, 0, 0)');
+  const reading = await page.getByLabel('Script reading area', { exact: true }).boundingBox();
+  expect(reading!.height).toBeGreaterThan(100);
+  await expect(page.getByText('Then let us start again.', { exact: true })).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: '/tmp/quickque-cues-compact.png' });
+});
+
+test('Markdown storage failure retains the draft and supports retry', async ({ page }) => {
+  await openLibrary(page);
+  await createPerformance(page);
+  await page.getByRole('button', { name: 'Markdown', exact: true }).click();
+  const field = page.getByRole('textbox', { name: 'Script Markdown' });
+  await field.fill('# Keep this draft\n## Opening\n\nSaved after retry.');
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    (window as any).__restoreStorage = () => { Storage.prototype.setItem = original; };
+    Storage.prototype.setItem = function(key: string, value: string) {
+      if (key === 'quickque_scripts') throw new DOMException('Storage full', 'QuotaExceededError');
+      original.call(this, key, value);
+    };
+  });
+  await page.getByRole('button', { name: 'Save script', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Your Markdown draft is still here' })).toBeVisible();
+  await expect(field).toHaveValue('# Keep this draft\n## Opening\n\nSaved after retry.');
+  await page.evaluate(() => (window as any).__restoreStorage());
+  await page.getByRole('button', { name: 'Save script', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved. Cast assignments' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to sections', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Script Title', exact: true })).toHaveValue('Keep this draft');
+});

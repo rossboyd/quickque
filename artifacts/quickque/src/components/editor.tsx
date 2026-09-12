@@ -154,7 +154,7 @@ export function Editor({
     <div className="flex-1 flex overflow-hidden relative">
       <div className="flex-1 flex flex-col overflow-hidden relative">
         <div className="flex-shrink-0 border-b border-border bg-background z-10 px-4 md:px-8 py-4 md:py-6">
-          <div className="flex items-start justify-between gap-4 max-w-4xl mx-auto">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-start justify-between gap-4 max-w-4xl mx-auto">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <button 
                 onClick={onCloseMobile}
@@ -189,7 +189,7 @@ export function Editor({
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <button onClick={() => setShowMarkdown(true)} className="rounded-full border border-border px-3 py-2 text-sm font-medium hover:bg-muted">Markdown</button>
               {isPerformance && <button
                 aria-label="Scene Partner setup"

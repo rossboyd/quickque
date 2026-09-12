@@ -208,8 +208,9 @@ class SceneSpeechAdapter implements SceneSpeech {
         }
         return new SpeechSynthesisUtterance(text) as unknown as BrowserUtterance;
       });
-    this.scheduleTimeout = dependencies.setTimeout ?? globalThis.setTimeout;
-    this.cancelTimeout = dependencies.clearTimeout ?? globalThis.clearTimeout;
+    // Window timers require their host receiver when called as class members.
+    this.scheduleTimeout = dependencies.setTimeout ?? globalThis.setTimeout.bind(globalThis);
+    this.cancelTimeout = dependencies.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
   }
 
   async listLocalVoices(): Promise<LocalVoice[]> {

@@ -17,16 +17,16 @@ export function SceneCues({ script, turnIndex, phase, silent, transform }: {
   const character = cast.find(item => item.id === current?.characterId);
   const nextCharacter = cast.find(item => item.id === next?.characterId);
   const mine = !!character && inPerson.includes(character.id);
-  const status = !character ? 'Assign a character in setup'
+  const status = phase === 'blocked' ? 'Playback needs attention'
+    : !character ? 'Assign a character in setup'
     : mine ? 'Your turn · speak in person'
     : silent ? 'Silent cues · read this line in person'
     : phase === 'speaking' ? 'Speaking'
     : phase === 'preparing' ? 'Preparing voice…'
-    : phase === 'error' ? 'Playback needs attention'
     : phase === 'paused' ? 'Paused'
     : 'Ready to speak';
 
-  return <section aria-label="Rehearsal cues" className="scene-cues relative z-30 shrink-0 border-y border-border bg-background text-foreground">
+  return <section aria-label="Rehearsal cues" data-scene-phase={phase} className="scene-cues relative z-30 shrink-0 border-y border-border bg-background text-foreground">
     <div style={{ transform }}>
       <p className="scene-cast-summary px-4 pt-2 text-xs text-muted-foreground truncate" title={cast.filter(item => inPerson.includes(item.id)).map(item => item.name).join(', ')}>
         In Person: {cast.filter(item => inPerson.includes(item.id)).map(item => item.name).join(', ') || 'None · full AI Partner read-through'}

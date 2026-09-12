@@ -506,7 +506,9 @@ export default function Reader() {
     ));
     exactScrollTopRef.current = targetTop;
     container.scrollTo({ top: targetTop, behavior: 'auto' });
-  }, [sceneEnabled, scene.turnIndex, enrichedSections.length, presentation.mirrorVertical]);
+  }, [sceneEnabled, scene.turnIndex, enrichedSections.length, presentation.mirrorVertical,
+    readerViewportHeight, presentation.fontSize, presentation.lineSpacing,
+    presentation.horizontalMargin, presentation.fontFamily, settings.compactMode]);
 
   useEffect(() => {
     const initDesktop = async () => {
@@ -1493,7 +1495,7 @@ export default function Reader() {
 
       <div className="contents scene-hud">
       <PresentationHUD
-        mode={sceneEnabled ? 'manual' : readMode}
+        mode={sceneEnabled ? sceneFlowEnabled ? 'flow' : 'manual' : readMode}
         status={flow.status}
         isFollowing={flow.isFollowing}
         audioLevelRef={flow.audioLevelRef}
@@ -1620,7 +1622,7 @@ export default function Reader() {
                 className={`transition-opacity duration-500 opacity-100 ${isPerformance ? 'border-l-4 pl-4' : ''}`}
                 style={isPerformance ? { borderLeftColor: getCharacterColor(characters.find(character => character.id === script.sections[idx]?.characterId)) } : undefined}
               >
-                {isPerformance && <p className="mb-2 text-sm font-semibold text-foreground">
+                {isPerformance && idx !== (sceneEnabled ? scene.turnIndex : activeSectionIdx) && <p className="mb-2 text-sm font-semibold text-foreground">
                   {characters.find(character => character.id === script.sections[idx]?.characterId)?.name ?? 'Unassigned'}
                   {' · '}{script.sections[idx]?.characterId && characterIds.has(script.sections[idx].characterId!)
                     ? sceneMyRoleIds.includes(script.sections[idx].characterId!) ? 'In Person' : 'AI Partner'
@@ -1644,6 +1646,8 @@ export default function Reader() {
                   // visible metadata from the live section instead.
                   const raw = script.sections[idx] ?? section;
                   const character = characters.find(item => item.id === raw.characterId);
+                  if (!raw.notes?.trim() && !sceneFlowEnabled && !scene.message &&
+                    ![character?.age, character?.gender, character?.style].some(value => value?.trim())) return null;
                   const mine = !!character && effectiveSceneMyRoleIds.includes(character.id);
                   const ownership = !character
                     ? 'Unassigned turn'
