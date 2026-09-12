@@ -24,6 +24,17 @@ func exportAudio(input: URL, output: URL) async throws {
     guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
         throw AudioExportError.invalid("Input has no audio track.")
     }
+    let sourceDescriptions = try await track.load(.formatDescriptions)
+    guard let sourceDescription = sourceDescriptions.first,
+          let settingsAssistant = AVOutputSettingsAssistant(preset: .presetM4A) else {
+        throw AudioExportError.invalid("Cannot inspect the cached audio format.")
+    }
+    settingsAssistant.sourceAudioFormat = sourceDescription
+    guard let aacSettings = settingsAssistant.audioSettings,
+          let formatIdentifier = aacSettings[AVFormatIDKey] as? NSNumber,
+          formatIdentifier.uint32Value == kAudioFormatMPEG4AAC else {
+        throw AudioExportError.invalid("Cannot derive supported AAC encoder settings.")
+    }
     let reader = try AVAssetReader(asset: asset)
     let readerOutput = AVAssetReaderTrackOutput(track: track, outputSettings: [
         AVFormatIDKey: kAudioFormatLinearPCM,
@@ -46,12 +57,7 @@ func exportAudio(input: URL, output: URL) async throws {
             try? FileManager.default.removeItem(at: output)
         }
     }
-    let writerInput = AVAssetWriterInput(mediaType: .audio, outputSettings: [
-        AVFormatIDKey: kAudioFormatMPEG4AAC,
-        AVSampleRateKey: format.sampleRate,
-        AVNumberOfChannelsKey: Int(format.channelCount),
-        AVEncoderBitRateKey: format.channelCount == 1 ? 96_000 : 128_000,
-    ])
+    let writerInput = AVAssetWriterInput(mediaType: .audio, outputSettings: aacSettings)
     writerInput.expectsMediaDataInRealTime = false
     guard writer.canAdd(writerInput) else {
         throw AudioExportError.invalid("Cannot encode this audio format as AAC.")

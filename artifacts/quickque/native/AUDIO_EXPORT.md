@@ -2,8 +2,10 @@
 
 `quickque-audio-export --input <assembled.wav> --output <new.mp4>` converts a
 non-empty mono or stereo WAV to an audio-only MP4 containing AAC audio, using
-macOS AVFoundation. It runs offline and does not need FFmpeg. The output path
-must not exist. Exit code zero indicates a completed export; errors go to stderr.
+macOS AVFoundation. AVFoundation derives a supported AAC encoder profile from
+the source format, including generated-speech inputs such as 24 kHz mono audio.
+It runs offline and does not need FFmpeg. The output path must not exist. Exit
+code zero indicates a completed export; errors go to stderr.
 
 The app owns paid entitlement checks, assembling script turns, choosing the
 destination and moving the successful temporary export there. It must remove
