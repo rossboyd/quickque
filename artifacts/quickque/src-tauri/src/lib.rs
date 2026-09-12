@@ -6,7 +6,7 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager};
 mod remote;
-use remote::{RemoteInfo, RemoteService, RemoteSnapshot};
+use remote::{RemoteInfo, RemoteService, RemoteSnapshot, RemoteStatus};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -338,12 +338,17 @@ fn remote_pairing_pending(state: tauri::State<'_, AppState>) -> bool {
     state.remote.pairing_pending()
 }
 
+#[tauri::command]
+fn remote_status(state: tauri::State<'_, AppState>) -> RemoteStatus {
+    state.remote.status()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![flow_command, remote_start, remote_stop, remote_approve, remote_reject, remote_snapshot, remote_publish_state, remote_take_commands, remote_pairing_pending])
+        .invoke_handler(tauri::generate_handler![flow_command, remote_start, remote_stop, remote_approve, remote_reject, remote_snapshot, remote_publish_state, remote_take_commands, remote_pairing_pending, remote_status])
         .build(tauri::generate_context!())
         .expect("error while building Quickque");
 

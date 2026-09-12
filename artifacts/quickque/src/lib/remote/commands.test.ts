@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveCommandEffect } from './reducer';
+import { resolveCommandEffect } from './reducer.ts';
 
 describe('Command Reducer', () => {
   const baseContext = {

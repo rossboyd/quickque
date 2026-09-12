@@ -123,52 +123,102 @@ zero and creates fresh utterance context.
 
 ## Local phone remote
 
-The desktop-only phone remote is an account-free HTTP service bound to an
-ephemeral port on all LAN interfaces. It is started and stopped by the
-following Tauri commands (all return a clear `Result` error):
+Click the small **Phone Remote** icon in the desktop reader. Quickque starts
+the local session automatically and displays a QR code after a brief loading
+state. Scan it with the phone's normal camera, open the link in its browser,
+and approve the phone on the Mac. There is no separate server-start or phone
+Pair step. Closing and reopening the dialog preserves the active session.
+The optional manual local URL and six-digit code are a fallback, not required
+for scanning.
 
-* `remote_start()` returns `{ url, code, expiresInSeconds, sessionId }`.
+The Mac serves the entire phone interface (including inline CSS and JavaScript)
+on a local HTTP port. It needs no internet connection even on the phone's first
+visit, and no app-store download, PWA installation, account, certificate
+installation, public website, cloud relay, or network discovery service.
+The browser preview cannot host this service; its manual reader remains usable.
+
+The Tauri bridge:
+
+* `remote_start()` is idempotent and returns
+  `{ url, pairingUrl, code, expiresInSeconds, sessionId }`.
+* `remote_status()` returns `{ status, sessionInfo, approved }`, distinguishing
+  awaiting scan, awaiting approval, connected, disconnected, rejected, expired,
+  and stopped. Recent phone activity determines connection status independently
+  of approval.
 * `remote_approve({ sessionId })` approves the one phone currently waiting for
-  presenter approval; `remote_reject()` cancels that request.
-* `remote_stop()` invalidates the session and its credentials immediately.
+  presenter approval; `remote_reject()` rejects that session's request.
+* `remote_stop()` invalidates the session and its credentials immediately;
+  replacement creates a new session and QR code.
 * `remote_snapshot()` returns the intentionally minimal presentation state:
   `connected`, `approved`, `mode`, `section`, `sectionCount`, `elapsedMs`,
   `playing`, `fontSize`, `scrollSpeed`, and `position`.
 * `remote_publish_state({ snapshot })` publishes the reader's authoritative
   state to the connected phone; its `connected` and `approved` flags remain
-  controlled by the secure session.
+  controlled by the native session.
 * `remote_take_commands()` returns and consumes each validated
   `{ action, value?, requestId }` exactly once; the reader polls this and routes
   actions through its normal command reducer.
-* `remote_pairing_pending()` is a lightweight presenter polling hook for
-  showing the approval dialog when a phone submits a valid code.
 
-The bridge emits `quickque:remote` events with `started`,
-`controllerApproved`, `controllerRejected`, and `stopped` types. The reader
-uses `remote_pairing_pending()` for approval requests. The phone
-loads the returned `url` (the page is embedded in the app, so no internet is
-needed), submits the six-digit code to `POST /api/pair`, and receives
-`{ status, token, message }`; that token remains unauthorized until presenter
-approval. After approval, `GET /api/events` with the controller token in the
-`Authorization: Bearer` header supplies authoritative
-snapshots. Commands are JSON
+The QR contains `pairingUrl`, a private LAN address and local port with a unique
+session ID and a five-minute pairing code. The scanned page automatically sends
+JSON `{ sessionId, code, clientId }` to `POST /api/pair`. The random client ID and
+returned bearer token are stored in browser storage scoped to this session so
+reloads, rescans in the same browser, and retries do not create competing
+requests. They do not establish a persistent trusted-device identity.
+The token cannot control the reader before explicit presenter approval.
+
+`GET /api/events` with the controller token in the `Authorization: Bearer`
+header returns `{ status, snapshot? }`. Pending approval is a distinct state,
+not a generic authorization error; rejected and expired sessions give explicit
+new-QR guidance. The bare local URL offers a manual-code form, obtaining the
+current session ID from `/api/session` only when that form is submitted. A
+stale scanned URL never silently switches to the current session.
+
+Commands are JSON
 `POST /api/control` requests with the same authorization header and
 `{ action, value?, requestId }`;
 actions are `playPause`, `previous`, `next`, `scrollSpeed`, `fontSize`, and
 `position`. Request IDs are single-use replay protection. Pairing expires in
-five minutes, only one controller is allowed, and requests are rate limited.
+five minutes (including approval); an approved controller remains authorized
+for the active session after that pairing window closes. Only one controller
+is allowed and requests are rate limited.
 No script, audio, transcript, or library contents are served. The service is
-closed and all credentials discarded on `remote_stop` and application exit.
+closed and all credentials invalidated on stop, replacement, leaving the
+reader, and application exit.
 
-The URL uses the machine's discovered LAN address. Both devices must be on the
-same trusted network and the Mac firewall must permit Quickque; guest Wi-Fi/client
-isolation, sleep, VPN routing, or unsupported browsers can prevent connection.
+The URL uses a usable private IPv4 LAN address discovered on the Mac, never
+loopback or a public pairing service. With no usable address, Quickque explains
+the problem instead of displaying a localhost QR. Both devices must be on the
+same reachable trusted LAN: the Mac may use Ethernet while the phone uses
+Wi-Fi. The Mac firewall and local-network permissions must permit Quickque;
+guest Wi-Fi/client isolation, sleep, VPN routing, or unsupported browsers can
+prevent connection. Use a current Safari, Chrome, or Firefox browser with
+JavaScript, local storage, Fetch, AbortController, and Web Crypto random-value
+support on HTTP. An embedded camera browser may need “Open in browser.”
 The local page uses HTTP because ordinary phone browsers cannot trust an
 app-generated LAN certificate. The token is kept out of URLs and browser
 history, but the trusted-network requirement remains important because local
 HTTP traffic is not encrypted.
-The phone page reports rejected, expired, and disconnected states and retries
-state polling after brief interruptions.
+The phone disables controls during unreachable or unapproved states and retries
+at the same address after brief interruptions. Commands are never automatically
+resent after ambiguous network failures. Network/IP changes require a new QR
+session; automatic address-change recovery is not implemented.
+
+### Remote verification
+
+Run `pnpm --filter @workspace/quickque test:remote` for the phone script,
+desktop lifecycle, and shared reader-command regressions. The protocol has
+Rust tests alongside the service; run `sh tests/remote-protocol/run.sh` from
+the repository root for its platform-neutral harness, which also runs on
+Linux without the full Tauri GTK/WebKit dependency chain. These checks are
+not proof of macOS firewall behavior or camera-to-browser behavior on a phone.
+
+**Physical verification remains outstanding:** this development environment
+has no Mac or physical phone. Before release, follow
+[`REMOTE_OFFLINE_CHECKLIST.md`](REMOTE_OFFLINE_CHECKLIST.md), with the router's
+internet uplink disconnected **before the first phone visit and camera scan**.
+Record hardware/browser versions and actual results; do not mark the checklist
+passed based on automated tests or the browser preview.
 
 FluidAudio is Apache-2.0 licensed. The Parakeet weights are separately licensed
 under the **NVIDIA Open Model License**, not MIT or Apache-2.0. Silero VAD is

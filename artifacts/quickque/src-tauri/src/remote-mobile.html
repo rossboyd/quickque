@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="data:,">
+  <title>Quickque Remote</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font:18px system-ui;max-width:520px;margin:auto;padding:calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));background:#10131b;color:#fff}
+    button,input{font:inherit;padding:16px;margin:5px;border-radius:14px;border:1px solid #394052}
+    button{min-width:44%;min-height:58px;background:#202636;color:#fff;cursor:pointer}
+    button:active{transform:scale(.98)}
+    button:disabled{opacity:.35;transform:none;cursor:default}
+    input{width:96%;background:#fff;color:#111;font-size:24px;letter-spacing:.2em}
+    #info{line-height:1.6;margin:18px 5px;padding:12px;background:#171c28;border-radius:12px}
+    .primary{width:96%;min-height:92px;background:#fff;color:#111;font-size:24px}
+    .row{display:flex}.row button{flex:1;min-width:0}
+    .hint{color:#adb5c7;font-size:15px;line-height:1.5}
+    [hidden]{display:none!important}
+    :focus-visible{outline:3px solid #a8caff;outline-offset:3px}
+  </style>
+</head>
+<body>
+  <h1>Quickque Remote</h1>
+  <p id="status" role="status" aria-live="polite">Starting local connection…</p>
+  <form id="pairing" hidden>
+    <label for="code">Manual pairing code</label>
+    <input id="code" aria-label="Pairing code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" required>
+    <button id="pairButton" type="submit">Connect with code</button>
+  </form>
+  <div id="controls" hidden>
+    <div id="info" aria-live="polite"></div>
+    <button class="primary" data-action="playPause">Play / Pause</button>
+    <div class="row"><button data-action="previous">Previous section</button><button data-action="next">Next section</button></div>
+    <div class="row"><button data-manual data-action="scrollSpeed" data-value="-5">Speed −</button><button data-manual data-action="scrollSpeed" data-value="5">Speed +</button></div>
+    <div class="row"><button data-action="fontSize" data-value="-4">Font −</button><button data-action="fontSize" data-value="4">Font +</button></div>
+    <div class="row"><button data-manual data-action="position" data-value="-40">Position −</button><button data-manual data-action="position" data-value="40">Position +</button></div>
+  </div>
+  <p class="hint">Scan the QR code in Quickque on your Mac, then approve the phone on the Mac. No app, account, installation, or internet connection is needed.</p>
+  <details class="hint">
+    <summary>Connection help</summary>
+    <p>Keep both devices on the same reachable local network. Your Mac can use Ethernet while your phone uses Wi-Fi. Allow Quickque through the Mac firewall and any local-network permission prompt. Guest Wi-Fi or client isolation can prevent devices from reaching each other.</p>
+    <p>Keep the Mac awake with Quickque’s reader open. If the Mac changes network or address, open a new QR session on the Mac and scan again. Use a current Safari, Chrome, or Firefox browser with JavaScript and browser storage enabled; an in-app camera browser may need “Open in browser.”</p>
+    <p>This connection uses unencrypted local HTTP. Use only a trusted LAN, not shared or hostile Wi-Fi. Script text, audio, transcripts, models, and library content stay on the Mac; only reader status and control commands are exchanged.</p>
+  </details>
+  <script>
+    (function () {
+      'use strict';
+      var statusEl = document.getElementById('status');
+      var pairing = document.getElementById('pairing');
+      var codeInput = document.getElementById('code');
+      var pairButton = document.getElementById('pairButton');
+      var controls = document.getElementById('controls');
+      var info = document.getElementById('info');
+      var buttons = Array.from(document.querySelectorAll('[data-action]'));
+      var storageKey = 'quickque.remote.session';
+      var session = null;
+      var state = 'starting';
+      var snapshot = null;
+      var inFlight = false;
+      var sending = false;
+      var timer;
+      var manual = false;
+
+      function show(next, message) {
+        state = next;
+        statusEl.textContent = message;
+        statusEl.dataset.state = next;
+        controls.hidden = next !== 'connected';
+        buttons.forEach(function (button) {
+          button.disabled = next !== 'connected' || sending ||
+            (button.hasAttribute('data-manual') && (!snapshot || snapshot.mode !== 'manual'));
+        });
+      }
+      function unsupported() {
+        clearTimeout(timer);
+        pairing.hidden = true;
+        show('unsupported', 'This browser is unsupported or browser storage is blocked. Open this link in a current Safari, Chrome, or Firefox browser with JavaScript and storage enabled.');
+      }
+      function save() {
+        try { localStorage.setItem(storageKey, JSON.stringify(session)); return true; }
+        catch (_) { unsupported(); return false; }
+      }
+      function randomId() {
+        var bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        return Array.from(bytes, function (x) { return x.toString(16).padStart(2, '0'); }).join('');
+      }
+      function prepare(sessionId, code) {
+        var cached;
+        try { cached = JSON.parse(localStorage.getItem(storageKey) || 'null'); }
+        catch (_) { unsupported(); return false; }
+        session = cached && cached.sessionId === sessionId && /^[a-f0-9]{32}$/.test(cached.clientId)
+          ? { sessionId: sessionId, code: code, clientId: cached.clientId, token: cached.token || '' }
+          : { sessionId: sessionId, code: code, clientId: randomId(), token: '' };
+        return save();
+      }
+      async function request(path, options) {
+        var abort = new AbortController();
+        var timeout = setTimeout(function () { abort.abort(); }, 5000);
+        try {
+          var response = await fetch(path, Object.assign({}, options, { signal: abort.signal, cache: 'no-store' }));
+          var data = await response.json();
+          return { ok: response.ok, status: response.status, data: data };
+        } finally { clearTimeout(timeout); }
+      }
+      function terminal(data) {
+        if (data.status === 'rejected') {
+          show('rejected', 'The presenter rejected this phone. Ask them to create a new QR code on the Mac, then scan it.');
+        } else if (data.status === 'busy') {
+          show('busy', 'Another phone is using this session. Ask the presenter to replace the controller and scan the new QR code.');
+        } else {
+          show('expired', 'This pairing link or session has expired. Open Phone Remote on the Mac, create a new QR code, and scan it.');
+        }
+        clearTimeout(timer);
+        pairing.hidden = true;
+        if (session) { session.token = ''; save(); }
+      }
+      function render(data) {
+        if (data.status === 'pending') {
+          show('pending', 'Awaiting approval — approve this phone in Quickque on your Mac.');
+        } else if (data.status === 'connected' && data.snapshot) {
+          snapshot = data.snapshot;
+          var totalSeconds = Math.floor(snapshot.elapsedMs / 1000);
+          var time = Math.floor(totalSeconds / 60) + ':' + String(totalSeconds % 60).padStart(2, '0');
+          info.textContent = (snapshot.playing ? 'Playing' : 'Paused') + ' · ' +
+            (snapshot.mode === 'flow' ? 'Voice Follow' : 'Manual') + ' · Section ' +
+            (snapshot.sectionCount ? snapshot.section + 1 : 0) + '/' + snapshot.sectionCount +
+            ' · ' + time + ' · Speed ' + snapshot.scrollSpeed + ' · Font ' + snapshot.fontSize +
+            ' · Position ' + snapshot.position;
+          show('connected', 'Connected to Quickque on your Mac');
+        } else {
+          terminal(data);
+        }
+      }
+      function canRetry() {
+        return ['starting', 'pending', 'connected', 'unreachable'].includes(state);
+      }
+      async function tick() {
+        if (!session || inFlight || !canRetry()) return;
+        inFlight = true;
+        try {
+          if (!session.token) {
+            var pairResult = await request('/api/pair', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sessionId: session.sessionId, code: session.code, clientId: session.clientId })
+            });
+            if (!pairResult.ok) {
+              if (pairResult.status === 429 || pairResult.status >= 500) throw new Error('Temporary connection failure');
+              terminal(pairResult.data);
+              return;
+            }
+            if (typeof pairResult.data.token !== 'string' || !pairResult.data.token) throw new Error('Invalid pairing response');
+            session.token = pairResult.data.token;
+            if (!save()) return;
+          }
+          var result = await request('/api/events', { headers: { Authorization: 'Bearer ' + session.token } });
+          if (!result.ok && (result.status === 429 || result.status >= 500)) throw new Error('Temporary connection failure');
+          render(result.data);
+        } catch (_) {
+          show('unreachable', 'Cannot reach the Mac — retrying at the same address. Check the LAN, firewall, and that Quickque is awake. If it was stopped or its address changed, scan a new QR code.');
+        } finally {
+          inFlight = false;
+          if (canRetry()) timer = setTimeout(tick, state === 'unreachable' ? 3000 : 1000);
+        }
+      }
+      async function send(action, value) {
+        if (state !== 'connected' || sending) return;
+        sending = true;
+        show(state, statusEl.textContent);
+        try {
+          var result = await request('/api/control', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + session.token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: action, value: value, requestId: randomId() })
+          });
+          if (result.status === 401 || result.status === 403 || result.status === 410) terminal(result.data);
+          else if (!result.ok) show('unreachable', 'Command was not accepted. Waiting for the Mac’s current state before trying again.');
+        } catch (_) {
+          show('unreachable', 'Connection interrupted. The command may not have arrived; it will not be repeated automatically. Reconnecting…');
+        } finally {
+          sending = false;
+          show(state, statusEl.textContent);
+        }
+      }
+      buttons.forEach(function (button) {
+        button.addEventListener('click', function () {
+          if (!button.disabled) void send(button.dataset.action,
+            button.dataset.value === undefined ? undefined : Number(button.dataset.value));
+        });
+      });
+      show('starting', 'Starting local connection…');
+      pairing.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        if (!manual || inFlight || pairButton.disabled || !/^\d{6}$/.test(codeInput.value)) return;
+        pairButton.disabled = true;
+        try {
+          var result = await request('/api/session');
+          if (!result.ok || !result.data.sessionId) { terminal(result.data); return; }
+          if (!prepare(result.data.sessionId, codeInput.value)) return;
+          pairing.hidden = true;
+          show('starting', 'Starting local connection…');
+          void tick();
+        } catch (_) {
+          show('unreachable', 'Cannot reach Quickque. Check the local network and firewall, then try the code again.');
+        } finally { pairButton.disabled = false; }
+      });
+      if (!window.fetch || !window.AbortController || !window.URLSearchParams ||
+          !window.crypto || !window.crypto.getRandomValues) { unsupported(); return; }
+      var query = new URLSearchParams(location.search);
+      if (query.has('session') || query.has('code')) {
+        var sessionId = query.get('session');
+        var code = query.get('code');
+        if (!/^[a-f0-9]{64}$/.test(sessionId || '') || !/^\d{6}$/.test(code || '')) {
+          terminal({ status: 'expired' });
+          return;
+        }
+        if (prepare(sessionId, code)) void tick();
+      } else {
+        manual = true;
+        pairing.hidden = false;
+        show('manual', 'For automatic connection, scan the QR code on your Mac. Or enter its six-digit code below.');
+      }
+    })();
+  </script>
+  <noscript>This remote needs JavaScript. Enable it in a current browser, then scan the Mac’s QR code again.</noscript>
+</body>
+</html>

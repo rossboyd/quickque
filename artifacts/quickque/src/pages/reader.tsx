@@ -418,10 +418,10 @@ export default function Reader() {
   useReaderCommands(dispatchCommand);
 
   // State publishing
-  const { isRunning, isConnected } = useRemoteStore();
+  const { isRunning, isApproved } = useRemoteStore();
 
   const publishSnapshot = useCallback(() => {
-    if (!script || !isRunning || !isConnected) return;
+    if (!script || !isRunning || !isApproved) return;
     const snapshot: RemoteSnapshot = {
       mode: readModeRef.current,
       section: activeSectionIdx,
@@ -433,21 +433,25 @@ export default function Reader() {
       position: exactScrollTopRef.current
     };
     invoke('remote_publish_state', { snapshot }).catch(() => {});
-  }, [script, isRunning, isConnected, activeSectionIdx, isPlaying, settings.fontSize, settings.speed]);
+  }, [script, isRunning, isApproved, activeSectionIdx, isPlaying, settings.fontSize, settings.speed]);
 
   useEffect(() => {
     publishSnapshot();
   }, [publishSnapshot]);
 
   useEffect(() => {
-    if (!isRunning || !isConnected) return;
+    if (!isRunning || !isApproved) return;
     const interval = setInterval(publishSnapshot, 1000);
     return () => clearInterval(interval);
-  }, [isRunning, isConnected, publishSnapshot]);
+  }, [isRunning, isApproved, publishSnapshot]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Let the pairing dialog handle Escape and focused buttons. Closing it
+      // must not also exit the reader and tear down the local session.
+      if (e.defaultPrevented ||
+          (e.target instanceof Element && e.target.closest('[role="dialog"]'))) return;
       if (
         e.target instanceof HTMLInputElement || 
         e.target instanceof HTMLTextAreaElement || 
@@ -563,8 +567,9 @@ export default function Reader() {
               onClick={exitReader}
               className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors backdrop-blur-md"
               title="Exit (Esc)"
+               aria-label="Exit reader"
             >
-              <X className="w-5 h-5" />
+               <X className="w-5 h-5" aria-hidden="true" />
             </button>
             
             <div className="flex items-center gap-1">
@@ -582,8 +587,9 @@ export default function Reader() {
                     <button
                       className="p-2 rounded-full transition-colors backdrop-blur-md hover:bg-black/10 dark:hover:bg-white/10"
                       title="Phone Remote"
+                      aria-label="Open phone remote"
                     >
-                      <Smartphone className="w-4 h-4" />
+                      <Smartphone className="w-4 h-4" aria-hidden="true" />
                     </button>
                   }
                 />

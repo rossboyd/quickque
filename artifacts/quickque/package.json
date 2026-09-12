@@ -12,6 +12,7 @@
     "desktop:dev": "pnpm native:build && tauri dev --config src-tauri/tauri.conf.json",
     "desktop:build": "pnpm native:build && tauri build --config src-tauri/tauri.conf.json",
     "test:flow": "node --test src/lib/flow/flow.test.ts",
+    "test:remote": "node --test src/lib/remote/*.test.ts src/lib/remote/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

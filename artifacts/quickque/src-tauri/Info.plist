@@ -4,5 +4,7 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>Quickque uses the microphone only while Flow is listening to follow your script. Audio is processed on this Mac and is not saved.</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Quickque uses your local network to let a phone you approve control the reader on this Mac. No internet connection is required and your scripts stay on this Mac.</string>
 </dict>
 </plist>
