@@ -21,81 +21,27 @@ func exportAudio(input: URL, output: URL) async throws {
         throw AudioExportError.invalid("Expected a non-empty mono or stereo audio file.")
     }
     let asset = AVURLAsset(url: input)
-    guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
+    guard try await asset.loadTracks(withMediaType: .audio).first != nil else {
         throw AudioExportError.invalid("Input has no audio track.")
     }
-    let sourceDescriptions = try await track.load(.formatDescriptions)
-    guard let sourceDescription = sourceDescriptions.first,
-          let settingsAssistant = AVOutputSettingsAssistant(preset: .presetM4A) else {
-        throw AudioExportError.invalid("Cannot inspect the cached audio format.")
+    guard let exporter = AVAssetExportSession(
+        asset: asset,
+        presetName: AVAssetExportPresetAppleM4A
+    ) else {
+        throw AudioExportError.invalid("Cannot create the AAC audio exporter.")
     }
-    settingsAssistant.sourceAudioFormat = sourceDescription
-    guard let aacSettings = settingsAssistant.audioSettings,
-          let formatIdentifier = aacSettings[AVFormatIDKey] as? NSNumber,
-          formatIdentifier.uint32Value == kAudioFormatMPEG4AAC else {
-        throw AudioExportError.invalid("Cannot derive supported AAC encoder settings.")
-    }
-    let reader = try AVAssetReader(asset: asset)
-    let readerOutput = AVAssetReaderTrackOutput(track: track, outputSettings: [
-        AVFormatIDKey: kAudioFormatLinearPCM,
-        AVLinearPCMBitDepthKey: 16,
-        AVLinearPCMIsFloatKey: false,
-        AVLinearPCMIsBigEndianKey: false,
-        AVLinearPCMIsNonInterleaved: false,
-    ])
-    readerOutput.alwaysCopiesSampleData = false
-    guard reader.canAdd(readerOutput) else {
-        throw AudioExportError.invalid("Cannot decode the cached audio.")
-    }
-    reader.add(readerOutput)
-    let writer = try AVAssetWriter(outputURL: output, fileType: .mp4)
+    let temporaryOutput = output
+        .deletingLastPathComponent()
+        .appendingPathComponent(".\(UUID().uuidString).m4a")
     var completed = false
     defer {
         if !completed {
-            reader.cancelReading()
-            writer.cancelWriting()
-            try? FileManager.default.removeItem(at: output)
+            try? FileManager.default.removeItem(at: temporaryOutput)
         }
     }
-    let writerInput = AVAssetWriterInput(mediaType: .audio, outputSettings: aacSettings)
-    writerInput.expectsMediaDataInRealTime = false
-    guard writer.canAdd(writerInput) else {
-        throw AudioExportError.invalid("Cannot encode this audio format as AAC.")
-    }
-    writer.add(writerInput)
-    guard writer.startWriting() else {
-        throw writer.error ?? AudioExportError.invalid("Cannot start MP4 export.")
-    }
-    writer.startSession(atSourceTime: .zero)
-    guard reader.startReading() else {
-        throw reader.error ?? AudioExportError.invalid("Cannot read cached audio.")
-    }
-    let deadline = ContinuousClock.now.advanced(by: .seconds(600))
-    while reader.status == .reading {
-        try Task.checkCancellation()
-        guard ContinuousClock.now < deadline else {
-            throw AudioExportError.invalid("Audio export timed out.")
-        }
-        guard writer.status == .writing else {
-            throw writer.error ?? AudioExportError.invalid("MP4 export stopped unexpectedly.")
-        }
-        if !writerInput.isReadyForMoreMediaData {
-            try await Task.sleep(for: .milliseconds(2))
-            continue
-        }
-        guard let sample = readerOutput.copyNextSampleBuffer() else { break }
-        guard writerInput.append(sample) else {
-            throw writer.error ?? AudioExportError.invalid("Could not write AAC audio.")
-        }
-    }
-    guard reader.status == .completed else {
-        throw reader.error ?? AudioExportError.invalid("Cached audio could not be read completely.")
-    }
-    writerInput.markAsFinished()
-    await writer.finishWriting()
-    guard writer.status == .completed else {
-        throw writer.error ?? AudioExportError.invalid("Could not finish MP4 export.")
-    }
+    try await exporter.export(to: temporaryOutput, as: .m4a)
+    try Task.checkCancellation()
+    try FileManager.default.moveItem(at: temporaryOutput, to: output)
     completed = true
 }
 
