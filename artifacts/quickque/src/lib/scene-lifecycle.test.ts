@@ -17,13 +17,13 @@ const flush = async () => {
 class DeferredSpeaker implements SceneSpeaker {
   calls: string[] = [];
   stops = 0;
-  private pending: { resolve: () => void; reject: (error: Error) => void }[] = [];
+  private pending: { resolve: () => void; reject: (error: Error) => void; progress?: (value: { charStart: number; charEnd: number }) => void }[] = [];
 
-  speak(text: string, _voice: SceneVoice, signal: AbortSignal): Promise<void> {
+  speak(text: string, _voice: SceneVoice, signal: AbortSignal, progress?: (value: { charStart: number; charEnd: number }) => void): Promise<void> {
     this.calls.push(text);
     return new Promise((resolve, reject) => {
       signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-      this.pending.push({ resolve, reject });
+      this.pending.push({ resolve, reject, progress });
     });
   }
 
@@ -35,7 +35,29 @@ class DeferredSpeaker implements SceneSpeaker {
   finish(call: number): void {
     this.pending[call]?.resolve();
   }
+
+  report(call: number, charStart: number, charEnd: number): void {
+    this.pending[call]?.progress?.({ charStart, charEnd });
+  }
 }
+
+test('partner progress is bounded to the active generation and cleared on pause', async () => {
+  const speaker = new DeferredSpeaker();
+  const scene = new SceneLifecycle({
+    turns,
+    myRoleIds: ['mine'],
+    voiceForCharacter: () => voice,
+    speaker,
+  });
+  void scene.start();
+  await flush();
+  speaker.report(0, 0, 7);
+  assert.deepEqual(scene.state.progress, { charStart: 0, charEnd: 7 });
+  await scene.pause();
+  assert.equal(scene.state.progress, null);
+  speaker.report(0, 8, 11);
+  assert.equal(scene.state.progress, null, 'late progress from the paused turn is ignored');
+});
 
 test('scene lifecycle waits on actor turns and never speaks an assigned role', async () => {
   const speaker = new DeferredSpeaker();

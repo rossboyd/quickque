@@ -36,7 +36,7 @@ export type ScenePartner = SceneState & {
   reset: () => Promise<void>;
 };
 
-const idle: SceneState = { phase: 'idle', turnIndex: 0, generation: 0, message: null };
+const idle: SceneState = { phase: 'idle', turnIndex: 0, generation: 0, message: null, progress: null };
 
 /**
  * React boundary around SceneLifecycle. Rebuilding after an edit deliberately
@@ -76,11 +76,11 @@ export function useScenePartner(args: UseScenePartnerArgs): ScenePartner {
     // Keep background preparation rejection handled; transport surfaces it on Start.
     void preparation.catch(() => {});
     const speech: SceneSpeaker = {
-      speak: async (text, voice, signal) => {
+      speak: async (text, voice, signal, onProgress) => {
         if (voice.engine !== 'turbo') throw new Error('Chatterbox Turbo is the only Quickque speech engine.');
         await preparation;
         if (!cached) throw new Error('Generate saved AI audio in Edit before rehearsing.');
-        return cached.speak(text, voice, signal);
+        return cached.speak(text, voice, signal, onProgress);
       },
       stop: async () => { await cached?.stop(); },
     };

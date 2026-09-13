@@ -3,6 +3,8 @@ import { isDesktop } from './desktop';
 import type { AudioRequest } from './script-audio-model';
 import { audioEntryIdentity } from './script-audio-model';
 import type { SceneVoice } from './scene-lifecycle';
+import type { SceneSpeechProgress } from './scene-lifecycle';
+import { tokenize } from './flow/tokenize';
 
 export type AudioStatus = { status: 'ready' | 'missing'; revision: string; entries: { id: string; key: string; durationSeconds: number }[]; missing?: number };
 export const AUDIO_CHANGED = 'quickque:script-audio-changed';
@@ -66,7 +68,7 @@ export class PreparedScriptAudio {
       this.buffers.set(audioEntryIdentity(entry.text, entry.voiceId, entry.rate, entry.voiceRevision), buffer);
     }
   }
-  async speak(text: string, voice: SceneVoice, signal: AbortSignal): Promise<void> {
+  async speak(text: string, voice: SceneVoice, signal: AbortSignal, onProgress?: (progress: SceneSpeechProgress) => void): Promise<void> {
     if (signal.aborted || this.disposed) throw new Error('Audio playback cancelled.');
     await this.prepare();
     if (signal.aborted || this.disposed) throw new Error('Audio playback cancelled.');
@@ -80,12 +82,16 @@ export class PreparedScriptAudio {
       const source = this.context!.createBufferSource();
       source.buffer = buffer;
       source.connect(this.context!.destination);
+      const tokens = tokenize(text);
+      const startedAt = this.context!.currentTime;
+      let frame = 0;
       let done = false;
       const finish = (cancelled: boolean) => {
         if (done) return;
         done = true;
         signal.removeEventListener('abort', abort);
         source.onended = null;
+        if (frame) cancelAnimationFrame(frame);
         source.disconnect();
         if (this.active?.stop === abort) this.active = null;
         if (cancelled) reject(new Error('Audio playback cancelled.')); else resolve();
@@ -95,6 +101,15 @@ export class PreparedScriptAudio {
       signal.addEventListener('abort', abort, { once: true });
       source.onended = () => finish(false);
       source.start();
+      const report = () => {
+        if (done || signal.aborted) return;
+        const elapsed = Math.max(0, this.context!.currentTime - startedAt);
+        const fraction = buffer.duration > 0 ? Math.min(0.999999, elapsed / buffer.duration) : 0;
+        const token = tokens[Math.min(tokens.length - 1, Math.floor(fraction * tokens.length))];
+        if (token) onProgress?.({ charStart: token.start, charEnd: token.end });
+        frame = requestAnimationFrame(report);
+      };
+      report();
     });
   }
   async stop() { this.active?.stop(); }

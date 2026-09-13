@@ -359,9 +359,12 @@ struct SceneSpeechHelperCompletion {
     status: String,
 }
 
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+struct SceneSpeechHelperProgress {
+    #[serde(rename = "type")]
+    kind: String,
+    char_start: usize,
+    char_end: usize,
+}
 struct SceneSpeechRequest<'a> {
     text: &'a str,
     voice_id: &'a str,
@@ -403,6 +406,7 @@ fn scene_speech_failure_message(output: &[u8]) -> String {
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 fn scene_speech_speak_native(
+    app: &AppHandle,
     state: &SceneSpeechState,
     mut command: Command,
     text: String,
@@ -530,9 +534,41 @@ fn scene_speech_speak_native(
     drop(spawn_guard);
     let generation = request_id;
 
-    let output = match read_scene_speech_output(stdout) {
-        Ok(output) => output,
-        Err(error) => {
+    let mut reader = BufReader::new(stdout);
+    let mut terminal_output = Vec::new();
+    let output_result = loop {
+        match read_bounded_line(&mut reader, MAXIMUM_SCENE_SPEECH_RESPONSE_BYTES) {
+            Ok(Some(BoundedLine::Line(line))) => {
+                if let Ok(progress) = serde_json::from_slice::<SceneSpeechHelperProgress>(&line) {
+                    if progress.kind == "word"
+                        && progress.char_start < progress.char_end
+                        && progress.char_end <= text.encode_utf16().count()
+                    {
+                        let current = state.process.lock().ok().is_some_and(|state_process| {
+                            state_process.generation == request_id
+                                && !state_process.cancelled
+                                && state_process.child.as_ref().is_some_and(|active| Arc::ptr_eq(active, &child))
+                        });
+                        if current {
+                            let _ = app.emit("scene-speech-progress", SceneSpeechProgressEvent {
+                                request_id,
+                                char_start: progress.char_start,
+                                char_end: progress.char_end,
+                            });
+                        }
+                        continue;
+                    }
+                }
+                terminal_output = line;
+            }
+            Ok(Some(BoundedLine::Oversized)) => {
+                break Err("SCENE_SPEECH_HELPER_PROTOCOL: The local speech response was too large.".to_string());
+            }
+            Ok(None) => break Ok(()),
+            Err(_) => break Err("SCENE_SPEECH_HELPER_PROTOCOL: Could not read the local speech response.".to_string()),
+        }
+    };
+    if let Err(error) = output_result {
             if let Err(stop_error) = stop_scene_speech_child(&child) {
                 state.record_stop_failure(child);
                 return Err(stop_error);
@@ -548,8 +584,7 @@ fn scene_speech_speak_native(
                 state_process.child = None;
             }
             return Err(error);
-        }
-    };
+    }
     let status = child
         .lock()
         .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech process is unavailable.".to_string())?
@@ -575,9 +610,9 @@ fn scene_speech_speak_native(
         return Err("SCENE_SPEECH_CANCELLED: Scene speech was cancelled.".to_string());
     }
     if !status.success() {
-        return Err(scene_speech_failure_message(&output));
+        return Err(scene_speech_failure_message(&terminal_output));
     }
-    let completion = serde_json::from_slice::<SceneSpeechHelperCompletion>(&output)
+    let completion = serde_json::from_slice::<SceneSpeechHelperCompletion>(&terminal_output)
         .map_err(|_| "SCENE_SPEECH_HELPER_PROTOCOL: The local speech service returned an invalid completion.".to_string())?;
     if completion.status != "finished" {
         return Err("SCENE_SPEECH_HELPER_PROTOCOL: The local speech service returned an unknown completion.".to_string());
@@ -1144,6 +1179,7 @@ async fn scene_speech_speak(
         let spawn_lock = Arc::clone(&state.scene_speech.spawn_lock);
         tauri::async_runtime::spawn_blocking(move || {
             scene_speech_speak_native(
+                &app,
                 &SceneSpeechState {
                     process,
                     spawn_lock,
@@ -2078,4 +2114,10 @@ fn helper_details(
 struct StderrSnapshot {
     text: String,
     truncated: bool,
+}
+
+struct SceneSpeechProgressEvent {
+    request_id: u64,
+    char_start: usize,
+    char_end: usize,
 }

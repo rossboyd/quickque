@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 
 import { isDesktop } from './desktop.ts';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { SceneSpeechProgress } from './scene-lifecycle.ts';
 
 export type LocalVoice = {
   /** A stable Chatterbox Turbo/default or local cloned reference. */
@@ -19,7 +21,7 @@ export type SceneSpeechVoice = {
 
 export interface SceneSpeech {
   listLocalVoices(): Promise<LocalVoice[]>;
-  speak(text: string, voice: SceneSpeechVoice, signal: AbortSignal): Promise<void>;
+  speak(text: string, voice: SceneSpeechVoice, signal: AbortSignal, onProgress?: (progress: SceneSpeechProgress) => void): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -28,6 +30,7 @@ export interface SceneSpeechDependencies {
   invoke?: <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
   setTimeout?: typeof globalThis.setTimeout;
   clearTimeout?: typeof globalThis.clearTimeout;
+  listen?: typeof listen;
 }
 
 // Scene settings expose a relative multiplier around each platform default.
@@ -146,6 +149,7 @@ class SceneSpeechAdapter implements SceneSpeech {
   ) => Promise<T>;
   private readonly scheduleTimeout: typeof globalThis.setTimeout;
   private readonly cancelTimeout: typeof globalThis.clearTimeout;
+  private readonly listenToEvent: typeof listen;
 
   private active: ActiveSpeech | null = null;
   private transition: Promise<void> = Promise.resolve();
@@ -157,6 +161,7 @@ class SceneSpeechAdapter implements SceneSpeech {
     // Window timers require their host receiver when called as class members.
     this.scheduleTimeout = dependencies.setTimeout ?? globalThis.setTimeout.bind(globalThis);
     this.cancelTimeout = dependencies.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
+    this.listenToEvent = dependencies.listen ?? listen;
   }
 
   async listLocalVoices(): Promise<LocalVoice[]> {
@@ -189,7 +194,7 @@ class SceneSpeechAdapter implements SceneSpeech {
     return [];
   }
 
-  async speak(text: string, voice: SceneSpeechVoice, signal: AbortSignal): Promise<void> {
+  async speak(text: string, voice: SceneSpeechVoice, signal: AbortSignal, onProgress?: (progress: SceneSpeechProgress) => void): Promise<void> {
     validateRequest(text, voice);
     if (signal.aborted) throw cancellationError();
 
@@ -219,7 +224,7 @@ class SceneSpeechAdapter implements SceneSpeech {
         );
       }
       if (signal.aborted) throw cancellationError();
-      const next = this.startNative(text, voice, signal, requestId);
+      const next = this.startNative(text, voice, signal, requestId, onProgress);
       this.active = next;
       return next;
     });
@@ -259,6 +264,7 @@ class SceneSpeechAdapter implements SceneSpeech {
     voice: SceneSpeechVoice,
     signal: AbortSignal,
     requestId: number,
+    onProgress?: (progress: SceneSpeechProgress) => void,
   ): ActiveSpeech {
     let settled = false;
     let rejectCompletion: (error: unknown) => void = () => {};
@@ -274,6 +280,7 @@ class SceneSpeechAdapter implements SceneSpeech {
       else resolveCompletion();
     };
     let cancellation: Promise<void> | null = null;
+    let unlisten: UnlistenFn | null = null;
 
     const timeout = this.scheduleTimeout(() => {
       void cancel(
@@ -292,6 +299,8 @@ class SceneSpeechAdapter implements SceneSpeech {
     const finish = (error?: unknown) => {
       this.cancelTimeout(timeout);
       signal.removeEventListener('abort', abort);
+      unlisten?.();
+      unlisten = null;
       settle(error);
     };
     const cancel = (reason = cancellationError()): Promise<void> => {
@@ -306,7 +315,7 @@ class SceneSpeechAdapter implements SceneSpeech {
       return cancellation!;
     };
 
-    void this.nativeInvoke('scene_speech_speak', {
+    const launch = () => this.nativeInvoke('scene_speech_speak', {
       text,
       engine: voice.engine,
       voiceId: voice.voiceId,
@@ -317,6 +326,20 @@ class SceneSpeechAdapter implements SceneSpeech {
       () => finish(),
       (error) => finish(normaliseNativeError(error)),
     );
+    void this.listenToEvent<{ requestId: number; charStart: number; charEnd: number }>(
+      'scene-speech-progress',
+      event => {
+        if (!settled && event.payload.requestId === requestId) {
+          onProgress?.({ charStart: event.payload.charStart, charEnd: event.payload.charEnd });
+        }
+      },
+    ).then(remove => {
+      if (settled) remove();
+      else unlisten = remove;
+      return settled ? undefined : launch();
+    }).catch(() => {
+      if (!settled) void launch();
+    });
 
     return { completion, cancel };
   }

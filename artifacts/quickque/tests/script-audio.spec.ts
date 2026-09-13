@@ -70,6 +70,64 @@ test('prepared audio reads once, plays from buffers and never synthesizes on a c
   expect(result).toEqual({ reads: 1, synthesis: false, sources: 2, cancelled: true, lateCancelled: true, blocked: true });
 });
 
+test('prepared audio progress follows the playback clock and stops at completion', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { PreparedScriptAudio } = await import('/src/lib/script-audio.ts');
+    (window as any).__TAURI_INTERNALS__ = { invoke: async (cmd: string) => {
+      if (cmd === 'script_audio_entitlement') return { paid: true };
+      if (cmd === 'script_audio_status') return { status: 'ready', entries: [] };
+      if (cmd === 'script_audio_read') return [0];
+      throw new Error(`Unexpected native call ${cmd}`);
+    } };
+    class Context {
+      state = 'running';
+      destination = {};
+      get currentTime() { return performance.now() / 1000; }
+      async resume() {}
+      async close() { this.state = 'closed'; }
+      async decodeAudioData() {
+        return { length: 32, numberOfChannels: 1, duration: 0.08 };
+      }
+      createBufferSource() {
+        return {
+          buffer: null,
+          onended: null as (() => void) | null,
+          connect() {},
+          disconnect() {},
+          stop() {},
+          start() { setTimeout(() => this.onended?.(), 90); },
+        };
+      }
+    }
+    (window as any).AudioContext = Context;
+    const request = {
+      scriptId: 'timed',
+      revision: 'r',
+      entries: [{ id: 'a', text: 'One two three', voiceId: 'chatterbox-turbo:default-en', rate: 1 }],
+    };
+    const player = new PreparedScriptAudio(request);
+    const progress: { charStart: number; charEnd: number }[] = [];
+    await player.speak(
+      'One two three',
+      { engine: 'turbo', voiceId: 'chatterbox-turbo:default-en', rate: 1 },
+      new AbortController().signal,
+      value => progress.push(value),
+    );
+    const countAtCompletion = progress.length;
+    await new Promise(resolve => setTimeout(resolve, 40));
+    await player.dispose();
+    delete (window as any).__TAURI_INTERNALS__;
+    return {
+      starts: progress.map(value => value.charStart),
+      stopped: progress.length === countAtCompletion,
+    };
+  });
+  expect(result.starts).toContain(0);
+  expect(result.starts).toContain(8);
+  expect(result.stopped).toBe(true);
+});
+
 test('Debug licence toggle persists and can return to Unlicensed', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(() => {

@@ -66,7 +66,7 @@ test('incomplete performance blocks rehearsal with actionable setup links', asyn
 });
 
 for (const width of [390, 1280]) {
-  test(`Markdown, cast colours and persistent rehearsal cues at ${width}px`, async ({ page }) => {
+  test(`Markdown, cast colours and script-first rehearsal at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -95,26 +95,17 @@ for (const width of [390, 1280]) {
     await expect(page.getByLabel('Colour for Alex', { exact: true })).toHaveValue('#14b8a6');
     await page.getByRole('button', { name: 'Close scene partner cast' }).click();
     await page.getByRole('button', { name: 'Rehearse', exact: true }).click();
-    const now = page.getByLabel('Speaking now', { exact: true });
-    const next = page.getByLabel('Up next', { exact: true });
-    await expect(now).toContainText('Alex');
-    await expect(now).toContainText('In Person');
-    await expect(now).toHaveCSS('border-left-color', 'rgb(20, 184, 166)');
-    await expect(next).toContainText('Jamie');
-    await expect(next).toContainText('I had to come back.');
-    await expect(next).toHaveCSS('border-left-color', 'rgb(245, 158, 11)');
+    await expect(page.getByLabel('Speaking now', { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('Up next', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Alex · In Person', { exact: true })).toBeVisible();
+    await expect(page.locator('[data-scene-current="true"]')).toHaveText('Jamie · In Person');
     await page.getByRole('button', { name: 'Start or resume scene', exact: true }).click();
-    await expect(page.getByLabel('Rehearsal cues', { exact: true })).toHaveAttribute('data-scene-phase', 'waiting');
     await page.getByTitle('Next turn (Right Arrow)', { exact: true }).click();
-    await expect(now).toContainText('Jamie');
-    await expect(next).toContainText('End of scene');
+    await expect(page.getByText('Jamie · In Person', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Previous turn (Left Arrow)', exact: true }).click();
-    await expect(now).toContainText('Alex');
+    await expect(page.locator('[data-scene-current="true"]')).toHaveText('Alex · In Person');
     await page.getByLabel('Script reading area', { exact: true }).evaluate(element => { element.scrollTop = element.scrollHeight; });
-    await expect(now).toBeInViewport();
-    await expect(next).toBeInViewport();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.screenshot({ path: `/tmp/quickque-cues-${width}.png` });
     expect(errors).toEqual([]);
   });
 }
@@ -143,7 +134,11 @@ test('AI Partner speaking hands back to In Person and cues remain visible in com
     Object.defineProperty(window, 'SpeechSynthesisUtterance', { configurable: true, value: class { text: string; constructor(text: string) { this.text = text; } } });
     Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
       getVoices: () => [{ voiceURI: 'test-local', name: 'Local test voice', lang: 'en-GB', localService: true }],
-      speak: (utterance: any) => { scope.__spoken.push(utterance.text); scope.__finishSpeech = () => utterance.onend(); },
+      speak: (utterance: any) => {
+        scope.__spoken.push(utterance.text);
+        scope.__activeUtterance = utterance;
+        scope.__finishSpeech = () => utterance.onend();
+      },
       cancel: () => {},
     } });
   });
@@ -163,22 +158,20 @@ test('AI Partner speaking hands back to In Person and cues remain visible in com
   });
   await page.goto('/edit');
   await page.getByRole('button', { name: 'Rehearse', exact: true }).click();
-  const now = page.getByLabel('Speaking now', { exact: true });
-  const next = page.getByLabel('Up next', { exact: true });
-  await expect(now).toContainText('In Person');
-  await expect(next).toContainText('AI Partner');
+  await expect(page.getByLabel('Speaking now', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Up next', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Start or resume scene', exact: true }).click();
-    await expect(page.getByLabel('Rehearsal cues', { exact: true })).toHaveAttribute('data-scene-phase', 'waiting');
   expect(await page.evaluate(() => (window as any).__spoken)).toEqual([]);
   await page.getByTitle('Next turn (Right Arrow)', { exact: true }).click();
-  await expect(now).toContainText('Jamie');
-  await expect(now).toContainText('AI Partner');
-  await expect(now).toContainText('Speaking');
-  await expect(next).toContainText('Alex');
+  await expect(page.locator('[data-scene-current="true"]')).toHaveText('Jamie · AI Partner');
   expect(await page.evaluate(() => (window as any).__spoken)).toEqual(['I had to come back.']);
+  await page.evaluate(() => {
+    const utterance = (window as any).__activeUtterance;
+    utterance?.onboundary?.({ name: 'word', charIndex: 2, charLength: 3 });
+  });
+  await expect(page.locator('[data-spoken-word="active"]')).toHaveText('had');
   await page.evaluate(() => (window as any).__finishSpeech());
-  await expect(now).toContainText('Alex');
-  await expect(now).toContainText('Your turn');
+  await expect(page.locator('[data-scene-current="true"]')).toHaveText('Alex · In Person');
   await page.getByRole('button', { name: 'Pause rehearsal', exact: true }).click();
   await page.getByRole('button', { name: 'Open rehearsal settings', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Mirror Horizontal', exact: true }).check();
@@ -186,9 +179,8 @@ test('AI Partner speaking hands back to In Person and cues remain visible in com
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'Toggle Compact Overlay', exact: true }).click();
   await page.setViewportSize({ width: 500, height: 400 });
-  await expect(now).toBeInViewport();
-  await expect(next).toBeInViewport();
-  await expect(page.getByLabel('Rehearsal cues').locator(':scope > div')).toHaveCSS('transform', 'matrix(-1, 0, 0, -1, 0, 0)');
+  await expect(page.getByLabel('Speaking now')).toHaveCount(0);
+  await expect(page.getByLabel('Up next')).toHaveCount(0);
   const reading = await page.getByLabel('Script reading area', { exact: true }).boundingBox();
   expect(reading!.height).toBeGreaterThan(100);
   await expect(page.getByText('Then let us start again.', { exact: true })).toBeInViewport({ ratio: 1 });

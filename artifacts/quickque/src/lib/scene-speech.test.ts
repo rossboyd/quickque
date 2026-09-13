@@ -35,6 +35,7 @@ test('native playback sends cloned voice identity and revision to Turbo', async 
   const requests: Array<{ command: string; args?: Record<string, unknown> }> = [];
   const speech = createSceneSpeech({
     isDesktop: () => true,
+    listen: async () => () => {},
     invoke: async (command, args) => {
       requests.push({ command, args });
       return command === 'scene_speech_next_request_id' ? 7 : undefined;
@@ -49,4 +50,48 @@ test('native playback sends cloned voice identity and revision to Turbo', async 
   assert.equal(requests.at(-1)?.command, 'scene_speech_speak');
   assert.equal(requests.at(-1)?.args?.voiceId, 'chatterbox-local:abc');
   assert.equal(requests.at(-1)?.args?.voiceRevision, 3);
+});
+
+test('native progress is request-fenced and detached after cancellation', async () => {
+  let progressListener: ((event: { payload: { requestId: number; charStart: number; charEnd: number } }) => void) | null = null;
+  let resolveSpeak: () => void = () => {};
+  const nativeSpeak = new Promise<void>(resolve => {
+    resolveSpeak = resolve;
+  });
+  let removed = 0;
+  const speech = createSceneSpeech({
+    isDesktop: () => true,
+    listen: async (_event, listener) => {
+      progressListener = listener as typeof progressListener;
+      return () => { removed += 1; };
+    },
+    invoke: async command => {
+      if (command === 'scene_speech_next_request_id') return 9;
+      if (command === 'scene_speech_speak') return nativeSpeak;
+      return undefined;
+    },
+  });
+  const controller = new AbortController();
+  const progress: Array<{ charStart: number; charEnd: number }> = [];
+  const playback = speech.speak(
+    'First line',
+    { engine: 'turbo', voiceId: 'chatterbox-local:abc', rate: 1 },
+    controller.signal,
+    value => progress.push(value),
+  ).catch(error => error);
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  progressListener?.({ payload: { requestId: 8, charStart: 0, charEnd: 5 } });
+  progressListener?.({ payload: { requestId: 9, charStart: 0, charEnd: 5 } });
+  assert.deepEqual(progress, [{ charStart: 0, charEnd: 5 }]);
+
+  controller.abort();
+  const error = await playback;
+  assert.ok(error instanceof SceneSpeechError);
+  assert.equal(error.code, 'SCENE_SPEECH_CANCELLED');
+  progressListener?.({ payload: { requestId: 9, charStart: 6, charEnd: 10 } });
+  assert.deepEqual(progress, [{ charStart: 0, charEnd: 5 }]);
+  assert.equal(removed, 1);
+  resolveSpeak();
 });

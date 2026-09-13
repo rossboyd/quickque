@@ -23,8 +23,13 @@ export type SceneState = {
   turnIndex: number;
   generation: number;
   message: string | null;
+  progress: SceneSpeechProgress | null;
 };
 
+export type SceneSpeechProgress = {
+  charStart: number;
+  charEnd: number;
+};
 export type SceneVoice = {
   engine: 'turbo';
   voiceId: string;
@@ -33,7 +38,12 @@ export type SceneVoice = {
 };
 
 export interface SceneSpeaker {
-  speak(text: string, voice: SceneVoice, signal: AbortSignal): Promise<void>;
+  speak(
+    text: string,
+    voice: SceneVoice,
+    signal: AbortSignal,
+    onProgress?: (progress: SceneSpeechProgress) => void,
+  ): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -68,6 +78,7 @@ export class SceneLifecycle {
     turnIndex: 0,
     generation: 0,
     message: null,
+    progress: null,
   };
   private aborter: AbortController | null = null;
   private disposed = false;
@@ -106,6 +117,7 @@ export class SceneLifecycle {
       turnIndex: this.stateValue.turnIndex,
       generation,
       message: null,
+      progress: null,
     });
     return this.stopSpeakerOrBlock(generation, this.stateValue.turnIndex).then(() => {});
   }
@@ -133,7 +145,7 @@ export class SceneLifecycle {
   reset(): Promise<void> {
     if (this.disposed) return Promise.resolve();
     const generation = this.invalidateSpeech();
-    this.setState({ phase: 'idle', turnIndex: 0, generation, message: null });
+    this.setState({ phase: 'idle', turnIndex: 0, generation, message: null, progress: null });
     return this.stopSpeakerOrBlock(generation, 0).then(() => {});
   }
 
@@ -156,7 +168,7 @@ export class SceneLifecycle {
     if (this.disposed) return;
     const generation = this.invalidateSpeech();
     const phase = this.stateValue.phase === 'paused' ? 'paused' : 'idle';
-    this.setState({ phase, turnIndex: index, generation, message: null });
+    this.setState({ phase, turnIndex: index, generation, message: null, progress: null });
     await this.stopSpeakerOrBlock(generation, index);
   }
 
@@ -165,11 +177,11 @@ export class SceneLifecycle {
     const generation = this.invalidateSpeech();
     // Preparing is intentionally inert. No actor waiting state or partner
     // speech is exposed until the prior audio has stopped successfully.
-    this.setState({ phase: 'preparing', turnIndex: index, generation, message: null });
+    this.setState({ phase: 'preparing', turnIndex: index, generation, message: null, progress: null });
     if (!await this.stopSpeakerOrBlock(generation, index)) return;
 
     if (index >= this.turns.length) {
-      this.setState({ phase: 'completed', turnIndex: this.turns.length, generation, message: null });
+      this.setState({ phase: 'completed', turnIndex: this.turns.length, generation, message: null, progress: null });
       return;
     }
 
@@ -180,12 +192,13 @@ export class SceneLifecycle {
         turnIndex: index,
         generation,
         message: 'This turn is unassigned. Assign a character before Quickque can speak it.',
+        progress: null,
       });
       return;
     }
 
     if (this.myRoles.has(turn.characterId)) {
-      this.setState({ phase: 'waiting', turnIndex: index, generation, message: null });
+      this.setState({ phase: 'waiting', turnIndex: index, generation, message: null, progress: null });
       return;
     }
 
@@ -196,6 +209,7 @@ export class SceneLifecycle {
         turnIndex: index,
         generation,
         message: 'This character needs an available local voice before playback can start.',
+        progress: null,
       });
       return;
     }
@@ -217,9 +231,16 @@ export class SceneLifecycle {
 
     const aborter = new AbortController();
     this.aborter = aborter;
-    this.setState({ phase: 'speaking', turnIndex: this.stateValue.turnIndex, generation, message: null });
+    this.setState({ phase: 'speaking', turnIndex: this.stateValue.turnIndex, generation, message: null, progress: null });
     try {
-      await this.speaker.speak(turn.content, voice, aborter.signal);
+      await this.speaker.speak(turn.content, voice, aborter.signal, progress => {
+        if (this.isStale(generation) || aborter.signal.aborted ||
+          this.stateValue.phase !== 'speaking') return;
+        const charStart = Math.max(0, Math.min(turn.content.length, Math.trunc(progress.charStart)));
+        const charEnd = Math.max(charStart, Math.min(turn.content.length, Math.trunc(progress.charEnd)));
+        if (charEnd <= charStart) return;
+        this.setState({ ...this.stateValue, progress: { charStart, charEnd } });
+      });
     } catch (error) {
       if (this.isStale(generation) || aborter.signal.aborted) return;
       this.setState({
@@ -229,6 +250,7 @@ export class SceneLifecycle {
         message: error instanceof Error && error.message
           ? `Speech could not play: ${error.message}`
           : 'Speech could not play. Check the selected local voice and try again.',
+        progress: null,
       });
       return;
     } finally {
@@ -260,7 +282,7 @@ export class SceneLifecycle {
 
   private blockIfCurrent(generation: number, message: string, turnIndex = this.stateValue.turnIndex): void {
     if (this.isStale(generation)) return;
-    this.setState({ phase: 'blocked', turnIndex, generation, message });
+    this.setState({ phase: 'blocked', turnIndex, generation, message, progress: null });
   }
 
   private errorDetail(error: unknown, fallback: string): string {

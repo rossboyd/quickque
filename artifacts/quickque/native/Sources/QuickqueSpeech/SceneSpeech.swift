@@ -76,6 +76,18 @@ private final class SpeechDelegate: NSObject, AVSpeechSynthesizerDelegate, @unch
 
     func speechSynthesizer(
         _ synthesizer: AVSpeechSynthesizer,
+        willSpeakRangeOfSpeechString characterRange: NSRange,
+        utterance: AVSpeechUtterance
+    ) {
+        emit([
+            "type": "word",
+            "charStart": characterRange.location,
+            "charEnd": characterRange.location + characterRange.length
+        ])
+    }
+
+    func speechSynthesizer(
+        _ synthesizer: AVSpeechSynthesizer,
         didFinish utterance: AVSpeechUtterance
     ) {
         lock.lock()

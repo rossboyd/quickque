@@ -1,6 +1,5 @@
 import { getScriptPurpose } from '@/lib/script-purpose';
 import { getCharacterColor } from '@/lib/actor-colors';
-import { SceneCues } from '@/components/scene-cues';
 import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import './reader-scene.css';
 import { useStore } from '@/lib/store';
@@ -494,7 +493,7 @@ export default function Reader() {
   ]);
 
   useEffect(() => {
-    if (!sceneEnabled || scene.turnIndex >= enrichedSections.length) return;
+    if (!sceneEnabled || scene.turnIndex >= enrichedSections.length || scene.progress) return;
     setActiveSectionIdx(scene.turnIndex);
     const section = sectionRefs.current[scene.turnIndex];
     const container = containerRef.current;
@@ -511,7 +510,7 @@ export default function Reader() {
     ));
     exactScrollTopRef.current = targetTop;
     container.scrollTo({ top: targetTop, behavior: 'auto' });
-  }, [sceneEnabled, scene.turnIndex, enrichedSections.length, presentation.mirrorVertical,
+  }, [sceneEnabled, scene.turnIndex, scene.progress, enrichedSections.length, presentation.mirrorVertical,
     readerViewportHeight, presentation.fontSize, presentation.lineSpacing,
     presentation.horizontalMargin, presentation.fontFamily, settings.compactMode]);
 
@@ -741,7 +740,11 @@ export default function Reader() {
 
   // Flow Smooth scroll following active token ONLY on confident matching
   useEffect(() => {
-    if (sceneEnabled || readMode !== "flow" || flow.status !== 'listening' || !flow.isFollowing) {
+    const followingScenePartner = sceneEnabled && scene.phase === 'speaking' && scene.progress !== null;
+    const followingSceneActor = sceneEnabled && scene.phase === 'waiting' &&
+      sceneFlowEnabled && flow.status === 'listening' && flow.isFollowing;
+    if (!followingScenePartner && !followingSceneActor &&
+      (sceneEnabled || readMode !== "flow" || flow.status !== 'listening' || !flow.isFollowing)) {
       return;
     }
 
@@ -775,7 +778,7 @@ export default function Reader() {
     req = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(req);
   }, [
-    sceneEnabled,
+    sceneEnabled, scene.phase, scene.progress, sceneFlowEnabled,
     readMode,
     flow.status,
     flow.isFollowing,
@@ -1539,12 +1542,6 @@ export default function Reader() {
         </div>
       )}
 
-      {isPerformance && <SceneCues script={script}
-        turnIndex={sceneEnabled ? scene.turnIndex : activeSectionIdx}
-        phase={sceneEnabled ? scene.phase : 'paused'}
-        silent={!sceneEnabled || sceneSilentManual}
-        transform={viewportTransform} />}
-
       {/* Reader Content Area */}
       <div className="flex-1 relative overflow-hidden">
         {/*
@@ -1616,7 +1613,10 @@ export default function Reader() {
                 className={`transition-opacity duration-500 opacity-100 ${isPerformance ? 'border-l-4 pl-4' : ''}`}
                 style={isPerformance ? { borderLeftColor: getCharacterColor(characters.find(character => character.id === script.sections[idx]?.characterId)) } : undefined}
               >
-                {isPerformance && idx !== (sceneEnabled ? scene.turnIndex : activeSectionIdx) && <p className="mb-2 text-sm font-semibold text-foreground">
+                {isPerformance && <p
+                  data-scene-current={idx === (sceneEnabled ? scene.turnIndex : activeSectionIdx) ? 'true' : undefined}
+                  className={`mb-2 text-sm font-semibold text-foreground ${idx === (sceneEnabled ? scene.turnIndex : activeSectionIdx) ? 'text-base' : ''}`}
+                >
                   {characters.find(character => character.id === script.sections[idx]?.characterId)?.name ?? 'Unassigned'}
                   {' · '}{script.sections[idx]?.characterId && characterIds.has(script.sections[idx].characterId!)
                     ? sceneMyRoleIds.includes(script.sections[idx].characterId!) ? 'In Person' : 'AI Partner'
@@ -1748,11 +1748,23 @@ export default function Reader() {
                          </span>
                        );
                     } else {
-                      const isRead = flow.anchor > span.endTokenIdx!;
-                      const isActive = flow.anchor >= span.startTokenIdx! && flow.anchor <= span.endTokenIdx!;
+                       const sceneSection = idx === scene.turnIndex;
+                       const localStart = (span.startTokenIdx ?? 0) - (section.firstTokenIdx ?? 0);
+                       const localEnd = (span.endTokenIdx ?? 0) - (section.firstTokenIdx ?? 0);
+                       const spokenToken = sceneSection && scene.progress
+                         ? sceneFlowTokens.find(token => token.start < scene.progress!.charEnd && token.end > scene.progress!.charStart)
+                         : undefined;
+                       const partnerActive = !!spokenToken && localStart <= spokenToken.index && localEnd >= spokenToken.index;
+                       const actorActive = sceneSection && scene.phase === 'waiting' && sceneFlowEnabled &&
+                         flow.anchor >= localStart && flow.anchor <= localEnd;
+                       const isRead = flow.anchor > (sceneEnabled ? localEnd : span.endTokenIdx!);
+                       const isActive = sceneEnabled
+                         ? partnerActive || actorActive
+                         : flow.anchor >= span.startTokenIdx! && flow.anchor <= span.endTokenIdx!;
                       
                        let className = "transition-colors duration-200 ";
-                       if (!sceneEnabled && readMode === "flow") {
+                        if ((sceneEnabled && (scene.phase === 'speaking' || scene.phase === 'waiting')) ||
+                          (!sceneEnabled && readMode === "flow")) {
                         if (isActive) {
                            // This is an explicit contrast pair, independent of
                            // a user's reader background or foreground colour.
@@ -1770,7 +1782,8 @@ export default function Reader() {
                           key={i} 
                           data-reader-anchor={`${section.id}:${i}`}
                           className={className}
-                          ref={isActive ? activeTokenSpanRef : null}
+                           ref={isActive ? activeTokenSpanRef : null}
+                           data-spoken-word={isActive ? 'active' : undefined}
                         >
                           {span.text}
                         </span>
