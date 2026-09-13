@@ -217,6 +217,12 @@ pub async fn script_audio_generate(
                 }
                 let value: Value =
                     serde_json::from_str(&line).map_err(|_| "Invalid audio progress.")?;
+                if value["status"] == "diagnostic" {
+                    let _ = app.emit("script-audio-diagnostic", json!({
+                        "scriptId": request["scriptId"], "revision": request["revision"],
+                        "stage": value["stage"],
+                    }));
+                }
                 if value["status"] == "generating" {
                     let _ = app.emit("script-audio-progress", &value);
                 }
@@ -224,7 +230,7 @@ pub async fn script_audio_generate(
                     final_value = Some(value.clone());
                 }
                 if let Some(message) = value["message"].as_str() {
-                    failure = Some(message.to_owned());
+                    failure = Some(format!("{}: {}", value["error"].as_str().unwrap_or("SCRIPT_AUDIO_FAILED"), message));
                 }
             }
             let mut job = shared

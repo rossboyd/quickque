@@ -149,3 +149,42 @@ test('Debug licence toggle persists and can return to Unlicensed', async ({ page
   await page.getByRole('button', { name: 'Settings & backups', exact: true }).click();
   await expect(toggle).not.toBeChecked();
 });
+
+test('generation traces worker stages and failures, filters other jobs, and removes its listener', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { generateAudio } = await import('/src/lib/script-audio.ts');
+    const { clearFlowDebug, getFlowDebugSnapshot } = await import('/src/lib/flow/diagnostics.ts');
+    let callback: (event: unknown) => void = () => {};
+    let removed = 0;
+    (window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
+    (window as any).__TAURI_INTERNALS__ = {
+      transformCallback: (handler: typeof callback) => { callback = handler; return 1; },
+      invoke: async (command: string) => {
+        if (command === 'plugin:event|listen') return 1;
+        if (command === 'plugin:event|unlisten') { removed++; return; }
+        if (command === 'script_audio_generate') {
+          callback({ payload: { scriptId: 'other', revision: 'r', stage: 'generation' } });
+          callback({ payload: { scriptId: 's', revision: 'old', stage: 'generation' } });
+          callback({ payload: { scriptId: 's', revision: 'r', stage: 'model_load' } });
+          callback({ payload: { scriptId: 's', revision: 'r', stage: 'SECRET /Users/name/reference.wav' } });
+          callback({ payload: { scriptId: 's', revision: 'r', stage: 'generation' } });
+          throw 'SCENE_SPEECH_TURBO_GENERATION: private script';
+        }
+        throw new Error(`Unexpected command ${command}`);
+      },
+    };
+    clearFlowDebug();
+    let failed = false;
+    try { await generateAudio({ scriptId: 's', revision: 'r', entries: [] }); }
+    catch { failed = true; }
+    const codes = getFlowDebugSnapshot().map((entry: { code: string }) => entry.code);
+    delete (window as any).__TAURI_INTERNALS__;
+    delete (window as any).__TAURI_EVENT_PLUGIN_INTERNALS__;
+    return { codes, removed, failed };
+  });
+  expect(result).toEqual({
+    codes: ['audio_generate_begin', 'audio_model_load', 'audio_generation', 'audio_generate_failed', 'error:SCENE_SPEECH_TURBO_GENERATION'],
+    removed: 1, failed: true,
+  });
+});

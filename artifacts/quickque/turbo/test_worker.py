@@ -175,6 +175,47 @@ class CacheTests(unittest.TestCase):
         with self.assertRaises(worker.SpeechFailure):
             worker.cache_status(self.root, self.request)
 
+class RendererTests(unittest.TestCase):
+    """Exercise the production renderer, replacing only native ML dependencies."""
+    def test_default_and_cloned_voices_render_one_two_and_many_chunks(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+        import socket
+        for text in ['Hello world.', 'hello ' * 60, 'hello ' * 100]:
+            for cloned in [False, True]:
+                with self.subTest(chunks=len(list(worker.chunks(text))), cloned=cloned), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    reference = root / 'reference.wav' if cloned else None
+                    entry = {'id': 'turn', 'text': text, 'voiceId': worker.VOICE_ID, 'rate': 1}
+                    if cloned:
+                        entry.update(voiceId=worker.LOCAL_VOICE_PREFIX + 'a' * 32, voiceRevision=1)
+                    audio = MagicMock()
+                    audio.numel.return_value = 2400
+                    audio.detach().cpu().flatten().clamp().numpy().__mul__().astype().tobytes.return_value = b'\0\0' * 2400
+                    model = SimpleNamespace(sr=24000, tokenizer=lambda *a, **kw: {'input_ids': [1]}, generate=MagicMock(return_value=audio))
+                    torch = SimpleNamespace(backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True)), inference_mode=contextlib.nullcontext, isfinite=lambda _: SimpleNamespace(all=lambda: True))
+                    turbo = SimpleNamespace(ChatterboxTurboTTS=SimpleNamespace(from_local=lambda *a, **kw: model), punc_norm=lambda text: text)
+                    with patch.dict('sys.modules', {'torch': torch, 'chatterbox': SimpleNamespace(), 'chatterbox.tts_turbo': turbo}), patch.object(worker, 'quiet_runtime', contextlib.nullcontext), patch.object(worker, 'verify', return_value=True), patch.object(worker, 'local_voice_reference', return_value=reference), patch.object(socket, 'create_connection'), patch.object(socket.socket, 'connect'), patch.object(socket.socket, 'connect_ex'), patch.dict(worker.os.environ), contextlib.redirect_stdout(io.StringIO()) as output:
+                        rendered = list(worker.render_batch(root, [entry], root))
+                    self.assertEqual(rendered, [entry])
+                    calls = model.generate.call_args_list
+                    self.assertEqual([call.args[0] for call in calls], list(worker.chunks(text)))
+                    self.assertTrue(all(call.kwargs == ({'audio_prompt_path': str(reference)} if cloned else {}) for call in calls))
+                    self.assertAlmostEqual(worker.wav_duration(root / (worker.entry_key(entry) + '.wav')), len(calls) * .1)
+                    self.assertEqual([json.loads(line)['stage'] for line in output.getvalue().splitlines()], ['model_load', 'generation'])
+
+    def test_runtime_failures_keep_stage_and_category_without_private_content(self):
+        with self.assertRaises(worker.SpeechFailure) as raised:
+            with worker.runtime_stage('generation'):
+                raise ValueError('private script /Users/someone/reference.wav')
+        self.assertEqual(raised.exception.code, 'SCENE_SPEECH_TURBO_GENERATION')
+        self.assertIn('ValueError', raised.exception.message)
+        self.assertNotIn('private', raised.exception.message)
+        with self.assertRaises(worker.SpeechFailure) as expected:
+            with worker.runtime_stage('model_load'):
+                raise worker.SpeechFailure('SCENE_SPEECH_TURBO_OFFLINE', 'Missing asset')
+        self.assertEqual(expected.exception.code, 'SCENE_SPEECH_TURBO_OFFLINE')
+
 
 if __name__ == '__main__':
     unittest.main()

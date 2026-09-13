@@ -17,6 +17,29 @@ export {
 // Only fixed lifecycle labels and numeric metadata may enter this in-memory
 // buffer. Never pass messages, payloads, script text, paths, or stderr here.
 const labels: Record<string, string> = {
+  audio_generate_begin: 'Script audio generation requested',
+  audio_generate_ready: 'Script audio generation completed',
+  audio_generate_failed: 'Script audio generation failed',
+  audio_listener_failed: 'Audio diagnostic listener could not be registered',
+  audio_model_load: 'Chatterbox loading model',
+  audio_generation: 'Chatterbox generating passage',
+  audio_cancel_begin: 'Audio cancellation requested',
+  audio_cancel_ready: 'Audio cancellation confirmed',
+  audio_cancel_failed: 'Audio cancellation failed',
+  voice_record_begin: 'Voice reference microphone requested',
+  voice_record_ready: 'Voice reference microphone recording',
+  voice_record_complete: 'Voice reference recording completed (milliseconds)',
+  voice_record_failed: 'Voice reference recording failed',
+  voice_record_cancel: 'Voice reference recording cancelled',
+  voice_library_begin: 'Voice library operation requested',
+  voice_library_ready: 'Voice library operation completed',
+  voice_library_failed: 'Voice library operation failed',
+  voice_preview_begin: 'Voice reference preview started',
+  voice_preview_ready: 'Voice reference preview completed',
+  voice_preview_failed: 'Voice reference preview failed',
+  speech_begin: 'Chatterbox speech requested',
+  speech_ready: 'Chatterbox speech completed',
+  speech_failed: 'Chatterbox speech failed or cancelled',
   ui_desktop: 'Desktop UI loaded',
   ui_browser: 'Browser preview — native Flow is unavailable',
   session_begin: 'Flow session opened',
@@ -80,6 +103,21 @@ for (const code of [
   'engine_start', 'permission_start', 'transcription', 'overrun', 'audio_input',
   'helper_protocol', 'helper_exited', 'helper_invalid_output', 'helper_output_too_large',
 ]) labels[`error:${code}`] = `Native error code: ${code}`;
+
+for (const code of [
+  'SCENE_SPEECH_TURBO_MODEL_LOAD', 'SCENE_SPEECH_TURBO_GENERATION',
+  'SCENE_SPEECH_TURBO_FAILED', 'SCENE_SPEECH_TURBO_UNAVAILABLE',
+  'SCENE_SPEECH_TURBO_RUNTIME', 'SCENE_SPEECH_TURBO_UNSUPPORTED',
+  'SCENE_SPEECH_TURBO_OFFLINE', 'SCENE_SPEECH_TURBO_AUDIO',
+  'SCENE_SPEECH_VOICE_UNAVAILABLE', 'SCENE_SPEECH_VOICE_INTEGRITY',
+  'SCRIPT_AUDIO_CANCELLED', 'SCRIPT_AUDIO_BUSY', 'SCRIPT_AUDIO_PAID_REQUIRED',
+]) labels[`error:${code}`] = `Audio error code: ${code}`;
+
+export function recordAudioFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const code = /^([A-Z_]+):/.exec(message)?.[1];
+  if (code) recordFlowDebug(`error:${code}`);
+}
 
 export interface FlowDebugEntry {
   id: number;

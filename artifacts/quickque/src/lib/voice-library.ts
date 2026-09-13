@@ -1,3 +1,4 @@
+import { recordFlowDebug, recordAudioFailure } from './flow/diagnostics.ts';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { isDesktop as defaultIsDesktop } from './desktop.ts';
 
@@ -58,6 +59,7 @@ type AudioContextLike = {
     disconnect(): void;
   };
   createGain(): AudioNodeLike & { gain: { value: number } };
+  resume(): Promise<void>;
   close(): Promise<void>;
 };
 type AudioElementLike = {
@@ -153,17 +155,25 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
   };
   const call = async <T>(command: string, args?: Record<string, unknown>): Promise<T> => {
     requireDesktop();
-    try { return await invoke<T>(command, args); } catch (error) { throw error instanceof VoiceLibraryError ? error : nativeError(error); }
+    recordFlowDebug('voice_library_begin');
+    try { const result = await invoke<T>(command, args); recordFlowDebug('voice_library_ready'); return result; }
+    catch (error) { recordFlowDebug('voice_library_failed'); recordAudioFailure(error); throw error instanceof VoiceLibraryError ? error : nativeError(error); }
   };
-  const playWav = (bytes: Uint8Array) => {
+  const playWav = async (bytes: Uint8Array) => {
+    recordFlowDebug('voice_preview_begin');
     void stopPreview();
     const copy = new Uint8Array(bytes.byteLength);
     copy.set(bytes);
     const url = objectUrl(new Blob([copy.buffer], { type: 'audio/wav' }));
     const audio = makeAudio(url) as AudioElementLike;
     playing = { audio, url };
-    audio.onended = () => { if (playing?.audio === audio) { revokeUrl(url); playing = null; } };
-    void Promise.resolve(audio.play()).catch(() => { revokeUrl(url); playing = null; });
+    audio.onended = () => { recordFlowDebug('voice_preview_ready'); if (playing?.audio === audio) { revokeUrl(url); playing = null; } };
+    try { await audio.play(); }
+    catch (error) {
+      recordFlowDebug('voice_preview_failed');
+      if (playing?.audio === audio) { revokeUrl(url); playing = null; }
+      throw new VoiceLibraryError('VOICE_PREVIEW_FAILED', 'Could not play the voice sample. Check your audio output and retry.');
+    }
   };
   const stopPreview = async () => {
     if (!playing) return;
@@ -173,6 +183,7 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
     list: async () => (await call<VoiceMetadata[]>('voice_library_list')).map(normaliseVoice),
     startRecording: async (): Promise<VoiceRecordingSession> => {
       requireDesktop();
+      recordFlowDebug('voice_record_begin');
       if (!mediaDevices?.getUserMedia) throw new VoiceLibraryError('VOICE_MICROPHONE_UNAVAILABLE', 'Microphone recording is available only in the Quickque Mac app.');
       let stream: MediaStreamLike | null = null;
       let context: AudioContextLike | null = null;
@@ -180,6 +191,7 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
       let processor: ReturnType<AudioContextLike['createScriptProcessor']> | null = null;
       let samples: Float32Array[] = [];
       let peak = 0;
+      let level = 0;
       let sampleRate = 48_000;
       let capturedFrames = 0;
       let settled = false;
@@ -203,23 +215,29 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
           if (!remaining) return;
           const copy = new Float32Array(sourceSamples.subarray(0, remaining));
           capturedFrames += copy.length;
-          samples.push(copy); for (const value of copy) peak = Math.max(peak, Math.abs(value));
+          level = 0;
+          samples.push(copy); for (const value of copy) level = Math.max(level, Math.abs(value));
+          peak = Math.max(peak, level);
         };
         source.connect(processor); processor.connect(silent); silent.connect(context.destination);
+        await context.resume();
+        recordFlowDebug('voice_record_ready');
       } catch (error) {
+        recordFlowDebug('voice_record_failed');
         await teardown();
         throw error instanceof VoiceLibraryError ? error : new VoiceLibraryError('VOICE_MICROPHONE_PERMISSION', 'Quickque could not access the microphone. Allow microphone access and try again.');
       }
       return {
-        currentLevel: () => peak,
+        currentLevel: () => level,
         stop: async () => {
           if (settled) throw new VoiceLibraryError('VOICE_RECORDING_NOT_ACTIVE', 'This recording has already ended.');
           settled = true; await teardown();
           const encoded = encodeWav(samples, sampleRate);
           const result = { wavData: encoded.data, durationSeconds: encoded.duration, sampleRate, levelPeak: Math.max(peak, encoded.peak), complete: true };
+          recordFlowDebug('voice_record_complete', undefined, Math.round(encoded.duration * 1000));
           return result;
         },
-        cancel: async () => { if (settled) return; settled = true; await teardown(); samples = []; },
+        cancel: async () => { if (settled) return; settled = true; await teardown(); samples = []; recordFlowDebug('voice_record_cancel'); },
       };
     },
     create: async (input: { name: string; recording: VoiceRecording; consentConfirmed: true }) => {
@@ -237,7 +255,7 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
     previewRecording: (recording: VoiceRecording) => playWav(recording.wavData),
     preview: async (voice: { voiceId: string; revision?: number }) => {
       const bytes = await call<number[]>('voice_library_read_recording', { voiceId: nativeId(voice.voiceId) });
-      playWav(Uint8Array.from(bytes));
+      await playWav(Uint8Array.from(bytes));
     },
     stopPreview,
   };

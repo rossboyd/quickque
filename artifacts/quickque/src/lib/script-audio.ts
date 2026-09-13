@@ -1,3 +1,5 @@
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { recordFlowDebug, recordAudioFailure } from './flow/diagnostics';
 import { invoke } from '@tauri-apps/api/core';
 import { isDesktop } from './desktop';
 import type { AudioRequest } from './script-audio-model';
@@ -16,21 +18,37 @@ export async function audioEntitlement(): Promise<{ paid: boolean; reason?: stri
 }
 export const audioStatus = (request: AudioRequest) => invoke<AudioStatus>('script_audio_status', { request });
 export async function generateAudio(request: AudioRequest): Promise<AudioStatus> {
+  recordFlowDebug('audio_generate_begin');
+  let unlisten: UnlistenFn | undefined;
   audioJobs.set(request.scriptId, { revision: request.revision, running: true });
   window.dispatchEvent(new Event(AUDIO_JOB_CHANGED));
   try {
+    try {
+      unlisten = await listen<{ scriptId: string; revision: string; stage: string }>('script-audio-diagnostic', ({ payload }) => {
+        if (payload.scriptId !== request.scriptId || payload.revision !== request.revision) return;
+        if (payload.stage === 'model_load' || payload.stage === 'generation') recordFlowDebug(`audio_${payload.stage}`);
+      });
+    } catch { recordFlowDebug('audio_listener_failed'); }
     const result = await invoke<AudioStatus>('script_audio_generate', { request });
+    recordFlowDebug('audio_generate_ready');
     audioJobs.set(request.scriptId, { revision: request.revision, running: false });
     return result;
   } catch (error) {
+    recordFlowDebug('audio_generate_failed');
+    recordAudioFailure(error);
     audioJobs.set(request.scriptId, { revision: request.revision, running: false, error: String(error) });
     throw error;
   } finally {
+    unlisten?.();
     window.dispatchEvent(new Event(AUDIO_JOB_CHANGED));
     window.dispatchEvent(new Event(AUDIO_CHANGED));
   }
 }
-export const cancelAudioGeneration = () => invoke<void>('script_audio_cancel');
+export async function cancelAudioGeneration() {
+  recordFlowDebug('audio_cancel_begin');
+  try { await invoke<void>('script_audio_cancel'); recordFlowDebug('audio_cancel_ready'); }
+  catch (error) { recordFlowDebug('audio_cancel_failed'); recordAudioFailure(error); throw error; }
+}
 export const exportAudio = (request: AudioRequest) => invoke<string | null>('script_audio_export', { scriptId: request.scriptId, revision: request.revision });
 export async function deleteAudio(scriptId: string) {
   await invoke('script_audio_delete', { scriptId });

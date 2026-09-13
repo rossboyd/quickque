@@ -34,6 +34,7 @@ test('library captures mono PCM, tears down tracks, then calls native create wit
   let process: { onaudioprocess: ((event: { inputBuffer: { getChannelData(channel: number): Float32Array } }) => void) | null } | null = null;
   let stopped = 0;
   let closed = 0;
+  let resumed = 0;
   const destination = { connect() {}, disconnect() {} };
   const library = createVoiceLibrary({
     isDesktop: () => true,
@@ -59,11 +60,13 @@ test('library captures mono PCM, tears down tracks, then calls native create wit
         return node;
       },
       createGain: () => ({ gain: { value: 0 }, connect() {}, disconnect() {} }),
+      resume: async () => { resumed += 1; },
       close: async () => { closed += 1; },
     }),
   });
   const session = await library.startRecording();
   assert.ok(session.stop);
+  assert.equal(resumed, 1);
   // A five-second 48 kHz chunk is valid mono PCM input.
   assert.ok(process);
   const chunk = new Float32Array(48_000 * 5);
@@ -91,4 +94,16 @@ test('legacy system assignments become explicit missing local references', () =>
   assert.equal(migrated.engine, 'turbo');
   assert.equal(migrated.voiceId, `${MISSING_CLONED_VOICE_PREFIX}com.apple.Alex`);
   assert.equal(migrated.voiceRevision, 1);
+});
+
+test('voice preview reports playback failures instead of silently swallowing them', async () => {
+  const revoked: string[] = [];
+  const library = createVoiceLibrary({
+    isDesktop: () => true,
+    createObjectUrl: () => 'blob:sample',
+    revokeObjectUrl: url => revoked.push(url),
+    createAudioElement: () => ({ play: async () => { throw new Error('output unavailable'); }, pause() {}, onended: null }),
+  });
+  await assert.rejects(library.previewRecording({ wavData: new Uint8Array(44), durationSeconds: 5, sampleRate: 48000, levelPeak: .5, complete: true }), /VOICE_PREVIEW_FAILED/);
+  assert.deepEqual(revoked, ['blob:sample']);
 });

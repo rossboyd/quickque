@@ -1,3 +1,4 @@
+import { recordFlowDebug, recordAudioFailure } from './flow/diagnostics.ts';
 import { invoke } from '@tauri-apps/api/core';
 
 import { isDesktop } from './desktop.ts';
@@ -276,6 +277,8 @@ class SceneSpeechAdapter implements SceneSpeech {
     const settle = (error?: unknown) => {
       if (settled) return;
       settled = true;
+      recordFlowDebug(error ? 'speech_failed' : 'speech_ready');
+      if (error) recordAudioFailure(error);
       if (error) rejectCompletion(error);
       else resolveCompletion();
     };
@@ -315,7 +318,9 @@ class SceneSpeechAdapter implements SceneSpeech {
       return cancellation!;
     };
 
-    const launch = () => this.nativeInvoke('scene_speech_speak', {
+    const launch = () => {
+      recordFlowDebug('speech_begin');
+      return this.nativeInvoke('scene_speech_speak', {
       text,
       engine: voice.engine,
       voiceId: voice.voiceId,
@@ -326,6 +331,7 @@ class SceneSpeechAdapter implements SceneSpeech {
       () => finish(),
       (error) => finish(normaliseNativeError(error)),
     );
+    };
     void this.listenToEvent<{ requestId: number; charStart: number; charEnd: number }>(
       'scene-speech-progress',
       event => {

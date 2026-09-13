@@ -1,8 +1,8 @@
-approvals_reviewer = "auto_review"
+approvals_reviewer = "user"
 model = "gpt-6-astra"
 model_reasoning_effort = "medium"
 [projects."/home/runner/workspace"]
 trust_level = "trusted"
 
 [tui.model_availability_nux]
-gpt-6-astra = 2
+gpt-6-astra = 3

@@ -30,6 +30,26 @@ def emit(value):
     print(json.dumps(value), flush=True)
 
 
+@contextlib.contextmanager
+def runtime_stage(stage, report=False):
+    """Report fixed stages and exception categories, never text, paths or stderr."""
+    if report:
+        emit({'status': 'diagnostic', 'stage': stage})
+    try:
+        yield
+    except SpeechFailure:
+        raise
+    except Exception as error:
+        category = next((kind.__name__ for kind in (
+            MemoryError, ImportError, OSError, ValueError, TypeError, RuntimeError,
+        ) if isinstance(error, kind)), 'Exception')
+        raise SpeechFailure(
+            'SCENE_SPEECH_TURBO_' + stage.upper(),
+            f'Chatterbox failed during {stage.replace("_", " ")} ({category}). '
+            'Copy the Debug trace and report this error.',
+        ) from error
+
+
 def sha256(path):
     with path.open('rb') as source:
         return hashlib.file_digest(source, 'sha256').hexdigest()
@@ -192,13 +212,14 @@ def speak(directory, request, voices_dir=None):
     socket.create_connection = no_network
     socket.socket.connect = no_network
     socket.socket.connect_ex = no_network
-    with quiet_runtime():
+    with runtime_stage('model_load'), quiet_runtime():
         import torch
         import sounddevice
         from chatterbox.tts_turbo import ChatterboxTurboTTS, punc_norm
         if not torch.backends.mps.is_available():
             raise SpeechFailure('SCENE_SPEECH_TURBO_UNSUPPORTED', 'Chatterbox needs an Apple Silicon Mac with MPS available.')
         model = ChatterboxTurboTTS.from_local(directory, device='mps')
+    with runtime_stage('generation'), quiet_runtime():
         # Reject oversized token sequences before upstream's truncation=True.
         for line in lines:
             tokens = model.tokenizer(punc_norm(line), truncation=False)['input_ids']
@@ -213,7 +234,7 @@ def speak(directory, request, voices_dir=None):
                         raise SpeechFailure('SCENE_SPEECH_TURBO_AUDIO', 'Chatterbox generated an oversized passage. Shorten this turn and retry.')
                     if not bool(torch.isfinite(audio).all()):
                         raise SpeechFailure('SCENE_SPEECH_TURBO_AUDIO', 'Chatterbox could not generate clean audio. Retry the turn.')
-                    sounddevice.play(audio.squeeze().numpy(), model.sr, blocking=True)
+                    sounddevice.play(audio.detach().cpu().squeeze().numpy(), model.sr, blocking=True)
                     del audio
         finally:
             sounddevice.stop()
@@ -294,7 +315,7 @@ def render_batch(directory, entries, folder, voices_dir=None):
     socket.create_connection = no_network
     socket.socket.connect = no_network
     socket.socket.connect_ex = no_network
-    with quiet_runtime():
+    with runtime_stage('model_load', report=True), quiet_runtime():
         import torch
         from chatterbox.tts_turbo import ChatterboxTurboTTS, punc_norm
         if not torch.backends.mps.is_available():
@@ -307,12 +328,13 @@ def render_batch(directory, entries, folder, voices_dir=None):
             continue
         temporary = target.with_suffix('.wav.partial')
         try:
-            with quiet_runtime(), torch.inference_mode(), wave.open(str(temporary), 'wb') as output:
+            with runtime_stage('generation', report=True), quiet_runtime(), torch.inference_mode(), wave.open(str(temporary), 'wb') as output:
                 output.setnchannels(1)
                 output.setsampwidth(2)
                 output.setframerate(model.sr)
                 total = 0
-                lines, reference = validate_request(entry, voices_dir)
+                lines = validate_request(entry, voices_dir)
+                reference = local_voice_reference(entry, voices_dir)
                 for line in lines:
                     if len(model.tokenizer(punc_norm(line), truncation=False)['input_ids']) > 128:
                         raise SpeechFailure('SCENE_SPEECH_TEXT_TOO_LONG', 'Shorten this passage before generating audio.')
@@ -347,6 +369,7 @@ def generate_batch(directory, root, request, renderer=render_batch, voices_dir=N
         rendered = renderer(directory, missing, folder, voices_dir=voices_dir) if missing else []
     else:
         rendered = renderer(directory, missing, folder) if missing else []
+    emit({'status': 'generating', 'scriptId': request['scriptId'], 'revision': request['revision'], 'completed': completed, 'total': len(request['entries'])})
     for _ in rendered:
         completed += 1
         emit({'status': 'generating', 'scriptId': request['scriptId'], 'revision': request['revision'], 'completed': completed, 'total': len(request['entries'])})
@@ -406,5 +429,5 @@ if __name__ == '__main__':
         emit({'error': error.code, 'message': error.message})
         sys.exit(1)
     except Exception:
-        emit({'error': 'SCENE_SPEECH_TURBO_FAILED', 'message': 'Chatterbox could not finish. Check the download and audio output, then retry. If this repeats, reinstall Quickque.'})
+        emit({'error': 'SCENE_SPEECH_TURBO_FAILED', 'message': 'Chatterbox encountered an unexpected worker error. Copy the Debug trace and report this error.'})
         sys.exit(1)

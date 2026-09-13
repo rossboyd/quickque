@@ -113,3 +113,18 @@ test('records Apple preparation stages and ignores stale warning/error payload d
   ]);
   assert.ok(!JSON.stringify(snapshot).includes(privateStderr));
 });
+test('audio diagnostics retain known failure codes without raw errors or voice data', async () => {
+  const { recordAudioFailure } = await import('./diagnostics.ts');
+  clearFlowDebug();
+  recordFlowDebug('audio_generate_begin');
+  recordFlowDebug('audio_model_load');
+  recordFlowDebug('audio_generation');
+  recordFlowDebug('audio_generate_failed');
+  recordAudioFailure('SCENE_SPEECH_TURBO_GENERATION: private script /Users/name/reference.wav');
+  recordAudioFailure('SECRET_CUSTOM_CODE: private voice');
+  assert.deepEqual(getFlowDebugSnapshot().map(x => x.code), [
+    'audio_generate_begin', 'audio_model_load', 'audio_generation', 'audio_generate_failed',
+    'error:SCENE_SPEECH_TURBO_GENERATION',
+  ]);
+  assert.doesNotMatch(JSON.stringify(getFlowDebugSnapshot()), /private|Users|SECRET/);
+});

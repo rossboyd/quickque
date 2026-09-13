@@ -161,7 +161,7 @@ export function VoiceRecorder({
             {recording.levelPeak !== undefined && <p className="mt-1 text-xs text-muted-foreground">Input level captured successfully.</p>}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" data-testid="button-preview-voice-recording" onClick={() => { library.previewRecording(recording); }} disabled={busy} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+            <button type="button" data-testid="button-preview-voice-recording" onClick={() => { void library.previewRecording(recording).catch(error => setMessage(String(error))); }} disabled={busy} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
               <Volume2 className="h-4 w-4" /> Listen
             </button>
             <button type="button" data-testid="button-retry-voice-recording" onClick={() => void retry()} disabled={busy} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">

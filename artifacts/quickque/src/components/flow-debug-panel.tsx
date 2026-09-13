@@ -23,7 +23,7 @@ export function FlowDebugPanel({ initiallyOpen = true, onClose }: { initiallyOpe
   async function copy() {
     try {
       await navigator.clipboard.writeText(
-        'Quickque Flow diagnostics (in memory; no speech content)\n' +
+        'Quickque Flow and audio diagnostics (in memory; no speech content)\n' +
         entries.map(formatFlowDebug).join('\n'),
       );
       setCopyMessage('Copied');
@@ -35,9 +35,9 @@ export function FlowDebugPanel({ initiallyOpen = true, onClose }: { initiallyOpe
   return (
     <section aria-label="Voice Flow debugger" className="shrink-0 border border-green-500/50 rounded-lg bg-[#031108] text-[#77ff9b] font-mono text-[11px] leading-relaxed shadow-lg">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
-        {onClose ? <span className="font-semibold">FLOW DEBUG</span> : (
+        {onClose ? <span className="font-semibold">FLOW & AUDIO DEBUG</span> : (
           <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="font-semibold hover:text-white">
-            {open ? '−' : '+'} FLOW DEBUG
+            {open ? '−' : '+'} FLOW & AUDIO DEBUG
           </button>
         )}
         {open && (
@@ -56,7 +56,7 @@ export function FlowDebugPanel({ initiallyOpen = true, onClose }: { initiallyOpe
           <div ref={output} tabIndex={0} aria-label="Debug checkpoint history" className="h-[min(20dvh,12rem)] overflow-auto overscroll-contain px-3 select-text whitespace-pre-wrap break-words">
             {entries.length ? entries.map(entry => (
               <div key={entry.id}>{formatFlowDebug(entry)}</div>
-            )) : <div>No checkpoints yet. Open Voice Follow to trace setup.</div>}
+            )) : <div>No checkpoints yet. Record a voice, generate audio, or open Voice Follow.</div>}
           </div>
           <p className="px-3 py-2 border-t border-green-500/20">
             {copyMessage || (last

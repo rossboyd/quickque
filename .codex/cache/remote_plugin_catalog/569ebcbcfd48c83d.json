@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "fetched_at": "2026-09-13T08:32:49.566709346Z",
+  "fetched_at": "2026-09-13T09:33:06.614935087Z",
   "plugins": [
     {
       "id": "plugin_connector_1p_95d39881713c8191931482a62d6edff9",
@@ -298182,6 +298182,73 @@
             "interface": {
               "display_name": "hotdog-verdict",
               "short_description": "Use when the user asks for a playful hotdog or not hotdog verdict for an image they share, or asks how to enable the not hotdog browser hover companion. Do not use for nutrition, allergens, food safety, identifying people, or unrelated tasks.",
+              "brand_color": null,
+              "default_prompt": null,
+              "icon_small_url": null,
+              "icon_large_url": null
+            }
+          }
+        ],
+        "scheduled_tasks": null
+      }
+    },
+    {
+      "id": "plugins_6aa66519954481919c4925ee7326e334",
+      "name": "unclass-lesson-builder",
+      "scope": "GLOBAL",
+      "discoverability": "UNLISTED",
+      "creator_account_user_id": "user-gPOb7YmYYpmOYiw6gXsYzuf2",
+      "creator_name": null,
+      "share_url": null,
+      "share_principals": null,
+      "can_publish_to_workspace": null,
+      "installation_policy": "AVAILABLE",
+      "installation_policy_source": null,
+      "must_show_installation_interstitial": false,
+      "authentication_policy": "ON_INSTALL",
+      "status": "AVAILABLE",
+      "disabled_reason": null,
+      "eligible_plan_types": null,
+      "release": {
+        "version": "0.0.2",
+        "display_name": "Unclass Lesson Builder",
+        "description": "Create editable language lessons in unclass lesson format. Describe your learners and goals, then copy the lesson into unclass.",
+        "bundle_download_url": null,
+        "app_ids": [],
+        "app_manifest": null,
+        "app_templates": [],
+        "keywords": [],
+        "interface": {
+          "short_description": "Language lessons for Unclass",
+          "long_description": "Create and revise complete language lessons that tutors can import directly into Unclass using the unclass/1 Markdown format.",
+          "developer_name": "Sergei Andronov",
+          "category": "Education & Research",
+          "capabilities": [
+            "Interactive",
+            "Write"
+          ],
+          "website_url": "https://unclass.app",
+          "privacy_policy_url": "https://unclass.app/privacy",
+          "terms_of_service_url": "https://unclass.app/terms",
+          "brand_color": "#4A66E0",
+          "default_prompt": "Create a 45-minute A2 English lesson about ordering food. Include a wordlist, fill-the-gaps, and multiple-choice exercises.",
+          "default_prompts": [
+            "Create a 45-minute A2 English lesson about ordering food. Include a wordlist, fill-the-gaps, and multiple-choice exercises.",
+            "Create a 30-minute A1 Spanish lesson about introductions. Include teacher notes and a speaking activity.",
+            "Convert my lesson to Unclass format. Ask for the material, teaching language, learner level, and duration."
+          ],
+          "composer_icon_url": "https://files.openai.com/content?id=file_00000000264081f4a7dfe5ba6dee8fd3&cdn=1&cp=pi&ma=32745600&ts=0&p=pi&cid=8&sig=b2042637f69f747f406a06aa21d9a414d2a4091346f3fd97b3816e9cdba76bd7&v=0",
+          "logo_url": "https://files.openai.com/content?id=file_00000000e06081f4b54b29a1814da41e&cdn=1&cp=pi&ma=32227200&ts=0&p=pi&cid=8&sig=d4014d450f6b84c6b4cd59136574f1c781af3f4374fadc8e15974bac2aa615d4&v=0",
+          "logo_url_dark": null,
+          "screenshot_urls": []
+        },
+        "skills": [
+          {
+            "name": "unclass-lesson-builder",
+            "description": "Create and revise useful language lessons in the Unclass `unclass/1` Markdown import format. Use when a tutor asks to build, adapt, or fix an importable Unclass lesson.",
+            "interface": {
+              "display_name": "unclass-lesson-builder",
+              "short_description": "Create and revise useful language lessons in the Unclass `unclass/1` Markdown import format. Use when a tutor asks to build, adapt, or fix an importable Unclass lesson.",
               "brand_color": null,
               "default_prompt": null,
               "icon_small_url": null,
