@@ -1,0 +1,217 @@
+96434 INFO: Building EXE because EXE-00.toc is non existent
+96434 INFO: Building EXE from EXE-00.toc
+96437 INFO: Copying bootloader EXE to /Users/rossboyd/Documents/github/quickque/artifacts/quickque/turbo/build/quickque-turbo/quickque-turbo
+96439 INFO: Converting EXE to target arch (arm64)
+96501 INFO: Removing signature(s) from EXE
+96522 INFO: Modifying Mach-O image UUID(s) in EXE
+96566 INFO: Appending PKG archive to EXE
+96617 INFO: Fixing EXE headers for code signing
+96622 INFO: Rewriting the executable's macOS SDK version (26.2.0) to match the SDK version of the Python library (15.0.0) in order to avoid inconsistent behavior and potential UI issues in the frozen application.
+96623 INFO: Re-signing the EXE
+96753 INFO: Building EXE from EXE-00.toc completed successfully.
+96773 INFO: checking COLLECT
+96773 INFO: Building COLLECT because COLLECT-00.toc is non existent
+96773 INFO: Removing dir /Users/rossboyd/Documents/github/quickque/artifacts/quickque/turbo/dist/quickque-turbo
+97148 INFO: Building COLLECT COLLECT-00.toc
+113836 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+113895 INFO: Build complete! The results are available in: /Users/rossboyd/Documents/github/quickque/artifacts/quickque/turbo/dist
+{"status": "runtime-ready", "mpsAvailable": true}
+
+> @workspace/quickque@0.0.0 desktop:test-native /Users/rossboyd/Documents/github/quickque/artifacts/quickque
+> cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+   Compiling quickque v0.1.0 (/Users/rossboyd/Documents/github/quickque/artifacts/quickque/src-tauri)
+error: cannot find attribute `serde` in this scope
+   --> src/lib.rs:374:7
+    |
+374 |     #[serde(skip_serializing_if = "Option::is_none")]
+    |       ^^^^^
+    |
+    = note: `serde` is an attribute that can be used by the derive macros `Deserialize`, `Deserialize_repr` and `Serialize`, you might be missing a `derive` attribute
+    = note: `serde` is in scope, but it is a crate, not an attribute
+
+error: cannot find attribute `serde` in this scope
+   --> src/lib.rs:372:7
+    |
+372 |     #[serde(skip_serializing_if = "Option::is_none")]
+    |       ^^^^^
+    |
+    = note: `serde` is an attribute that can be used by the derive macros `Deserialize`, `Deserialize_repr` and `Serialize`, you might be missing a `derive` attribute
+    = note: `serde` is in scope, but it is a crate, not an attribute
+
+error: cannot find attribute `serde` in this scope
+   --> src/lib.rs:363:7
+    |
+363 |     #[serde(rename = "type")]
+    |       ^^^^^
+    |
+    = note: `serde` is an attribute that can be used by the derive macros `Deserialize`, `Deserialize_repr` and `Serialize`, you might be missing a `derive` attribute
+    = note: `serde` is in scope, but it is a crate, not an attribute
+
+error[E0618]: expected function, found `std::string::String`
+   --> src/voices.rs:368:5
+    |
+ 59 | fn name(value: &str) -> Result<(), String> {
+    | ------------------------------------------ this function of the same name is available here, but it's shadowed by the local binding
+...
+366 |     name: String,
+    |     ---- `name` has type `std::string::String`
+367 | ) -> Result<VoiceMetadata, String> {
+368 |     name(&name)?;
+    |     ^^^^-------
+    |     |
+    |     call expression requires function
+
+error[E0618]: expected function, found `std::string::String`
+   --> src/voices.rs:449:5
+    |
+ 59 | fn name(value: &str) -> Result<(), String> {
+    | ------------------------------------------ this function of the same name is available here, but it's shadowed by the local binding
+...
+446 |     name: String,
+    |     ---- `name` has type `std::string::String`
+...
+449 |     name(&name)?;
+    |     ^^^^-------
+    |     |
+    |     call expression requires function
+
+error[E0277]: the trait bound `SceneSpeechRequest<'_>: serde::Serialize` is not satisfied
+    --> src/lib.rs:493:48
+     |
+ 493 |             serde_json::to_writer(&mut *stdin, &request)
+     |             ---------------------              ^^^^^^^^ unsatisfied trait bound
+     |             |
+     |             required by a bound introduced by this call
+     |
+help: the trait `Serialize` is not implemented for `SceneSpeechRequest<'_>`
+    --> src/lib.rs:368:1
+     |
+ 368 | struct SceneSpeechRequest<'a> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: for local types consider adding `#[derive(serde::Serialize)]` to your `SceneSpeechRequest<'_>` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Serialize`:
+               &'a T
+               &'a mut T
+               ()
+               (T,)
+               (T0, T1)
+               (T0, T1, T2)
+               (T0, T1, T2, T3)
+               (T0, T1, T2, T3, T4)
+             and 394 others
+note: required by a bound in `to_writer`
+    --> /Users/rossboyd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/ser.rs:2180:17
+     |
+2177 | pub fn to_writer<W, T>(writer: W, value: &T) -> Result<()>
+     |        --------- required by a bound in this function
+...
+2180 |     T: ?Sized + Serialize,
+     |                 ^^^^^^^^^ required by this bound in `to_writer`
+     = note: the full name for the type has been written to '/Users/rossboyd/Documents/github/quickque/artifacts/quickque/src-tauri/target/debug/deps/quickque_lib-db841d16da220b11.long-type-10848270629031605442.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+error[E0277]: the trait bound `SceneSpeechHelperProgress: serde::Deserialize<'de>` is not satisfied
+    --> src/lib.rs:542:64
+     |
+ 542 | ..._slice::<SceneSpeechHelperProgress>(&line) {
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+     |
+help: the trait `Deserialize<'_>` is not implemented for `SceneSpeechHelperProgress`
+    --> src/lib.rs:362:1
+     |
+ 362 | struct SceneSpeechHelperProgress {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `SceneSpeechHelperProgress` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a RawValue` implements `Deserialize<'de>`
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `&'p jsonptr::pointer::Pointer` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 418 others
+note: required by a bound in `from_slice`
+    --> /Users/rossboyd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/de.rs:2669:8
+     |
+2667 | pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<T>
+     |        ---------- required by a bound in this function
+2668 | where
+2669 |     T: de::Deserialize<'a>,
+     |        ^^^^^^^^^^^^^^^^^^^ required by this bound in `from_slice`
+     = note: the full name for the type has been written to '/Users/rossboyd/Documents/github/quickque/artifacts/quickque/src-tauri/target/debug/deps/quickque_lib-db841d16da220b11.long-type-4703859879213678879.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+error[E0277]: the trait bound `SceneSpeechProgressEvent: serde::Serialize` is not satisfied
+    --> src/lib.rs:553:71
+     |
+ 553 |                               let _ = app.emit("scene-speech-progress", Scen...
+     |  _________________________________________----__________________________^
+     | |                                         |
+     | |                                         required by a bound introduced by this call
+ 554 | |                                 request_id,
+ 555 | |                                 char_start: progress.char_start,
+ 556 | |                                 char_end: progress.char_end,
+ 557 | |                             });
+     | |_____________________________^ unsatisfied trait bound
+     |
+help: the trait `Serialize` is not implemented for `SceneSpeechProgressEvent`
+    --> src/lib.rs:2119:1
+     |
+2119 | struct SceneSpeechProgressEvent {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: for local types consider adding `#[derive(serde::Serialize)]` to your `SceneSpeechProgressEvent` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Serialize`:
+               &'a T
+               &'a mut T
+               ()
+               (T,)
+               (T0, T1)
+               (T0, T1, T2)
+               (T0, T1, T2, T3)
+               (T0, T1, T2, T3, T4)
+             and 394 others
+note: required by a bound in `emit`
+    --> /Users/rossboyd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.11.5/src/lib.rs:946:14
+     |
+ 946 |   fn emit<S: Serialize + Clone>(&self, event: &str, payload: S) -> Res...
+     |              ^^^^^^^^^ required by this bound in `Emitter::emit`
+     = note: the full name for the type has been written to '/Users/rossboyd/Documents/github/quickque/artifacts/quickque/src-tauri/target/debug/deps/quickque_lib-db841d16da220b11.long-type-10848270629031605442.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+error[E0277]: the trait bound `SceneSpeechProgressEvent: Clone` is not satisfied
+    --> src/lib.rs:553:71
+     |
+ 553 |                               let _ = app.emit("scene-speech-progress", Scen...
+     |  _________________________________________----__________________________^
+     | |                                         |
+     | |                                         required by a bound introduced by this call
+ 554 | |                                 request_id,
+ 555 | |                                 char_start: progress.char_start,
+ 556 | |                                 char_end: progress.char_end,
+ 557 | |                             });
+     | |_____________________________^ the trait `Clone` is not implemented for `SceneSpeechProgressEvent`
+     |
+note: required by a bound in `emit`
+    --> /Users/rossboyd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.11.5/src/lib.rs:946:26
+     |
+ 946 | ...rialize + Clone>(&self, event: &str, payload: S) -> Result<()> {
+     |              ^^^^^ required by this bound in `Emitter::emit`
+help: consider annotating `SceneSpeechProgressEvent` with `#[derive(Clone)]`
+     |
+2119 + #[derive(Clone)]
+2120 | struct SceneSpeechProgressEvent {
+     |
+
+Some errors have detailed explanations: E0277, E0618.
+For more information about an error, try `rustc --explain E0277`.
+error: could not compile `quickque` (lib test) due to 9 previous errors
+ ELIFECYCLE  Command failed with exit code 101.
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/quickque@0.0.0 desktop:build: `pnpm icons:check && pnpm native:build && pnpm turbo:build && pnpm desktop:test-native && tauri build --config src-tauri/tauri.conf.json && sh scripts/check-mac-icon.sh`
+Exit status 101
+rossboyd@Rosss-MacBook-Air-2 native % 
