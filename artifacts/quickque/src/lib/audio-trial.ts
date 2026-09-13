@@ -1,7 +1,8 @@
 /** The allowance covers audible playback, not model loading or paused time. */
 export class AudioTrial {
   private used = 0;
-  constructor(private readonly limit = 30) {}
+  private readonly limit: number;
+  constructor(limit = 30) { this.limit = limit; }
   remaining(licensed: boolean) { return licensed ? Infinity : Math.max(0, this.limit - this.used); }
   consume(seconds: number) { if (Number.isFinite(seconds) && seconds > 0) this.used += seconds; }
 }

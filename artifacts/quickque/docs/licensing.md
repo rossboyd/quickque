@@ -33,5 +33,5 @@ Add a server-only fulfilment handler after verifying Stripe webhook signatures a
 ## Validation
 
 `cargo test --manifest-path lib/licence-core/Cargo.toml`
-`node --test artifacts/api-server/src/licensing/lease.test.ts`
+`node --test artifacts/api-server/tests/lease.test.ts`
 Frontend and browser regression tests cover onboarding, licence settings, trial stop and upgrade choices. The pure Rust verifier is testable on Linux without Tauri's desktop GUI dependencies.

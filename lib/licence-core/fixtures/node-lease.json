@@ -1,0 +1,14 @@
+{
+  "device": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "keys": [
+    [
+      "fixture-only",
+      "NFJdIhxETA86ExHO-ZmTTjcJYPKtULcTGGMV_T2ZFug"
+    ]
+  ],
+  "envelope": {
+    "keyId": "fixture-only",
+    "payload": "eyJzY2hlbWEiOjEsInByb2R1Y3QiOiJxdWlja3F1ZSIsImxlYXNlSWQiOiI0ZjQxYWQ4Ny04Mzc2LTQ0NzctOTAzZS1iZDM1N2E0ZjVjNzEiLCJsaWNlbmNlSWQiOiJjcm9zcy1sYW5ndWFnZS10ZXN0IiwiZGV2aWNlSWQiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwicGxhbiI6InN1YnNjcmlwdGlvbiIsImZlYXR1cmVzIjpbInNhdmVkX2F1ZGlvIiwidm9pY2VfZm9sbG93Il0sImlzc3VlZEF0IjoxMDAwLCJyZWZyZXNoQWZ0ZXIiOjg3NDAwLCJleHBpcmVzQXQiOjIwMDAsInVwZGF0ZXNVbnRpbCI6bnVsbCwicmV2b2tlZCI6ZmFsc2V9",
+    "signature": "M3EbwiG-4g8hdZMZwTajrEGo_1gCF39BKW33ytFndOdnMi_qYe4NUA1DOHASTN02Xd7_bqrn0i_KLxBKDz4rCg"
+  }
+}

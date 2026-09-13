@@ -57,6 +57,14 @@ mod tests {
         let signature = URL_SAFE_NO_PAD.encode(key.sign(format!("quickque-lease-v1\ntest\n{payload}").as_bytes()).to_bytes());
         (Envelope{key_id:"test".into(),payload,signature},vec![("test".into(),URL_SAFE_NO_PAD.encode(key.verifying_key().as_bytes()))])
     }
+    #[test] fn accepts_a_real_node_issuer_signature() {
+        let fixture: serde_json::Value=serde_json::from_str(include_str!("../fixtures/node-lease.json")).unwrap();
+        let env: Envelope=serde_json::from_value(fixture["envelope"].clone()).unwrap();
+        let keys: Vec<(String,String)>=serde_json::from_value(fixture["keys"].clone()).unwrap();
+        let lease=verify(&env,&keys,fixture["device"].as_str().unwrap()).unwrap();
+        assert_eq!(access(&lease,1500,1400,1000),Access::Active);
+        assert_eq!(lease.licence_id,"cross-language-test");
+    }
     #[test] fn verifies_signature_device_and_product_without_network() {
         let (mut env, keys) = signed();
         assert!(verify(&env,&keys,"mac-a").is_ok());

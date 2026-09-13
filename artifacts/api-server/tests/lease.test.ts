@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { generateKeyPairSync, verify } from 'node:crypto';
-import { issueLease, keyHash, DAY } from './lease.ts';
+import { issueLease, keyHash, DAY } from '../src/licensing/lease.ts';
 const { privateKey, publicKey } = generateKeyPairSync('ed25519');
 const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 const device = 'a'.repeat(64);

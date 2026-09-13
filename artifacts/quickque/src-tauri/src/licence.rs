@@ -106,9 +106,9 @@ fn request(action: &str, key: &str, device: &str) -> Result<(Envelope,Lease),Str
 }
 fn exchange(app: &AppHandle, action: &str, supplied_key: Option<String>) -> Result<Value,String> {
     let _network=NETWORK.lock().map_err(|_| "Licence operation unavailable.")?;
-    let (key,device,last_seen,previous)= {
+    let (key,device,previous)= {
         let current=cache().lock().map_err(|_| "Licence state unavailable.")?;
-        (supplied_key.unwrap_or_else(|| current.stored.licence_key.clone()), if current.device.is_empty() {device_id()?} else {current.device.clone()}, current.stored.last_seen, current.lease.clone())
+        (supplied_key.unwrap_or_else(|| current.stored.licence_key.clone()), if current.device.is_empty() {device_id()?} else {current.device.clone()}, current.lease.clone())
     };
     if key.len()!=46 || !key.starts_with("QQ-") || !key[3..].bytes().all(|b| b.is_ascii_alphanumeric() || b==b'-' || b==b'_') { return Err("Enter a valid Quickque licence key.".into()); }
     let (envelope,lease)=request(action,&key,&device)?;

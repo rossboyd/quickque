@@ -67,7 +67,7 @@ export async function cancelAudioGeneration() {
   catch (error) { recordFlowDebug('audio_cancel_failed'); recordAudioFailure(error); throw error; }
 }
 export async function exportAudio(request: AudioRequest) {
-  if (!(await audioEntitlement()).paid) { window.dispatchEvent(new Event('quickque:upgrade')); return null; }
+  if (!(await audioEntitlement()).paid) { window.dispatchEvent(new CustomEvent('quickque:upgrade', { detail: 'export' })); return null; }
   return invoke<string | null>('script_audio_export', { scriptId: request.scriptId, revision: request.revision });
 }
 export async function deleteAudio(scriptId: string) {
