@@ -37,7 +37,7 @@ test('legacy payment endpoints are disabled and cannot create or verify purchase
     httpServer.close();
   });
   const address = httpServer.address();
-  const base = `http://127.0.0.1:${address.port}/website`;
+  const base = `http://127.0.0.1:${address.port}`;
 
   const cases = [
     ['GET', '/api/commerce/status'],

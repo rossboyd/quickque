@@ -1,15 +1,15 @@
 {
   "repository": "https://github.com/rossboyd/quickque",
   "branch": "main",
-  "basePath": "/website/",
+  "basePath": "/",
   "productionOrigin": null,
   "guideVersion": "Current source \u00b7 0.1.0",
   "commerce": {
     "name": "Quickque for Mac",
     "currency": "gbp",
     "billing": "free, monthly or lifetime",
-    "licence": "Lifetime access to unlimited Voice Follow and saved AI audio features in Quickque for Mac.",
-    "updates": "Lifetime includes future updates to these paid Quickque for Mac features; separate products and services are not included.",
+    "licence": "Pro access in eligible versions of Quickque for Mac.",
+    "updates": "Lifetime includes one year of updates. Keep using versions released during that period; newer versions require renewed update coverage.",
     "sourceLicence": "MIT",
     "liveEnabled": false,
     "mode": "dummy",

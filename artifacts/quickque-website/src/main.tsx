@@ -16,7 +16,7 @@ function parseSiteDataScript(): SiteData | null {
 
 export function ClientApp({ siteData }: { siteData: SiteData | null }) {
   const configuredBasePath = siteData?.config.basePath.replace(/\/+$/, '');
-  const basePath = siteData ? (configuredBasePath || '/') : '/website';
+  const basePath = siteData ? (configuredBasePath || '') : '';
   return (
     <SiteDataProvider data={siteData}>
       <Router base={basePath}>

@@ -77,7 +77,7 @@ export function Meta({ title, description, context, noindex = false }: MetaProps
   const [location] = useLocation();
   const production = runtimeIsProduction(context);
   const origin = production ? safeProductionOrigin(config?.productionOrigin) : null;
-  const basePath = config?.basePath || '/website/';
+  const basePath = config?.basePath || '/';
   const route = normalizedRoute(location, basePath);
   const routeTitle =
     route === '/install'

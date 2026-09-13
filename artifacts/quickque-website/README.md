@@ -13,7 +13,7 @@ pnpm install --frozen-lockfile
 pnpm --filter @workspace/quickque-website dev
 ```
 
-Outside Replit, the default address is `http://localhost:3000/website/`.
+Outside Replit, the default address is `http://localhost:3000/`.
 Set `PORT` if another local service uses port 3000.
 In Replit, use the existing `artifacts/quickque-website: web` workflow instead
 of starting a second server. It supplies the port and preview path.
@@ -119,7 +119,7 @@ or a guessed production address.
 
 After the owner chooses publishing, obtain the actual published HTTPS origin
 from the publishing configuration and set it in `config/site.json`. Keep the
-origin separate from `basePath`, which remains `/website/` in this workspace.
+origin separate from `basePath`, which is `/` in this workspace.
 Build and serve in production mode, then verify canonical/social URLs, sitemap,
 root `/robots.txt`, article refreshes, assets, and a genuinely missing route at
 that origin. Development responses remain noindex, even if an origin is set.

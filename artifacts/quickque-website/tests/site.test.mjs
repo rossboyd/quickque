@@ -44,10 +44,10 @@ test('first-frame HTML owns CSS ordering and only preloads useful local faces', 
 });
 
 test('SSR remains readable without JavaScript and has no remote first-frame dependencies', () => {
-  const { html } = render('/website/', {}, data);
+  const { html } = render('/', {}, data);
   const head = html;
   assert.match(head, /<h1[^>]*>Your words\./);
-  assert.match(head, /src="\/website\/images\/library\.webp"/);
+  assert.match(head, /src="\/images\/library\.webp"/);
   assert.doesNotMatch(head, /https?:\/\/[^"]+\.(?:css|woff2?|ttf)/);
   assert.doesNotMatch(head, /Loading (article|manual)/);
 });
@@ -63,7 +63,7 @@ test('production revalidates HTML and stable assets while fingerprinted assets a
   assert.ok(address && typeof address === 'object');
   const base = `http://127.0.0.1:${address.port}`;
 
-  const htmlResponse = await fetch(`${base}/website/`);
+  const htmlResponse = await fetch(`${base}/`);
   assert.equal(htmlResponse.status, 200);
   assert.equal(htmlResponse.headers.get('cache-control'), 'public, max-age=0, must-revalidate');
   const html = await htmlResponse.text();
@@ -80,16 +80,16 @@ test('production revalidates HTML and stable assets while fingerprinted assets a
   assert.equal(cssResponse.headers.get('cache-control'), 'public, max-age=31536000, immutable');
   assert.match(await cssResponse.text(), /@font-face/);
 
-  const fontResponse = await fetch(`${base}/website/fonts/Inter-Variable.ttf`);
+  const fontResponse = await fetch(`${base}/fonts/Inter-Variable.ttf`);
   assert.equal(fontResponse.status, 200);
   assert.match(fontResponse.headers.get('content-type') || '', /font|octet-stream/);
   assert.equal(fontResponse.headers.get('cache-control'), 'public, max-age=604800, must-revalidate');
 
-  const imageResponse = await fetch(`${base}/website/images/library.webp`);
+  const imageResponse = await fetch(`${base}/images/library.webp`);
   assert.equal(imageResponse.status, 200);
   assert.equal(imageResponse.headers.get('cache-control'), 'public, max-age=604800, must-revalidate');
 
-  const privateResponse = await fetch(`${base}/website/checkout/result`);
+  const privateResponse = await fetch(`${base}/checkout/result`);
   assert.equal(privateResponse.status, 200);
   assert.equal(privateResponse.headers.get('cache-control'), 'no-store');
   assert.equal(privateResponse.headers.get('x-robots-tag'), 'noindex, nofollow');
@@ -128,10 +128,9 @@ test('hydration serialization cannot close its script element', () => {
   assert.deepEqual(JSON.parse(serialized), value);
 });
 
-test('base-path boundaries do not capture the app or similar paths', () => {
-  assert.equal(routePath('/', data.config), null);
-  assert.equal(routePath('/website-other/', data.config), null);
-  assert.equal(routePath('/website/guide/scripts/', data.config), '/guide/scripts');
+test('root base path accepts public website routes', () => {
+  assert.equal(routePath('/', data.config), '/');
+  assert.equal(routePath('/guide/scripts/', data.config), '/guide/scripts');
 });
 
 test('every public page renders on the server with unique production metadata', () => {
@@ -140,11 +139,11 @@ test('every public page renders on the server with unique production metadata', 
   const titles = new Set();
   for (const route of routes) {
     const context = { isProduction: true };
-    const result = render(`/website/${route}?ignored=1`, context, publicData);
+    const result = render(`/${route}?ignored=1`, context, publicData);
     assert.notEqual(context.status, 404);
     assert.ok(result.html.includes('<h1'));
     assert.equal(result.metadata.noindex, false);
-    assert.equal(result.metadata.canonical, `https://example.org/website/${route}`);
+    assert.equal(result.metadata.canonical, `https://example.org/${route}`);
     assert.equal(result.metadata.openGraph.url, result.metadata.canonical);
     assert.ok(!titles.has(result.metadata.title));
     titles.add(result.metadata.title);
@@ -154,7 +153,7 @@ test('every public page renders on the server with unique production metadata', 
 test('dummy checkout completion is explicit, private, and never claims payment', () => {
   const publicData = { ...data, config: { ...data.config, productionOrigin: 'https://example.org' } };
   const context = { isProduction: true };
-  const result = render('/website/checkout/result?demo=complete', context, publicData);
+  const result = render('/checkout/result?demo=complete', context, publicData);
   assert.notEqual(context.status, 404);
   assert.equal(result.metadata.noindex, true);
   assert.equal(result.metadata.canonical, undefined);
@@ -166,14 +165,14 @@ test('dummy checkout completion is explicit, private, and never claims payment',
 
 test('preview remains noindex even with a production origin configured', () => {
   const publicData = { ...data, config: { ...data.config, productionOrigin: 'https://example.org' } };
-  const result = render('/website/guide/local-flow/', { isProduction: false }, publicData);
+  const result = render('/guide/local-flow/', { isProduction: false }, publicData);
   assert.equal(result.metadata.noindex, true);
   assert.equal(result.metadata.canonical, undefined);
   assert.ok(result.html.includes('Download'));
 });
 
 test('unknown routes and unknown article slugs are real not-found states', () => {
-  for (const route of ['/website/nope/', '/website/guide/nope/']) {
+  for (const route of ['/nope/', '/guide/nope/']) {
     const context = { isProduction: true };
     render(route, context, data);
     assert.equal(context.status, 404);
@@ -181,7 +180,7 @@ test('unknown routes and unknown article slugs are real not-found states', () =>
 });
 
 test('search exposes keyboard instructions and an atomic live selection announcement', () => {
-  const { html } = render('/website/guide', {}, data);
+  const { html } = render('/guide', {}, data);
   assert.match(html, /aria-describedby="search-help search-selection"/);
   assert.match(html, /id="search-selection" role="status" aria-live="polite" aria-atomic="true"/);
   assert.match(html, /12 articles found/);

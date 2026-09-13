@@ -6,13 +6,16 @@ import { COMMERCE_PRICE } from './commercePrice.js';
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const packageDirectory = path.resolve(moduleDirectory, '../..');
 
-export const DEFAULT_BASE_PATH = '/website';
+export const DEFAULT_BASE_PATH = '';
 
 function fail(message) {
   throw new Error(`Quickque website configuration error: ${message}`);
 }
 
 export function normalizeBasePath(value) {
+  // The root route normalizes to an empty internal prefix. Accept that value
+  // when helpers validate an already-normalized base path a second time.
+  if (value === '') return '';
   if (typeof value !== 'string' || !value.startsWith('/')) {
     fail('basePath must be an absolute URL path.');
   }

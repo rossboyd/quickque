@@ -38,7 +38,7 @@ function markUnknownRoute(route: string | null, siteData: SiteData | null, conte
 
 export function render(url: string, context: any = {}, suppliedSiteData?: SiteData | null) {
   const siteData = suppliedSiteData ?? context.siteData ?? null;
-  const basePath = siteData?.config.basePath || '/website/';
+  const basePath = siteData?.config.basePath || '/';
   const pathname = pathnameFromUrl(url).replace(/\/+$/, '') || '/';
   const route = routeForPath(pathname, basePath);
   markUnknownRoute(route, siteData, context);

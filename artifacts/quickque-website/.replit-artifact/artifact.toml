@@ -1,5 +1,5 @@
 kind = "web"
-previewPath = "/website/"
+previewPath = "/"
 title = "Quickque Website"
 description = "The public Quickque website: honest installation instructions and a practical, searchable guide to the local-first teleprompter."
 version = "1.0.0"
@@ -8,7 +8,7 @@ router = "path"
 
 [[services]]
 name = "web"
-paths = [ "/website/", "/robots.txt", "/sitemap.xml" ]
+paths = [ "/", "/robots.txt", "/sitemap.xml" ]
 localPort = 20353
 
 [services.development]
@@ -20,4 +20,4 @@ run = [ "pnpm", "--filter", "@workspace/quickque-website", "run", "serve" ]
 
 [services.env]
 PORT = "20353"
-BASE_PATH = "/website/"
+BASE_PATH = "/"

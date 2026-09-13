@@ -3,7 +3,7 @@
 ## Verified in Linux / Chromium
 
 - TypeScript typecheck passes.
-- Vite production build passes with `PORT=24952 BASE_PATH=/` supplied to the
+- Vite production build passes with `PORT=24952 BASE_PATH=/demo/` supplied to the
   build command. Existing startup-script, source-map and chunk-size warnings
   remain non-fatal.
 - 125 Node tests passed across presentation lifecycle/timer/scheduler, logical

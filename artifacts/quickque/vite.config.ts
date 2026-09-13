@@ -1,7 +1,7 @@
 import path from 'path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import { pdfBudgetPlugin } from './scripts/pdf-budget.mjs';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
@@ -28,11 +28,31 @@ if (!basePath) {
   );
 }
 
+function redirectBareBase(base: string): Plugin {
+  const bareBase = base.replace(/\/+$/, '');
+  return {
+    name: 'quickque-redirect-bare-base',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const requestUrl = new URL(req.url || '/', 'http://quickque.local');
+        if (bareBase && requestUrl.pathname === bareBase) {
+          res.statusCode = 308;
+          res.setHeader('Location', `${base}${requestUrl.search}`);
+          res.end();
+          return;
+        }
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
   base: basePath,
   optimizeDeps: { include: ['fflate', 'saxes'], exclude: ['pdfjs-dist'] },
   worker: { format: 'es', plugins: () => [pdfBudgetPlugin()] },
   plugins: [
+    redirectBareBase(basePath),
     pdfBudgetPlugin(),
     react(),
     tailwindcss(),

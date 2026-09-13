@@ -1,5 +1,5 @@
 kind = "web"
-previewPath = "/"
+previewPath = "/demo"
 title = "Quickque"
 description = "A personal, local-first teleprompter for live meetings, with interruption-friendly playback, named sections, and a companion Mac floating window."
 version = "1.0.0"
@@ -8,7 +8,7 @@ router = "path"
 
 [[services]]
 name = "web"
-paths = [ "/" ]
+paths = [ "/demo/" ]
 localPort = 24952
 
 [services.development]
@@ -20,9 +20,13 @@ serve = "static"
 publicDir = "artifacts/quickque/dist/public"
 
 [[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
+from = "/demo"
+to = "/demo/index.html"
+
+[[services.production.rewrites]]
+from = "/demo/*"
+to = "/demo/index.html"
 
 [services.env]
 PORT = "24952"
-BASE_PATH = "/"
+BASE_PATH = "/demo/"
