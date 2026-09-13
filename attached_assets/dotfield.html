@@ -1,0 +1,1464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#10110f">
+<meta name="description" content="A customisable, fixed-grid dot animation. SVG shapes and generated loops. Works offline.">
+<title>Dotfield · Shapes & generated loops</title>
+<style>:root{color-scheme:dark;--page:#10110f;--panel:#171815;--line:#2d3029;--text:#f0f0e8;--muted:#9b9f92;--faint:#74796d;--accent:#d6e9b4;--accent-ink:#202719;--mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--text);font-family:var(--sans);font-size:14px;-webkit-font-smoothing:antialiased}button,input,select{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.5}button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px}button{border:0}svg{display:block;flex-shrink:0}button,select,a,input{-webkit-tap-highlight-color:transparent}a{color:inherit}header{height:88px;padding:0 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);gap:16px}.brand{display:flex;align-items:center;gap:13px}.brandmark{width:29px;height:29px}.brand h1{font-weight:550;letter-spacing:-1px;font-size:25px;margin:0}.brand-divider{height:22px;width:1px;background:var(--line);margin:0 8px}.brand-note{font-size:12px;color:var(--muted);letter-spacing:.1px}.header-actions{display:flex;gap:10px}.button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);background:transparent;color:var(--text);height:39px;padding:0 14px;border-radius:8px;font-size:12px;font-weight:550;transition:background .15s,border-color .15s}.button:hover{background:#252821;border-color:#454b3c}.button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}.button.primary:hover{background:#e1efc9}.button svg{width:15px;height:15px}.workspace{display:grid;grid-template-columns:minmax(0,1fr) 344px;gap:24px;padding:27px 32px 20px;max-width:2000px;margin:0 auto;height:calc(100dvh - 88px);min-height:740px}.preview-column{min-width:0;display:flex;flex-direction:column;gap:16px}.section-top{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:22px}.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--muted);font-weight:500;line-height:1.5}.eyebrow .number{color:var(--faint);margin-right:10px}.grid-info{font-family:var(--mono);font-size:10px;color:var(--faint);white-space:nowrap}.stage{position:relative;flex:1;min-height:460px;isolation:isolate;overflow:hidden;border:1px solid #2b2e27;border-radius:15px;background:#000}.stage.checkered{background-color:#121411;background-image:linear-gradient(45deg,#22251f 25%,transparent 25%),linear-gradient(-45deg,#22251f 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#22251f 75%),linear-gradient(-45deg,transparent 75%,#22251f 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}.stage canvas{display:block;width:100%;height:100%;position:absolute;inset:0;pointer-events:none}.stage-top{position:absolute;top:19px;left:19px;right:19px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;pointer-events:none}.canvas-caption{background:rgba(15,17,14,.80);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid #ffffff16;display:flex;align-items:center;padding:9px 11px;gap:8px;border-radius:7px;color:#b5bba9;font-family:var(--mono);font-size:10px;letter-spacing:.2px}.live-dot{height:5px;width:5px;background:var(--accent);border-radius:50%;box-shadow:0 0 7px #d6e9b420}.live-dot.paused{background:#838779;box-shadow:none}.focus-button{pointer-events:auto;height:32px;min-width:32px;padding:0 8px;display:flex;gap:8px;align-items:center;justify-content:center;border:1px solid #ffffff20;background:rgba(15,17,14,.80);color:#dce0d3;border-radius:7px;backdrop-filter:blur(8px)}.focus-button:hover{background:#30352c}.focus-button svg{width:14px;height:14px}.focus-label{display:none;font-size:11px}.transport{position:absolute;bottom:19px;left:19px;right:19px;display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(16,18,15,.87);border:1px solid #ffffff21;border-radius:11px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 6px 30px #0002;color:#e9ede2}.transport button{width:31px;height:31px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:transparent;color:inherit;flex-shrink:0}.transport button:hover{background:#ffffff12}.transport button.main-play{background:var(--accent);color:var(--accent-ink)}.transport button.main-play:hover{background:#e5f2d0}.transport svg{width:15px;height:15px}.transport-divider{height:18px;width:1px;background:#ffffff22}.transport input[type=range]{flex:1;min-width:30px;margin:0;height:22px;background:transparent;accent-color:var(--accent);appearance:none}.transport input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:8px;background:linear-gradient(to right,var(--accent) var(--progress,0%),#ffffff20 var(--progress,0%))}.transport input[type=range]::-webkit-slider-thumb{appearance:none;width:9px;height:9px;border-radius:50%;background:var(--accent);margin-top:-3px}.transport input[type=range]::-moz-range-track{height:3px;border-radius:8px;background:#ffffff22}.transport input[type=range]::-moz-range-progress{background:var(--accent);height:3px}.transport input[type=range]::-moz-range-thumb{width:9px;height:9px;border:0;background:var(--accent);border-radius:50%}.phase{font-family:var(--mono);font-size:11px;min-width:42px;text-align:right;color:#c6cfb8;font-variant-numeric:tabular-nums}.loop-tag{font-size:10px;color:#8f9883;font-family:var(--mono);white-space:nowrap}.preview-footer{display:flex;justify-content:space-between;align-items:center;gap:16px;min-height:26px;padding:0 2px}.fixed-note{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11px}.fixed-note svg{width:13px;height:13px;color:var(--accent)}.shortcuts{display:flex;align-items:center;gap:13px;color:var(--faint);font-size:10px}kbd{display:inline-block;padding:2px 5px;margin-right:4px;border:1px solid #363b30;border-radius:4px;font:9px var(--mono);color:#aeb5a3}.sidebar{display:flex;flex-direction:column;min-height:0;overflow:hidden;background:var(--panel);border:1px solid var(--line);border-radius:15px}.sidebar-title{padding:22px 22px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px}.sidebar-title h2{font-size:16px;letter-spacing:-.3px;font-weight:550;margin:0}.reset-button{font-size:11px;background:transparent;color:var(--muted);display:flex;align-items:center;gap:5px;padding:4px 0}.reset-button:hover{color:var(--text)}.reset-button svg{width:12px;height:12px}.tabs{display:grid;grid-template-columns:repeat(3,1fr);margin:0 22px 18px;padding:3px;gap:3px;border-radius:8px;background:#0f110e;border:1px solid #ffffff05}.tab{font-size:11px;height:31px;border-radius:5px;background:transparent;color:var(--muted);transition:background .15s,color .15s}.tab[aria-selected=true]{background:#30352a;color:var(--text);box-shadow:0 1px 3px #0002}.tab:hover{color:var(--text)}.controls-scroll{flex:1;overflow-y:auto;padding:0 22px 20px;scrollbar-width:thin;scrollbar-color:#3b4232 transparent}.control-panel[hidden]{display:none}.group-label{font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.patterns{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:24px}.pattern-card{display:flex;flex-direction:column;align-items:center;gap:7px;min-width:0;padding:10px 3px 8px;border-radius:8px;background:#10120f;border:1px solid #30362a;color:#a8b19a;transition:border-color .15s,background .15s}.pattern-card:hover{border-color:#667553;background:#1b2016}.pattern-card[aria-pressed=true]{background:#252e1c;border-color:#a9c580;color:#e0eccc}.pattern-card svg{width:65px;height:27px}.pattern-card span{font-size:10px}.divider{height:1px;background:var(--line);margin:21px 0}.slider-control{margin:0 0 20px}.slider-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}.slider-heading label{font-size:12px;color:#d3d6cc}.slider-value{font-family:var(--mono);font-size:10px;min-width:49px;text-align:right;color:#bcc6ad;background:#23271e;padding:3px 5px;border:1px solid #3a4130;border-radius:4px;font-variant-numeric:tabular-nums}.slider-control input[type=range]{display:block;width:100%;appearance:none;height:17px;margin:0;background:transparent;cursor:pointer;accent-color:var(--accent)}.slider-control input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:5px;background:linear-gradient(to right,#c1d59e var(--fill,50%),#3a4131 var(--fill,50%))}.slider-control input[type=range]::-webkit-slider-thumb{appearance:none;border:0;height:11px;width:11px;border-radius:50%;background:#d9e9bc;margin-top:-4px;box-shadow:0 0 0 3px var(--panel)}.slider-control input[type=range]::-moz-range-track{height:3px;background:#3a4131}.slider-control input[type=range]::-moz-range-progress{height:3px;background:#c1d59e}.slider-control input[type=range]::-moz-range-thumb{height:11px;width:11px;border:0;background:#d9e9bc;border-radius:50%}.range-labels{display:flex;justify-content:space-between;align-items:center;font-size:9px;color:var(--faint);margin-top:2px}.note{font-size:11px;color:var(--muted);line-height:1.65;margin:0}.note strong{font-weight:500;color:#c8d4b6}.small-card{padding:13px 14px;background:#20251a;border:1px solid #3b4630;border-radius:8px;color:#b4c2a0;font-size:11px;line-height:1.6}.small-card .card-label{display:flex;align-items:center;gap:6px;color:#d5e5bd;font-weight:500;margin-bottom:4px}.small-card svg{width:12px;height:12px}.sidebar-footer{padding:15px 22px;border-top:1px solid var(--line);font-size:10px;color:var(--faint);display:flex;justify-content:space-between;align-items:center;gap:8px}.footer-dot{width:5px;height:5px;background:#69765a;border-radius:50%;display:inline-block;margin-right:6px}.text-button{background:transparent;color:#a8b29c;padding:0;font-size:10px;text-decoration:underline;text-underline-offset:3px}.text-button:hover{color:var(--accent)}.colour-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:22px}.colour-preset{background:#12140f;border:1px solid #353c2c;border-radius:8px;padding:0;color:#bac3af;overflow:hidden;font-size:10px}.colour-preset[aria-pressed=true]{border-color:#b1ca91;color:var(--accent)}.colour-preview{height:37px;display:flex;align-items:center;justify-content:center;gap:6px}.colour-preview i{width:4px;height:4px;border-radius:50%;background:currentColor}.colour-preview i:nth-child(2){width:6px;height:6px}.colour-preview i:nth-child(3){width:8px;height:8px}.colour-preview i:nth-child(4){width:6px;height:6px}.colour-preset span:last-child{display:block;padding:8px 4px}.colour-input-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px}.colour-input-row>label{font-size:12px;color:#d3d6cc}.colour-input-wrap{display:flex;align-items:center;gap:8px;border:1px solid #39402f;background:#11130f;padding:4px 7px 4px 4px;border-radius:6px}.colour-input-wrap input[type=color]{padding:0;height:22px;width:23px;cursor:pointer;background:none;border:none;border-radius:3px}.colour-input-wrap input[type=color]::-webkit-color-swatch-wrapper{padding:0}.colour-input-wrap input[type=color]::-webkit-color-swatch{border:1px solid #ffffff22;border-radius:3px}.colour-input-wrap input[type=text]{width:67px;background:transparent;color:#bdc8b0;font:10px var(--mono);border:0;padding:0;text-transform:uppercase}.toggle-control{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:19px 0}.toggle-text{font-size:12px;color:#d3d6cc}.toggle-text small{display:block;color:var(--faint);font-size:10px;margin-top:5px;line-height:1.5}.switch{position:relative;width:31px;height:18px;flex-shrink:0}.switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:2}.switch-track{position:absolute;inset:0;background:#3b4134;border:1px solid #525c46;border-radius:20px}.switch-track:before{content:"";position:absolute;width:12px;height:12px;top:2px;left:2px;border-radius:50%;background:#a4ad98;transition:transform .15s}.switch input:checked+.switch-track{background:#bbd59a;border-color:#bbd59a}.switch input:checked+.switch-track:before{transform:translateX(13px);background:#26331b}.switch input:focus-visible+.switch-track{outline:2px solid var(--accent);outline-offset:4px}.reduced-notice{display:none;margin-bottom:16px;color:#d5e5bd;background:#27301e;border:1px solid #536542;border-radius:7px;padding:11px;font-size:11px;line-height:1.6}.reduced-notice.visible{display:block}.stage.focused{position:fixed;inset:0;width:100dvw;height:100dvh;min-height:0;border:0;border-radius:0;z-index:100}.stage.focused .stage-top{top:24px;left:24px;right:24px}.stage.focused .transport{left:50%;right:auto;transform:translateX(-50%);width:min(640px,calc(100% - 48px));bottom:24px}.stage.focused .focus-label{display:inline}.stage.focused .focus-button{padding:0 10px}.visually-hidden{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+/* Export dialog */
+dialog{width:min(720px,calc(100vw - 32px));max-height:calc(100dvh - 48px);padding:0;border:1px solid #454d39;border-radius:16px;background:#171a13;color:var(--text);box-shadow:0 30px 130px #000b;overflow:auto}dialog::backdrop{background:#0009;backdrop-filter:blur(6px)}.dialog-header{display:flex;justify-content:space-between;gap:15px;padding:25px 26px 0;align-items:flex-start}.dialog-header h2{font-size:21px;font-weight:500;letter-spacing:-.6px;margin:0 0 7px}.dialog-header p{font-size:12px;color:var(--muted);line-height:1.6;margin:0}.close-button{width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:var(--muted);background:#252b1e;border:1px solid #3c4630;border-radius:6px}.close-button:hover{color:var(--text)}.close-button svg{width:14px;height:14px}.dialog-body{padding:22px 26px}.code-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}.code-tabs{display:flex;gap:4px;padding:3px;border-radius:6px;background:#0f120d}.code-tab{color:var(--muted);background:transparent;font-size:11px;padding:7px 11px;border-radius:4px}.code-tab[aria-selected=true]{background:#2c3523;color:var(--accent)}.code-label{font:10px var(--mono);color:var(--faint)}pre{margin:0;background:#0b0e09;border:1px solid #303b24;border-radius:10px;padding:20px;max-height:300px;overflow:auto;font:11px/1.8 var(--mono);color:#c4d5ad;tab-size:2;white-space:pre}.code-actions{margin-top:12px;display:flex;gap:9px;justify-content:flex-end}.export-extras{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:22px}.export-extra{background:#20271a;border:1px solid #39462a;border-radius:9px;padding:15px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;text-align:left;color:var(--text)}.export-extra:hover{background:#2a3521;border-color:#708b50}.export-extra svg{width:14px;height:14px;color:var(--accent);margin-top:2px}.export-extra strong{display:block;font-size:12px;font-weight:500;margin-bottom:5px}.export-extra span{font-size:10px;color:var(--muted);line-height:1.6}.dialog-footnote{padding-top:18px;color:var(--faint);font-size:10px;line-height:1.7}.toast{position:fixed;left:50%;bottom:25px;z-index:200;transform:translate(-50%,15px);opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;background:#d6e9b4;color:#24311b;padding:12px 18px;border:1px solid #eef8db;border-radius:9px;box-shadow:0 8px 40px #0005;font-size:12px;max-width:calc(100vw - 32px);text-align:center}.toast.visible{opacity:1;transform:translate(-50%,0)}.error-state{padding:30px;font-size:14px;line-height:1.7;color:#e9d7b9}.footer-version{font-family:var(--mono);font-size:9px}
+@media(min-width:1700px){.workspace{grid-template-columns:minmax(0,1fr) 370px;gap:30px}.sidebar-title{padding-top:26px}.patterns{gap:10px}.pattern-card{padding-top:14px;padding-bottom:10px}.pattern-card svg{height:33px}.slider-control{margin-bottom:25px}}
+@media(max-width:1100px){header{padding:0 24px}.workspace{padding:23px 24px 20px;grid-template-columns:minmax(0,1fr) 312px;gap:20px}.sidebar-title{padding-left:18px;padding-right:18px}.tabs{margin-left:18px;margin-right:18px}.controls-scroll{padding-left:18px;padding-right:18px}.sidebar-footer{padding-left:18px;padding-right:18px}.shortcuts{display:none}.brand-note{display:none}.brand-divider{display:none}.loop-tag{display:none}}
+@media(max-width:780px){header{height:73px;padding:0 18px}.brand h1{font-size:23px}.brandmark{width:25px;height:25px}.header-actions{gap:7px}.button{padding:0 11px;height:36px}.workspace{display:flex;flex-direction:column;padding:22px 18px 24px;height:auto;min-height:0;gap:22px}.preview-column{gap:12px}.stage{flex:none;height:min(76vw,530px);min-height:310px}.sidebar{min-height:0}.sidebar-title{padding-top:20px}.controls-scroll{max-height:none;overflow:visible;padding-bottom:10px}.patterns{grid-template-columns:repeat(6,1fr);gap:6px}.pattern-card svg{width:100%;max-width:65px;height:26px}.pattern-card span{font-size:9px}.sliders{display:grid;grid-template-columns:1fr 1fr;gap:0 25px}.tabs{margin-bottom:20px}.sidebar-footer{padding:15px 18px}.small-card{margin-bottom:12px}.colour-presets{grid-template-columns:repeat(6,1fr)}.transport{left:12px;right:12px;bottom:12px;gap:9px;padding:7px 9px}.stage-top{top:12px;left:12px;right:12px}.canvas-caption{font-size:9px;padding:8px 9px}.preview-footer{min-height:24px}.colour-input-row{max-width:420px}.export-extras{gap:8px}.grid-info{font-size:9px}}
+@media(max-width:450px){.header-actions .save-frame-label{display:none}.header-actions .save-frame{width:35px;padding:0}.brand{gap:9px}.workspace{padding:18px 14px}.patterns{grid-template-columns:repeat(3,1fr);gap:8px}.pattern-card{padding:10px 5px 9px}.pattern-card span{font-size:10px}.pattern-card svg{height:28px}.colour-presets{grid-template-columns:repeat(3,1fr)}.sliders{gap:0 18px}.slider-heading label{font-size:11px}.slider-value{font-size:9px;min-width:40px}.range-labels{font-size:8px}.dialog-header{padding:22px 18px 0}.dialog-body{padding:19px 18px}.export-extras{grid-template-columns:1fr}.code-actions{justify-content:stretch}.code-actions .button{flex:1}.grid-info .grid-dimensions{display:none}.stage{min-height:310px;height:84vw}.phase{min-width:35px}.transport-divider{display:none}.fixed-note{font-size:10px}.code-label{display:none}pre{font-size:10px;padding:15px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
+
+/* Vector layer and seeded loop generation */
+[hidden]{display:none!important}.tabs{grid-template-columns:repeat(4,1fr)}.random-tools{display:flex;gap:8px;margin:0 22px 17px}.random-tools .primary{flex:1;justify-content:flex-start}.random-key{margin-left:auto;font:9px var(--mono);border:1px solid #52623c55;border-radius:4px;padding:2px 4px}.random-tools .undo-button{width:39px;padding:0}.tab-indicator{display:none;width:4px;height:4px;background:var(--accent);border-radius:50%;vertical-align:middle;margin-left:5px}.tab-indicator.active{display:inline-block}.pattern-card[data-pattern=generated]{grid-column:1/-1;flex-direction:row;justify-content:center;gap:13px;padding:8px}.pattern-card[data-pattern=generated] svg{height:22px}.pattern-card[data-pattern=generated] span{font-size:11px}.seed-controls{border:1px solid #3b4531;border-radius:9px;padding:12px;margin:0 0 21px;background:#1b2016}.seed-heading{display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:9px}.seed-heading span{font-size:9px;color:var(--faint)}.seed-row{display:flex;gap:7px;margin-bottom:15px}.seed-row input{background:#10130d;border:1px solid #3d4930;border-radius:6px;color:var(--accent);padding:8px 10px;font:11px var(--mono);width:100%;min-width:0}.seed-row button{height:34px;font-size:10px;padding:0 11px}.seed-controls .slider-control{margin-bottom:0}.seed-controls .range-labels{margin-top:3px}.shape-intro{margin:0 0 15px}.svg-drop{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;background:#11160e;color:var(--text);border:1px dashed #566546;border-radius:10px;width:100%;min-height:130px;padding:19px 12px;transition:background .15s,border-color .15s}.svg-drop:hover,.svg-drop.dragging{background:#24301a;border-color:var(--accent)}.svg-drop>span:first-child{padding:9px;border:1px solid #424e35;border-radius:8px;background:#222b1b;color:var(--accent);margin-bottom:2px}.svg-drop svg{width:19px;height:19px}.svg-drop strong{font-size:11px;font-weight:500}.svg-drop>span:last-child{font-size:10px;color:var(--muted)}.shape-card{display:flex;gap:11px;align-items:center;background:#11160e;border:1px solid #3c4b2e;border-radius:10px;padding:12px;margin-bottom:14px}.shape-thumb{width:54px;height:54px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:repeating-conic-gradient(#727867 0% 25%,#8e9580 0% 50%) 50%/12px 12px;border-radius:7px;overflow:hidden}.shape-thumb img{width:44px;height:44px;object-fit:contain}.shape-file-detail{display:flex;flex-direction:column;align-items:flex-start;gap:5px;flex:1;min-width:0}.shape-file-detail strong{font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}.shape-file-detail>span{font-size:9px;color:var(--faint)}.shape-file-detail button{font-size:9px}.remove-shape{align-self:flex-start;background:none;color:var(--muted);padding:1px}.remove-shape svg{width:13px;height:13px}.shape-sample-label{font-size:10px;color:var(--faint);margin:17px 0 9px}.shape-samples{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:16px}.shape-sample{background:#11150e;border:1px solid #35412a;border-radius:8px;padding:10px 4px 8px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:8px;font-size:9px}.shape-sample:hover,.shape-sample[aria-pressed=true]{background:#27321e;border-color:#93ad6f;color:var(--accent)}.shape-sample img{width:28px;height:28px;object-fit:contain;opacity:.85}.select-control{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 16px;font-size:11px;color:#d3d6cc}.select-control select{min-width:0;max-width:67%;border:1px solid #3d4832;background:#11160d;color:#c9d9b3;border-radius:6px;padding:8px;font-size:10px;cursor:pointer}.shape-advanced{margin:0 0 18px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.shape-advanced summary{font-size:11px;color:var(--muted);cursor:pointer;list-style:none;padding:15px 0;display:flex;align-items:center;justify-content:space-between}.shape-advanced summary::-webkit-details-marker{display:none}.shape-advanced summary span{font-size:15px;color:var(--faint)}.shape-advanced[open] summary span{transform:rotate(45deg)}.shape-advanced[open] summary{margin-bottom:6px;color:var(--accent)}.channel-note{margin:0 0 20px;font-size:10px}.svg-note{margin-top:20px;font-size:10px;color:var(--faint)}.shape-error{border:1px solid #705344;border-radius:8px;background:#30231b;color:#f5d5b7;font-size:11px;line-height:1.6;padding:11px;margin-top:12px}.drop-overlay{position:absolute;inset:0;z-index:20;pointer-events:none;opacity:0;background:#10190def;backdrop-filter:blur(8px);border:2px dashed #bad992;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}.drop-overlay strong{font-size:24px;font-weight:500;letter-spacing:-.6px;color:var(--accent)}.drop-overlay span{font-size:12px;color:var(--muted)}.stage.dragging .drop-overlay{opacity:1}.canvas-caption{max-width:calc(100% - 46px)}#canvas-state{white-space:nowrap;text-overflow:ellipsis;overflow:hidden}.sidebar-footer>span{min-width:0}.sidebar-footer .text-button{white-space:nowrap}
+@media(max-width:1100px){.random-tools{margin-left:18px;margin-right:18px}}
+@media(max-width:780px){.patterns{grid-template-columns:repeat(3,1fr)}.shape-samples{max-width:440px}.svg-drop{min-height:115px}.shape-card{max-width:520px}.select-control{max-width:480px}.seed-controls #generated-sliders{display:block}.shape-advanced .select-control{max-width:none}.shape-advanced .select-control select{max-width:66%}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg class="brandmark" viewBox="0 0 29 29" fill="currentColor" aria-hidden="true"><circle cx="4" cy="4" r="1.7" opacity=".4"/><circle cx="14.5" cy="4" r="2" opacity=".55"/><circle cx="25" cy="4" r="1.7" opacity=".4"/><circle cx="4" cy="14.5" r="2.8" opacity=".7"/><circle cx="14.5" cy="14.5" r="3.6"/><circle cx="25" cy="14.5" r="2.8" opacity=".7"/><circle cx="4" cy="25" r="2.3" opacity=".65"/><circle cx="14.5" cy="25" r="3" opacity=".8"/><circle cx="25" cy="25" r="2.3" opacity=".65"/></svg>
+    <h1>Dotfield</h1><div class="brand-divider"></div><span class="brand-note">Fixed-grid motion</span>
+  </div>
+  <div class="header-actions">
+    <button class="button save-frame" id="save-frame" title="Save the canvas as a PNG"><span data-icon="image"></span><span class="save-frame-label">Save frame</span></button>
+    <button class="button primary" id="open-export">Export<span data-icon="arrow-up-right"></span></button>
+  </div>
+</header>
+<main class="workspace">
+  <section class="preview-column" aria-label="Animation preview">
+    <div class="section-top"><div class="eyebrow"><span class="number">01 /</span>LIVE PREVIEW</div><div class="grid-info" id="grid-info">Preparing the grid</div></div>
+    <div class="stage" id="stage">
+      <canvas id="field" aria-label="Animated fixed grid of dots" role="img"></canvas>
+      <div class="drop-overlay" id="stage-drop" aria-hidden="true"><strong>Drop your SVG here</strong><span>Your artwork becomes part of the dot field.</span></div>
+      <div class="stage-top"><div class="canvas-caption"><span class="live-dot" id="live-dot"></span><span id="canvas-state">Reference · Live</span></div><button class="focus-button" id="focus" title="Focus mode (F)" aria-label="Enter focus mode" aria-pressed="false"><span data-icon="expand"></span><span class="focus-label">Exit focus</span></button></div>
+      <div class="transport" aria-label="Playback controls">
+        <button class="main-play" id="play" title="Pause (Space)" aria-label="Pause animation"><span data-icon="pause"></span></button>
+        <button id="restart" title="Restart the animation (R)" aria-label="Restart animation"><span data-icon="restart"></span></button>
+        <span class="transport-divider"></span><span class="loop-tag">PHASE</span>
+        <input id="timeline" type="range" min="0" max="100" step="0.1" value="0" aria-label="Animation phase. Adjusting this pauses the animation.">
+        <output id="phase" class="phase">0%</output>
+      </div>
+    </div>
+    <div class="preview-footer"><div class="fixed-note"><span data-icon="crosshair"></span>Fixed grid. No drifting particles.</div><div class="shortcuts"><span><kbd>Space</kbd>pause</span><span><kbd>F</kbd>focus</span><span><kbd>N</kbd>new loop</span></div></div>
+  </section>
+  <aside class="sidebar" aria-label="Field controls">
+    <div class="sidebar-title"><h2>Field controls</h2><button class="reset-button" id="reset" title="Restore the reference settings"><span data-icon="restart"></span>Reset</button></div>
+    <div class="random-tools"><button class="button primary" id="randomize" title="Generate a new seamless loop (N)"><span data-icon="shuffle"></span>Randomise<span class="random-key">N</span></button><button class="button undo-button" id="undo-random" title="Undo the last randomisation" aria-label="Undo randomisation" disabled><span data-icon="undo"></span></button></div>
+    <div class="tabs" role="tablist" aria-label="Control categories"><button class="tab" id="tab-motion" role="tab" aria-selected="true" aria-controls="panel-motion" data-tab="motion">Motion</button><button class="tab" id="tab-shape" role="tab" aria-selected="false" aria-controls="panel-shape" tabindex="-1" data-tab="shape">Shape<span class="tab-indicator" id="shape-indicator"></span></button><button class="tab" id="tab-dots" role="tab" aria-selected="false" aria-controls="panel-dots" tabindex="-1" data-tab="dots">Dots</button><button class="tab" id="tab-colour" role="tab" aria-selected="false" aria-controls="panel-colour" tabindex="-1" data-tab="colour">Colour</button></div>
+    <div class="controls-scroll">
+      <div class="reduced-notice" id="reduced-notice">Your device has reduced motion enabled. The field is paused. You can change this under Colour.</div>
+      <section class="control-panel" id="panel-motion" role="tabpanel" aria-labelledby="tab-motion"><div class="group-label">Pattern<span id="pattern-count">01 / 06</span></div><div class="patterns" id="patterns"></div><div class="seed-controls" id="seed-controls" hidden><div class="seed-heading"><label for="seed-input">Loop seed</label><span>Recreate a favourite</span></div><div class="seed-row"><input id="seed-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="10" aria-label="Loop seed"><button class="button" id="apply-seed">Apply</button></div><div id="generated-sliders"></div></div><div class="sliders" id="motion-sliders"></div><p class="note">The dots stay anchored. The wave changes their size and, optionally, their brightness.</p></section>
+      <section class="control-panel" id="panel-shape" role="tabpanel" aria-labelledby="tab-shape" hidden>
+        <div class="group-label">Vector layer<span>SVG</span></div>
+        <p class="note shape-intro">Move a shape through the field. The dots stay fixed and reveal its silhouette.</p>
+        <button class="svg-drop" id="upload-shape"><span data-icon="upload"></span><strong>Drop an SVG, or choose a file</strong><span>A logo, icon or simple vector. Up to 1 MB.</span></button>
+        <input id="shape-file" type="file" accept=".svg,image/svg+xml" hidden>
+        <div class="shape-card" id="shape-card" hidden><div class="shape-thumb"><img id="shape-preview" alt="Loaded vector preview"></div><div class="shape-file-detail"><strong id="shape-name"></strong><span>SVG · saved on this device</span><button class="text-button" id="replace-shape">Replace</button></div><button class="remove-shape" id="remove-shape" title="Remove shape" aria-label="Remove shape"><span data-icon="close"></span></button></div>
+        <div class="shape-error" id="shape-error" role="alert" hidden></div>
+        <div class="shape-sample-label">Or try a shape</div><div class="shape-samples" id="shape-samples"></div>
+        <div id="shape-settings" hidden>
+          <div id="shape-toggle"></div>
+          <label class="select-control"><span>Path</span><select id="setting-shapeMotion" data-select="shapeMotion"><option value="float">Gentle float</option><option value="orbit">Orbit</option><option value="figure8">Figure of eight</option><option value="still">Centred</option></select></label>
+          <label class="select-control"><span>Appearance</span><select id="setting-shapeMode" data-select="shapeMode"><option value="blend">Dots + shape</option><option value="only">Shape only</option><option value="cutout">Cut-out</option></select></label>
+          <div class="sliders" id="shape-sliders"></div>
+          <details class="shape-advanced"><summary>Rotation & detail<span>+</span></summary>
+            <label class="select-control"><span>Read artwork from</span><select id="setting-shapeChannel" data-select="shapeChannel"><option value="alpha">Transparency / silhouette</option><option value="dark">Dark artwork on light</option><option value="light">Light artwork on dark</option></select></label>
+            <p class="note channel-note">Seeing a rectangle? Choose dark or light artwork to ignore an opaque background.</p>
+            <div class="sliders" id="shape-extra-sliders"></div>
+          </details>
+          <p class="note">Position, rotation and pulse share the field's loop. Space pauses everything.</p>
+        </div>
+        <p class="note svg-note">SVG artwork stays in this browser. For fine detail, reduce spacing in Dots. Convert text to outlines. Embedded images and external assets are removed.</p>
+      </section>
+      <section class="control-panel" id="panel-dots" role="tabpanel" aria-labelledby="tab-dots" hidden><div class="group-label">The grid</div><div class="sliders" id="dot-sliders"></div><div class="small-card"><div class="card-label"><span data-icon="crosshair"></span>Always in place</div>Dot centres only change when you resize the canvas or change the spacing. Dot sizes are capped to keep them separate.</div></section>
+      <section class="control-panel" id="panel-colour" role="tabpanel" aria-labelledby="tab-colour" hidden><div class="group-label">Palette</div><div class="colour-presets" id="palettes"></div>
+        <div class="colour-input-row"><label for="dotColor">Dots</label><div class="colour-input-wrap"><input id="dotColor" type="color" value="#ececec" aria-label="Dot colour"><input id="dotColor-hex" type="text" value="#ECECEC" aria-label="Dot colour hex value" maxlength="7" spellcheck="false"></div></div>
+        <div class="colour-input-row"><label for="backgroundColor">Background</label><div class="colour-input-wrap"><input id="backgroundColor" type="color" value="#000000" aria-label="Background colour"><input id="backgroundColor-hex" type="text" value="#000000" aria-label="Background colour hex value" maxlength="7" spellcheck="false"></div></div>
+        <div id="colour-toggles"></div><div class="divider"></div><div class="sliders" id="colour-sliders"></div><div id="accessibility-toggle"></div>
+      </section>
+    </div>
+    <div class="sidebar-footer"><span><span class="footer-dot"></span><span id="save-status">Settings saved on this device</span></span><button class="text-button" id="import-settings">Import JSON</button><input type="file" id="import-file" accept=".json,application/json" hidden></div>
+  </aside>
+</main>
+<dialog id="export-dialog" aria-labelledby="export-title">
+  <div class="dialog-header"><div><h2 id="export-title">Take it with you.</h2><p>Your component, loop, vector artwork and settings.</p></div><button class="close-button" id="close-export" aria-label="Close export dialog"><span data-icon="close"></span></button></div>
+  <div class="dialog-body"><div class="code-top"><div class="code-tabs" role="tablist" aria-label="Export format"><button class="code-tab" id="export-tab-react" role="tab" aria-selected="true" aria-controls="code-export" data-format="react">React</button><button class="code-tab" id="export-tab-json" role="tab" aria-selected="false" aria-controls="code-export" tabindex="-1" data-format="json">Settings</button></div><span class="code-label" id="code-language">TSX · no animation library</span></div><pre id="code-export" role="tabpanel" aria-labelledby="export-tab-react" tabindex="0"><code id="export-code"></code></pre><div class="code-actions"><button class="button" id="download-settings"><span data-icon="download"></span>Save JSON</button><button class="button primary" id="copy-code"><span data-icon="copy"></span>Copy snippet</button></div><div class="export-extras"><button class="export-extra" id="download-react"><div><strong>React component</strong><span>One .tsx file, renderer and controls.<br>Works with React 18 and 19.</span></div><span data-icon="download"></span></button><button class="export-extra" id="dialog-save-frame"><div><strong>Save this frame</strong><span>PNG at the current canvas resolution.<br>No interface, just the dots.</span></div><span data-icon="image"></span></button></div><div class="dialog-footnote">The HTML demo runs offline. The React component needs React in your project, but no animation package or other runtime dependency.</div></div>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<noscript><p class="error-state">Enable JavaScript to render the dot field and use the controls.</p></noscript>
+<script type="module">export const PATTERNS = [
+    'reference', 'tide', 'crosswave', 'ripple', 'breath', 'sweep', 'generated',
+];
+export const DEFAULT_CONFIG = Object.freeze({
+    pattern: 'reference',
+    seed: 271828,
+    complexity: 4,
+    shapeEnabled: true,
+    shapeMotion: 'float',
+    shapeMode: 'blend',
+    shapeChannel: 'alpha',
+    shapeSize: 0.82,
+    shapeTravel: 0.65,
+    shapeIntensity: 1,
+    shapeSoftness: 0.12,
+    shapeBackground: 0.18,
+    shapeRotation: 0,
+    shapeSpin: 0,
+    shapePulse: 0.08,
+    shapeCycles: 1,
+    spacing: 26,
+    minRadius: 1.05,
+    maxRadius: 5.1,
+    speed: 0.65,
+    duration: 24,
+    scale: 1,
+    depth: 1,
+    contrast: 1,
+    angle: 0,
+    dotColor: '#ececec',
+    backgroundColor: '#000000',
+    opacity: 0.97,
+    minOpacity: 0.19,
+    varyOpacity: true,
+    edgeFade: 0,
+    transparent: false,
+    respectReducedMotion: true,
+});
+const TAU = Math.PI * 2;
+const clamp = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
+const smoothstep = (lo, hi, x) => {
+    const t = clamp((x - lo) / (hi - lo));
+    return t * t * (3 - 2 * t);
+};
+const finite = (x, fallback, min, max) => clamp(typeof x === 'number' && Number.isFinite(x) ? x : fallback, min, max);
+const colour = (x, fallback) => {
+    if (typeof x !== 'string' || !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(x))
+        return fallback;
+    return (x.length === 4 ? '#' + x.slice(1).split('').map(c => c + c).join('') : x).toLowerCase();
+};
+/** Validate imported settings and enforce non-overlapping dots. */
+export function normalizeConfig(input = {}) {
+    const d = DEFAULT_CONFIG;
+    const spacing = finite(input.spacing, d.spacing, 8, 80);
+    const maxRadius = finite(input.maxRadius, d.maxRadius, 0.25, Math.min(24, spacing * 0.46));
+    return {
+        pattern: PATTERNS.includes(input.pattern) ? input.pattern : d.pattern,
+        seed: Math.floor(finite(input.seed, d.seed, 0, 4294967295)),
+        complexity: Math.round(finite(input.complexity, d.complexity, 2, 7)),
+        shapeEnabled: typeof input.shapeEnabled === 'boolean' ? input.shapeEnabled : d.shapeEnabled,
+        shapeMotion: ['float', 'orbit', 'figure8', 'still'].includes(input.shapeMotion) ? input.shapeMotion : d.shapeMotion,
+        shapeMode: ['blend', 'only', 'cutout'].includes(input.shapeMode) ? input.shapeMode : d.shapeMode,
+        shapeChannel: ['alpha', 'dark', 'light'].includes(input.shapeChannel) ? input.shapeChannel : d.shapeChannel,
+        shapeSize: finite(input.shapeSize, d.shapeSize, 0.15, 1.6),
+        shapeTravel: finite(input.shapeTravel, d.shapeTravel, 0, 1),
+        shapeIntensity: finite(input.shapeIntensity, d.shapeIntensity, 0, 1),
+        shapeSoftness: finite(input.shapeSoftness, d.shapeSoftness, 0, 1),
+        shapeBackground: finite(input.shapeBackground, d.shapeBackground, 0, 1),
+        shapeRotation: finite(input.shapeRotation, d.shapeRotation, 0, 360),
+        shapeSpin: Math.round(finite(input.shapeSpin, d.shapeSpin, -3, 3)),
+        shapePulse: finite(input.shapePulse, d.shapePulse, 0, 0.5),
+        shapeCycles: Math.round(finite(input.shapeCycles, d.shapeCycles, 1, 4)),
+        spacing,
+        minRadius: finite(input.minRadius, d.minRadius, 0, maxRadius),
+        maxRadius,
+        speed: finite(input.speed, d.speed, 0, 3),
+        duration: finite(input.duration, d.duration, 6, 120),
+        scale: finite(input.scale, d.scale, 0.35, 3),
+        depth: finite(input.depth, d.depth, 0, 1),
+        contrast: finite(input.contrast, d.contrast, 0.35, 3),
+        angle: finite(input.angle, d.angle, 0, 360),
+        dotColor: colour(input.dotColor, d.dotColor),
+        backgroundColor: colour(input.backgroundColor, d.backgroundColor),
+        opacity: finite(input.opacity, d.opacity, 0, 1),
+        minOpacity: finite(input.minOpacity, d.minOpacity, 0, 1),
+        varyOpacity: typeof input.varyOpacity === 'boolean' ? input.varyOpacity : d.varyOpacity,
+        edgeFade: finite(input.edgeFade, d.edgeFade, 0, 1),
+        transparent: typeof input.transparent === 'boolean' ? input.transparent : d.transparent,
+        respectReducedMotion: typeof input.respectReducedMotion === 'boolean'
+            ? input.respectReducedMotion : d.respectReducedMotion,
+    };
+}
+/** Deterministic PRNG. Used for recipes, never for per-frame noise. */
+function seededRandom(seed) {
+    let a = seed >>> 0;
+    return () => {
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+export function newRandomSeed() {
+    if (typeof globalThis.crypto?.getRandomValues === 'function') {
+        return globalThis.crypto.getRandomValues(new Uint32Array(1))[0];
+    }
+    return Math.floor(Math.random() * 4294967296);
+}
+/** Keep the grid, colours, vector asset and accessibility choices intact. */
+export function randomizeConfig(base = {}, seed = newRandomSeed()) {
+    seed = Math.floor(finite(seed, DEFAULT_CONFIG.seed, 0, 4294967295));
+    const random = seededRandom(seed);
+    const between = (a, b) => a + random() * (b - a);
+    const round = (v) => Math.round(v * 100) / 100;
+    const choose = (values) => values[Math.floor(random() * values.length)];
+    return normalizeConfig({
+        ...normalizeConfig(base), pattern: 'generated', seed,
+        complexity: choose([3, 4, 4, 5, 6]),
+        scale: round(between(0.65, 1.65)),
+        angle: Math.round(between(0, 360)),
+        contrast: round(between(1.05, 2.15)),
+        depth: round(between(0.85, 1)),
+        speed: choose([0.5, 0.65, 0.8, 1, 1.2]),
+        duration: choose([12, 16, 18, 20, 24, 30, 36]),
+        shapeMotion: choose(['float', 'orbit', 'figure8']),
+        shapeTravel: round(between(0.35, 0.9)),
+        shapeSpin: choose([-1, 0, 0, 0, 1]),
+        shapePulse: round(between(0.04, 0.18)),
+        shapeCycles: choose([1, 1, 1, 2]),
+    });
+}
+const recipeCache = new Map();
+function getRecipe(seed, count) {
+    const key = `${seed}:${count}`;
+    const existing = recipeCache.get(key);
+    if (existing)
+        return existing;
+    const random = seededRandom(seed);
+    const result = [];
+    for (let i = 0; i < count; i++) {
+        const direction = random() * TAU;
+        const frequency = 3 + random() * 8;
+        result.push({
+            ax: Math.cos(direction) * frequency, ay: Math.sin(direction) * frequency,
+            cycle: (1 + Math.floor(random() * 3)) * (random() > 0.5 ? 1 : -1),
+            counter: 1 + Math.floor(random() * 2), offset: random() * TAU,
+            warp: 0.2 + random() * 1.1, weight: (i === 0 ? 1.8 : 0.3 + random() * 0.7),
+        });
+    }
+    if (recipeCache.size >= 32)
+        recipeCache.delete(recipeCache.keys().next().value);
+    recipeCache.set(key, result);
+    return result;
+}
+export const BUILTIN_SHAPES = [
+    { name: 'Bloom', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><g fill="white"><ellipse cx="100" cy="61" rx="26" ry="49"/><ellipse cx="100" cy="61" rx="26" ry="49" transform="rotate(60 100 100)"/><ellipse cx="100" cy="61" rx="26" ry="49" transform="rotate(120 100 100)"/><ellipse cx="100" cy="61" rx="26" ry="49" transform="rotate(180 100 100)"/><ellipse cx="100" cy="61" rx="26" ry="49" transform="rotate(240 100 100)"/><ellipse cx="100" cy="61" rx="26" ry="49" transform="rotate(300 100 100)"/></g></svg>' },
+    { name: 'Ring', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><circle cx="100" cy="100" r="69" fill="none" stroke="white" stroke-width="40"/></svg>' },
+    { name: 'Bolt', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240"><path fill="white" d="M113 10 28 136H88L68 229 174 96H112L143 10Z"/></svg>' },
+    { name: 'Heart', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 190"><path fill="white" d="M100 176C81 160 14 112 14 65 14 17 70 2 100 43 130 2 186 17 186 65 186 112 119 160 100 176Z"/></svg>' },
+];
+const SVG_NS = 'http://www.w3.org/2000/svg';
+export const MAX_SVG_BYTES = 1000000;
+const SVG_TAGS = new Set(['svg', 'g', 'path', 'circle', 'rect', 'ellipse', 'line', 'polygon', 'polyline',
+    'defs', 'clipPath', 'mask', 'linearGradient', 'radialGradient', 'stop', 'pattern', 'symbol', 'use',
+    'text', 'tspan', 'title', 'desc', 'style']);
+const SVG_ATTRS = new Set(('id class viewBox preserveAspectRatio x y x1 y1 x2 y2 dx dy cx cy r rx ry width height d points '
+    + 'transform fill fill-opacity fill-rule clip-rule stroke stroke-width stroke-opacity stroke-linecap stroke-linejoin '
+    + 'stroke-miterlimit stroke-dasharray stroke-dashoffset opacity color clip-path mask gradientUnits gradientTransform '
+    + 'spreadMethod offset stop-color stop-opacity fx fy fr patternUnits patternContentUnits patternTransform '
+    + 'clipPathUnits maskUnits maskContentUnits font-family font-size font-weight font-style text-anchor '
+    + 'dominant-baseline letter-spacing word-spacing textLength lengthAdjust display visibility vector-effect').split(' '));
+const STYLE_ATTRS = new Set(('fill fill-opacity fill-rule clip-rule stroke stroke-width stroke-opacity stroke-linecap '
+    + 'stroke-linejoin stroke-miterlimit stroke-dasharray stroke-dashoffset opacity color clip-path mask stop-color '
+    + 'stop-opacity font-family font-size font-weight font-style text-anchor dominant-baseline letter-spacing '
+    + 'word-spacing display visibility vector-effect transform transform-origin transform-box').split(' '));
+function safeSVGValue(value) {
+    if (value.length > 200000 || /[\\<>@]|javascript\s*:|data\s*:|https?\s*:|\/\/|expression\s*\(|var\s*\(|env\s*\(/i.test(value))
+        return null;
+    // Only local fragment references are allowed. No files, remote URLs or data URIs.
+    if (/url\s*\(/i.test(value)
+        && !/^url\(\s*['"]?#[\w.:-]+['"]?\s*\)(?:\s+(?:none|#[\da-f]+))?$/i.test(value.trim()))
+        return null;
+    return value;
+}
+function cleanDeclarations(css) {
+    return css.split(';').map(declaration => {
+        const colon = declaration.indexOf(':');
+        if (colon < 0)
+            return '';
+        const key = declaration.slice(0, colon).trim().toLowerCase();
+        const value = safeSVGValue(declaration.slice(colon + 1).trim());
+        return STYLE_ATTRS.has(key) && value !== null ? `${key}:${value}` : '';
+    }).filter(Boolean).join(';');
+}
+function cleanStylesheet(css) {
+    css = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    if (/[@\\]/.test(css))
+        return '';
+    let result = '';
+    for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selector = match[1].trim();
+        if (!/^[\w\s.#,:>+~*\[\]="'|()-]+$/.test(selector))
+            continue;
+        const declarations = cleanDeclarations(match[2]);
+        if (declarations)
+            result += `${selector}{${declarations}}`;
+    }
+    return result;
+}
+/**
+ * Restrict an SVG to static, self-contained vector artwork. This is not a general
+ * HTML sanitizer. The result must only be used as an image, never as innerHTML.
+ * No script, external resources, embedded bitmap, HTML, or SVG/CSS animation.
+ */
+export function sanitizeSVGShape(source, name = 'Custom shape') {
+    if (typeof source !== 'string' || !source.trim())
+        throw new Error('Choose an SVG file containing vector artwork.');
+    if (new TextEncoder().encode(source).length > MAX_SVG_BYTES)
+        throw new Error('Use an SVG smaller than 1 MB.');
+    if (/<!ENTITY/i.test(source) || /<!DOCTYPE[^>]*\[/i.test(source))
+        throw new Error('SVG documents with custom entities are not supported.');
+    source = source.replace(/<!DOCTYPE[^>]*>/gi, '');
+    const doc = new DOMParser().parseFromString(source, 'image/svg+xml');
+    const root = doc.documentElement;
+    if (doc.querySelector('parsererror') || root.localName !== 'svg'
+        || (root.namespaceURI && root.namespaceURI !== SVG_NS))
+        throw new Error('This file is not a valid SVG. Re-export the artwork as SVG.');
+    if (doc.getElementsByTagName('*').length > 4000)
+        throw new Error('This SVG is too complex. Simplify it to fewer than 4,000 elements.');
+    const output = document.implementation.createDocument(SVG_NS, 'svg', null);
+    function copyNode(node, depth = 0) {
+        if (depth > 64)
+            throw new Error('This SVG is too deeply nested. Flatten the artwork before exporting.');
+        if (!SVG_TAGS.has(node.localName) || (node.namespaceURI && node.namespaceURI !== SVG_NS))
+            return null;
+        const target = output.createElementNS(SVG_NS, node.localName);
+        for (const attr of Array.from(node.attributes)) {
+            if (attr.localName === 'href' && /^#[\w.:-]+$/.test(attr.value))
+                target.setAttribute('href', attr.value);
+            else if (attr.name === 'style')
+                target.setAttribute('style', cleanDeclarations(attr.value));
+            else if (SVG_ATTRS.has(attr.name)) {
+                const safe = safeSVGValue(attr.value);
+                if (safe !== null)
+                    target.setAttribute(attr.name, safe);
+            }
+        }
+        if (node.localName === 'style')
+            target.textContent = cleanStylesheet(node.textContent || '');
+        else
+            for (const child of Array.from(node.childNodes)) {
+                if (child.nodeType === 1) {
+                    const copied = copyNode(child, depth + 1);
+                    if (copied)
+                        target.appendChild(copied);
+                }
+                else if (child.nodeType === 3)
+                    target.appendChild(output.createTextNode(child.textContent || ''));
+            }
+        return target;
+    }
+    const clean = copyNode(root);
+    output.replaceChild(clean, output.documentElement);
+    clean.setAttribute('xmlns', SVG_NS);
+    const parts = (clean.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+    if (parts.length !== 4 || !parts.every(Number.isFinite) || parts[2] <= 0 || parts[3] <= 0) {
+        const numeric = (attr) => {
+            const v = clean.getAttribute(attr) || '';
+            return /^\d+(\.\d+)?(?:px)?$/.test(v) ? parseFloat(v) : 0;
+        };
+        const w = numeric('width'), h = numeric('height');
+        if (!w || !h)
+            throw new Error('The SVG needs a viewBox or numeric width and height. Re-export with an artboard.');
+        clean.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        parts.splice(0, parts.length, 0, 0, w, h);
+    }
+    const ratio = parts[2] / parts[3];
+    if (ratio < 0.02 || ratio > 50)
+        throw new Error('Use an SVG with a less extreme aspect ratio.');
+    // Bound the raster dimensions regardless of the source's artboard units.
+    clean.setAttribute('width', String(Math.round(ratio >= 1 ? 768 : 768 * ratio)));
+    clean.setAttribute('height', String(Math.round(ratio >= 1 ? 768 / ratio : 768)));
+    if (!clean.getAttribute('color'))
+        clean.setAttribute('color', '#ffffff');
+    if (!clean.querySelector('path,circle,rect,ellipse,line,polygon,polyline,text,use')) {
+        throw new Error('No supported vector artwork found. Export shapes or outlined text, not an embedded image.');
+    }
+    // Reject reference cycles, which can make tiny SVGs expensive to render.
+    const byId = new Map();
+    for (const el of Array.from(clean.querySelectorAll('[id]')))
+        byId.set(el.id, el);
+    const visiting = new Set(), costs = new Map();
+    function estimate(el, depth) {
+        if (depth > 64 || visiting.has(el))
+            throw new Error('The SVG contains circular or deeply nested references. Expand its symbols.');
+        const known = costs.get(el);
+        if (known !== undefined)
+            return known;
+        visiting.add(el);
+        let cost = 1;
+        for (const child of Array.from(el.children)) {
+            cost += estimate(child, depth + 1);
+            if (cost > 20000)
+                throw new Error('The SVG expands to too many shapes. Simplify repeated symbols.');
+        }
+        if (el.localName === 'use') {
+            const ref = el.getAttribute('href')?.slice(1);
+            if (ref && byId.has(ref))
+                cost += estimate(byId.get(ref), depth + 1);
+        }
+        if (cost > 20000)
+            throw new Error('The SVG expands to too many shapes. Simplify repeated symbols.');
+        visiting.delete(el);
+        costs.set(el, cost);
+        return cost;
+    }
+    estimate(clean, 0);
+    return { name: String(name || 'Custom shape').slice(0, 120), svg: new XMLSerializer().serializeToString(clean) };
+}
+const rasterCache = new Map();
+async function rasterizeShape(shape) {
+    const cached = rasterCache.get(shape.svg);
+    if (cached)
+        return cached;
+    const promise = (async () => {
+        const url = URL.createObjectURL(new Blob([shape.svg], { type: 'image/svg+xml' }));
+        const img = new Image();
+        try {
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => { img.src = ''; reject(new Error('The SVG took too long to load. Simplify the artwork.')); }, 8000);
+                img.onload = () => { clearTimeout(timeout); resolve(); };
+                img.onerror = () => { clearTimeout(timeout); reject(new Error('The browser could not render this SVG. Export a plain SVG with outlined shapes.')); };
+                img.src = url;
+            });
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            if (!ctx || !canvas.width || !canvas.height)
+                throw new Error('Could not prepare the vector mask.');
+            ctx.drawImage(img, 0, 0);
+            const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            let visible = false;
+            for (let i = 3; i < pixels.length; i += 4)
+                if (pixels[i] > 2) {
+                    visible = true;
+                    break;
+                }
+            if (!visible)
+                throw new Error('The SVG has no visible artwork inside its artboard. Check fills and the viewBox.');
+            return { width: canvas.width, height: canvas.height, pixels };
+        }
+        finally {
+            URL.revokeObjectURL(url);
+            img.onload = null;
+            img.onerror = null;
+        }
+    })();
+    if (rasterCache.size >= 4)
+        rasterCache.delete(rasterCache.keys().next().value);
+    rasterCache.set(shape.svg, promise);
+    try {
+        return await promise;
+    }
+    catch (error) {
+        if (rasterCache.get(shape.svg) === promise)
+            rasterCache.delete(shape.svg);
+        throw error;
+    }
+}
+/** Read and validate an SVG locally, including a renderability check. */
+export async function loadSVGShape(source, name = 'Custom shape') {
+    const shape = sanitizeSVGShape(source, name);
+    await rasterizeShape(shape);
+    return shape;
+}
+export async function readSVGFile(file) {
+    if (!/\.svg$/i.test(file.name) && file.type !== 'image/svg+xml')
+        throw new Error('Choose an .svg file. Export AI or EPS artwork as SVG first.');
+    if (file.size > MAX_SVG_BYTES)
+        throw new Error('Use an SVG smaller than 1 MB.');
+    return loadSVGShape(await file.text(), file.name);
+}
+function softenMask(values, size, radius) {
+    if (radius < 1)
+        return values;
+    let src = values;
+    let dst = new Float32Array(src.length);
+    const divisor = radius * 2 + 1;
+    // Three separable box passes approximate a Gaussian. No per-frame raster work.
+    for (let pass = 0; pass < 3; pass++) {
+        for (let y = 0; y < size; y++) {
+            const offset = y * size;
+            let sum = 0;
+            for (let x = 0; x <= radius; x++)
+                sum += src[offset + x];
+            for (let x = 0; x < size; x++) {
+                dst[offset + x] = sum / divisor;
+                if (x - radius >= 0)
+                    sum -= src[offset + x - radius];
+                if (x + radius + 1 < size)
+                    sum += src[offset + x + radius + 1];
+            }
+        }
+        [src, dst] = [dst, src];
+        for (let x = 0; x < size; x++) {
+            let sum = 0;
+            for (let y = 0; y <= radius; y++)
+                sum += src[y * size + x];
+            for (let y = 0; y < size; y++) {
+                dst[y * size + x] = sum / divisor;
+                if (y - radius >= 0)
+                    sum -= src[(y - radius) * size + x];
+                if (y + radius + 1 < size)
+                    sum += src[(y + radius + 1) * size + x];
+            }
+        }
+        [src, dst] = [dst, src];
+    }
+    return src;
+}
+function makeShapeMask(raster, channel, softness) {
+    const { width, height, pixels } = raster;
+    const source = new Float32Array(width * height);
+    let minX = width, minY = height, maxX = -1, maxY = -1;
+    for (let i = 0; i < source.length; i++) {
+        const j = i * 4;
+        const alpha = pixels[j + 3] / 255;
+        const light = (pixels[j] * 0.2126 + pixels[j + 1] * 0.7152 + pixels[j + 2] * 0.0722) / 255;
+        const value = alpha * (channel === 'dark' ? 1 - light : channel === 'light' ? light : 1);
+        source[i] = value;
+        if (value > 0.01) {
+            const x = i % width, y = Math.floor(i / width);
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+        }
+    }
+    const size = 512;
+    const values = new Float32Array(size * size);
+    if (maxX < 0)
+        return { size, values }; // A blank channel is reversible using the channel selector.
+    const cropW = maxX - minX + 1, cropH = maxY - minY + 1;
+    const unit = Math.max(cropW, cropH) / (size * 0.86);
+    const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
+    const get = (x, y) => x < 0 || x >= width || y < 0 || y >= height ? 0 : source[y * width + x];
+    for (let y = 0; y < size; y++)
+        for (let x = 0; x < size; x++) {
+            const sx = midX + (x - (size - 1) / 2) * unit;
+            const sy = midY + (y - (size - 1) / 2) * unit;
+            const ix = Math.floor(sx), iy = Math.floor(sy), fx = sx - ix, fy = sy - iy;
+            values[y * size + x] = (get(ix, iy) * (1 - fx) + get(ix + 1, iy) * fx) * (1 - fy)
+                + (get(ix, iy + 1) * (1 - fx) + get(ix + 1, iy + 1) * fx) * fy;
+        }
+    return { size, values: softenMask(values, size, Math.round(softness * 13)) };
+}
+/** Integer phase harmonics keep translation, rotation and pulse on the same closed loop. */
+export function getShapeTransform(phase, config, width, height) {
+    const p = phase * config.shapeCycles;
+    let dx = 0, dy = 0;
+    if (config.shapeMotion === 'orbit') {
+        dx = Math.cos(p);
+        dy = Math.sin(p);
+    }
+    else if (config.shapeMotion === 'figure8') {
+        dx = Math.sin(p);
+        dy = Math.sin(2 * p);
+    }
+    else if (config.shapeMotion === 'float') {
+        dx = 0.72 * Math.sin(p) + 0.22 * Math.sin(2 * p + 0.6);
+        dy = 0.72 * Math.cos(p + 0.8) + 0.22 * Math.sin(3 * p);
+    }
+    const baseSize = Math.min(width, height) * config.shapeSize;
+    const rangeX = Math.max(0, (width - baseSize * 0.86) * 0.5) * config.shapeTravel;
+    const rangeY = Math.max(0, (height - baseSize * 0.86) * 0.5) * config.shapeTravel;
+    const rotation = config.shapeRotation * Math.PI / 180 + phase * config.shapeSpin;
+    return { x: width / 2 + dx * rangeX, y: height / 2 + dy * rangeY,
+        size: baseSize * (1 + config.shapePulse * Math.sin(p)), cos: Math.cos(rotation), sin: Math.sin(rotation) };
+}
+export function sampleShapeMask(mask, x, y, t) {
+    const dx = (x - t.x) / t.size, dy = (y - t.y) / t.size;
+    const u = dx * t.cos + dy * t.sin + 0.5, v = -dx * t.sin + dy * t.cos + 0.5;
+    if (u <= 0 || u >= 1 || v <= 0 || v >= 1)
+        return 0;
+    const sx = u * (mask.size - 1), sy = v * (mask.size - 1);
+    const ix = Math.floor(sx), iy = Math.floor(sy), fx = sx - ix, fy = sy - iy;
+    const a = iy * mask.size + ix, b = a + mask.size;
+    return clamp((mask.values[a] * (1 - fx) + mask.values[a + 1] * fx) * (1 - fy)
+        + (mask.values[b] * (1 - fx) + mask.values[b + 1] * fx) * fy);
+}
+export function blendShapeField(base, mask, config) {
+    const background = base * config.shapeBackground;
+    const target = config.shapeMode === 'only' ? mask : config.shapeMode === 'cutout'
+        ? base * (1 - mask) : background + mask * (1 - background);
+    return clamp(base * (1 - config.shapeIntensity) + target * config.shapeIntensity);
+}
+/**
+ * The field is independent of the grid: evaluate it at any fixed u/v position.
+ * `phase` is radians, and every pattern loops seamlessly at 2π.
+ * `aspect` keeps circular ripples circular on a rectangular canvas.
+ */
+export function sampleField(u, v, phase, config, aspect = 1) {
+    const angle = config.angle * Math.PI / 180;
+    const cx = (u - 0.5) * aspect;
+    const cy = v - 0.5;
+    const x = (cx * Math.cos(angle) - cy * Math.sin(angle)) / config.scale + 0.5;
+    const y = (cx * Math.sin(angle) + cy * Math.cos(angle)) / config.scale + 0.5;
+    let value;
+    switch (config.pattern) {
+        case 'generated': {
+            const recipe = getRecipe(config.seed, config.complexity);
+            let sum = 0, weights = 0;
+            for (const wave of recipe) {
+                const warped = wave.ax * x + wave.ay * y + wave.offset + phase * wave.cycle
+                    + wave.warp * Math.sin(wave.ay * x - wave.ax * y + phase * wave.counter + wave.offset);
+                sum += wave.weight * Math.sin(warped);
+                weights += wave.weight;
+            }
+            value = 0.5 + 0.78 * sum / weights;
+            break;
+        }
+        case 'tide':
+            value = 0.5 + 0.5 * Math.sin(y * 5.2 - phase + 0.9 * Math.sin(x * 4.5 + phase));
+            break;
+        case 'crosswave':
+            value = 0.5
+                + 0.25 * Math.sin(x * 7 + Math.sin(y * 4 - phase))
+                + 0.22 * Math.cos(y * 5.5 - phase)
+                + 0.10 * Math.sin((x + y) * 7 + phase);
+            break;
+        case 'ripple': {
+            const radius = Math.hypot(x - 0.5, y - 0.5);
+            value = 0.5 + 0.5 * Math.cos(radius * 15 - phase);
+            break;
+        }
+        case 'breath': {
+            const envelope = 0.75 + 0.25 * Math.cos((x - 0.5) * 2.5) * Math.cos((y - 0.5) * 2.5);
+            value = (0.5 - 0.5 * Math.cos(phase)) * envelope;
+            break;
+        }
+        case 'sweep': {
+            const center = 0.5 + 0.63 * Math.sin(phase);
+            const delta = (y - center + 0.08 * Math.sin(x * 5 + phase)) / 0.23;
+            value = Math.exp(-delta * delta);
+            break;
+        }
+        default: {
+            // Broad vertical light band and two gentle horizontal lobes, inspired
+            // by the supplied still. It is an original approximation, not copied code.
+            const band = 0.5 + 0.5 * Math.cos((y - 0.76) * Math.PI * 1.25 - phase);
+            const folds = 0.84 + 0.16 * Math.cos((x - 0.2) * Math.PI * 3.7 + 0.8 * Math.sin(phase));
+            value = band * folds + 0.02 * Math.sin(x * 8 + y * 4 - phase);
+        }
+    }
+    value = clamp(value);
+    if (config.contrast !== 1) {
+        const a = Math.pow(value, config.contrast);
+        const b = Math.pow(1 - value, config.contrast);
+        value = a / (a + b);
+    }
+    return clamp(0.5 + (value - 0.5) * config.depth);
+}
+/**
+ * Canvas implementation, also usable without React.
+ * Stops scheduling frames when paused, offscreen or in a background tab.
+ * Respects reduced motion unless the caller explicitly opts out.
+ */
+export function createDotField(canvas, initialConfig = {}, onStats) {
+    const ctx = canvas.getContext('2d', { alpha: true });
+    if (!ctx)
+        throw new Error('Dotfield needs a browser with Canvas 2D support.');
+    let config = normalizeConfig(initialConfig);
+    let raster = null;
+    let shapeMask = null;
+    let shapeTicket = 0;
+    let shapeState = 'empty';
+    let shapeError = null;
+    let width = 0, height = 0, dpr = 1;
+    let columns = 0, rows = 0, actualSpacing = config.spacing;
+    let points = new Float32Array(0);
+    let elapsed = 0;
+    let requestedPlaying = true;
+    let inView = true;
+    let destroyed = false;
+    let frameId = 0;
+    let lastFrame = null;
+    let lastReport = 0;
+    let dirty = true;
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const canAnimate = () => requestedPlaying && config.speed > 0 && !document.hidden
+        && inView && !(motion.matches && config.respectReducedMotion);
+    const getStats = () => ({
+        columns, rows, count: columns * rows, width, height, spacing: actualSpacing,
+        time: elapsed, progress: (elapsed % config.duration) / config.duration,
+        running: canAnimate(), reducedMotion: motion.matches && config.respectReducedMotion,
+        shapeState, shapeError,
+    });
+    const report = () => { onStats?.(getStats()); };
+    function rebuildGrid() {
+        // A hard cap protects very large screens at very small spacing.
+        actualSpacing = Math.max(config.spacing, Math.sqrt(width * height / 16000));
+        columns = Math.max(0, Math.floor((width - actualSpacing) / actualSpacing) + 1);
+        rows = Math.max(0, Math.floor((height - actualSpacing) / actualSpacing) + 1);
+        const offsetX = (width - (columns - 1) * actualSpacing) / 2;
+        const offsetY = (height - (rows - 1) * actualSpacing) / 2;
+        points = new Float32Array(columns * rows * 4);
+        for (let row = 0, i = 0; row < rows; row++) {
+            for (let col = 0; col < columns; col++, i += 4) {
+                const x = offsetX + col * actualSpacing;
+                const y = offsetY + row * actualSpacing;
+                points[i] = x;
+                points[i + 1] = y;
+                points[i + 2] = x / Math.max(1, width);
+                points[i + 3] = y / Math.max(1, height);
+            }
+        }
+    }
+    function draw() {
+        if (!width || !height || destroyed)
+            return;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.globalAlpha = 1;
+        if (config.transparent)
+            ctx.clearRect(0, 0, width, height);
+        else {
+            ctx.fillStyle = config.backgroundColor;
+            ctx.fillRect(0, 0, width, height);
+        }
+        ctx.fillStyle = config.dotColor;
+        const phase = (elapsed % config.duration) / config.duration * TAU;
+        const radiusRange = config.maxRadius - config.minRadius;
+        const fadeWidth = config.edgeFade * 0.25;
+        const aspect = width / height;
+        const activeMask = config.shapeEnabled ? shapeMask : null;
+        const transform = activeMask ? getShapeTransform(phase, config, width, height) : null;
+        for (let i = 0; i < points.length; i += 4) {
+            const x = points[i], y = points[i + 1];
+            const u = points[i + 2], v = points[i + 3];
+            const base = sampleField(u, v, phase, config, aspect);
+            const mask = activeMask && transform ? sampleShapeMask(activeMask, x, y, transform) : 0;
+            const field = activeMask ? blendShapeField(base, mask, config) : base;
+            const radius = config.minRadius + radiusRange * field;
+            if (radius < 0.05)
+                continue;
+            let alpha = config.opacity;
+            if (activeMask && config.shapeMode === 'only')
+                alpha *= 1 - config.shapeIntensity + mask * config.shapeIntensity;
+            if (config.varyOpacity) {
+                alpha *= config.minOpacity + (1 - config.minOpacity) * smoothstep(0.025, 0.58, field);
+            }
+            if (fadeWidth > 0) {
+                alpha *= smoothstep(0, fadeWidth, u) * smoothstep(0, fadeWidth, 1 - u)
+                    * smoothstep(0, fadeWidth, v) * smoothstep(0, fadeWidth, 1 - v);
+            }
+            if (alpha < 0.003)
+                continue;
+            ctx.globalAlpha = alpha;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, TAU);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        dirty = false;
+    }
+    function tick(now) {
+        frameId = 0;
+        if (destroyed)
+            return;
+        const running = canAnimate();
+        if (running && lastFrame !== null) {
+            // Do not jump after stalls or after returning to a hidden tab.
+            elapsed += Math.min((now - lastFrame) / 1000, 0.1) * config.speed;
+        }
+        lastFrame = running ? now : null;
+        if (dirty || running)
+            draw();
+        if (now - lastReport >= 200 || !running) {
+            report();
+            lastReport = now;
+        }
+        if (running && width > 0 && height > 0)
+            frameId = requestAnimationFrame(tick);
+    }
+    function invalidate() {
+        dirty = true;
+        if (!destroyed && !frameId && !document.hidden && inView)
+            frameId = requestAnimationFrame(tick);
+    }
+    function resize() {
+        if (destroyed)
+            return;
+        const rect = canvas.getBoundingClientRect();
+        const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+        const nextWidth = Math.max(0, rect.width);
+        const nextHeight = Math.max(0, rect.height);
+        if (nextWidth === width && nextHeight === height && nextDpr === dpr)
+            return;
+        width = nextWidth;
+        height = nextHeight;
+        dpr = nextDpr;
+        canvas.width = Math.max(1, Math.round(width * dpr));
+        canvas.height = Math.max(1, Math.round(height * dpr));
+        rebuildGrid();
+        invalidate();
+        report();
+    }
+    function refreshVisibility() {
+        lastFrame = null;
+        if (!canAnimate() && frameId) {
+            cancelAnimationFrame(frameId);
+            frameId = 0;
+        }
+        invalidate();
+        report();
+    }
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
+    resizeObserver?.observe(canvas);
+    const intersectionObserver = typeof IntersectionObserver !== 'undefined'
+        ? new IntersectionObserver(entries => {
+            inView = entries[0]?.isIntersecting ?? true;
+            refreshVisibility();
+        }, { threshold: 0 }) : null;
+    intersectionObserver?.observe(canvas);
+    window.addEventListener('resize', resize);
+    document.addEventListener('visibilitychange', refreshVisibility);
+    motion.addEventListener('change', refreshVisibility);
+    resize();
+    invalidate();
+    return {
+        configure(partial) {
+            if (destroyed)
+                return;
+            const oldSpacing = config.spacing;
+            const oldChannel = config.shapeChannel, oldSoftness = config.shapeSoftness;
+            config = normalizeConfig({ ...config, ...partial });
+            if (config.spacing !== oldSpacing)
+                rebuildGrid();
+            if (raster && (oldChannel !== config.shapeChannel || oldSoftness !== config.shapeSoftness)) {
+                shapeMask = makeShapeMask(raster, config.shapeChannel, config.shapeSoftness);
+            }
+            lastFrame = null;
+            invalidate();
+            report();
+        },
+        async setShape(asset) {
+            if (destroyed)
+                return false;
+            const ticket = ++shapeTicket;
+            shapeError = null;
+            if (!asset) {
+                raster = null;
+                shapeMask = null;
+                shapeState = 'empty';
+                invalidate();
+                report();
+                return true;
+            }
+            shapeState = 'loading';
+            report();
+            try {
+                const safe = sanitizeSVGShape(asset.svg, asset.name);
+                const result = await rasterizeShape(safe);
+                if (destroyed || ticket !== shapeTicket)
+                    return false;
+                const mask = makeShapeMask(result, config.shapeChannel, config.shapeSoftness);
+                raster = result;
+                shapeMask = mask;
+                shapeState = 'ready';
+                invalidate();
+                report();
+                return true;
+            }
+            catch (cause) {
+                if (destroyed || ticket !== shapeTicket)
+                    return false;
+                shapeError = cause instanceof Error ? cause.message : 'Could not read this SVG.';
+                // A bad replacement never erases the last working vector.
+                shapeState = raster ? 'ready' : 'error';
+                invalidate();
+                report();
+                throw new Error(shapeError);
+            }
+        },
+        setPlaying(playing) {
+            if (destroyed)
+                return;
+            requestedPlaying = !!playing;
+            lastFrame = null;
+            invalidate();
+            report();
+        },
+        seek(progress) {
+            if (destroyed || !Number.isFinite(progress))
+                return;
+            elapsed = clamp(progress, 0, 0.9999999) * config.duration;
+            lastFrame = null;
+            invalidate();
+            report();
+        },
+        reset() {
+            if (destroyed)
+                return;
+            elapsed = 0;
+            lastFrame = null;
+            invalidate();
+            report();
+        },
+        getStats,
+        getConfig: () => ({ ...config }),
+        snapshot() {
+            if (destroyed)
+                return null;
+            draw();
+            try {
+                return canvas.toDataURL('image/png');
+            }
+            catch {
+                return null;
+            }
+        },
+        destroy() {
+            if (destroyed)
+                return;
+            destroyed = true;
+            shapeTicket++;
+            raster = null;
+            shapeMask = null;
+            cancelAnimationFrame(frameId);
+            resizeObserver?.disconnect();
+            intersectionObserver?.disconnect();
+            window.removeEventListener('resize', resize);
+            document.removeEventListener('visibilitychange', refreshVisibility);
+            motion.removeEventListener('change', refreshVisibility);
+            points = new Float32Array(0);
+        },
+    };
+}
+
+const REACT_SOURCE = "\"use client\";\n\nimport React, { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState, type CSSProperties } from \"react\";\n\n/**\n * Dotfield, a fixed-coordinate canvas renderer.\n * Positions are created only on resize or spacing changes. Animation can change\n * each point's radius and opacity, but never its x/y coordinates.\n * No runtime dependencies. All dimensions are CSS pixels.\n */\nexport type DotPattern = 'reference' | 'tide' | 'crosswave' | 'ripple' | 'breath' | 'sweep' | 'generated';\nexport type ShapeMotion = 'float' | 'orbit' | 'figure8' | 'still';\nexport type ShapeMode = 'blend' | 'only' | 'cutout';\nexport type ShapeChannel = 'alpha' | 'dark' | 'light';\n\n/** Plain serialisable data. Uploaded markup is never inserted into the page. */\nexport interface DotFieldShape { name: string; svg: string; }\n\nexport interface DotFieldConfig {\n  pattern: DotPattern;\n  seed: number;\n  complexity: number;\n  shapeEnabled: boolean;\n  shapeMotion: ShapeMotion;\n  shapeMode: ShapeMode;\n  shapeChannel: ShapeChannel;\n  shapeSize: number;\n  shapeTravel: number;\n  shapeIntensity: number;\n  shapeSoftness: number;\n  shapeBackground: number;\n  shapeRotation: number;\n  shapeSpin: number;\n  shapePulse: number;\n  shapeCycles: number;\n  spacing: number;\n  minRadius: number;\n  maxRadius: number;\n  speed: number;\n  duration: number;\n  scale: number;\n  depth: number;\n  contrast: number;\n  angle: number;\n  dotColor: string;\n  backgroundColor: string;\n  opacity: number;\n  minOpacity: number;\n  varyOpacity: boolean;\n  edgeFade: number;\n  transparent: boolean;\n  respectReducedMotion: boolean;\n}\n\nexport interface DotFieldStats {\n  columns: number;\n  rows: number;\n  count: number;\n  width: number;\n  height: number;\n  spacing: number;\n  progress: number;\n  time: number;\n  running: boolean;\n  reducedMotion: boolean;\n  shapeState: 'empty' | 'loading' | 'ready' | 'error';\n  shapeError: string | null;\n}\n\nexport interface DotFieldController {\n  configure(config: Partial<DotFieldConfig>): void;\n  /** Resolves false if a newer load supersedes this one, or the renderer unmounts. */\n  setShape(shape: DotFieldShape | null): Promise<boolean>;\n  setPlaying(playing: boolean): void;\n  seek(progress: number): void;\n  reset(): void;\n  getStats(): DotFieldStats;\n  getConfig(): DotFieldConfig;\n  snapshot(): string | null;\n  destroy(): void;\n}\n\nexport const PATTERNS: readonly DotPattern[] = [\n  'reference', 'tide', 'crosswave', 'ripple', 'breath', 'sweep', 'generated',\n];\n\nexport const DEFAULT_CONFIG: Readonly<DotFieldConfig> = Object.freeze({\n  pattern: 'reference',\n  seed: 271828,\n  complexity: 4,\n  shapeEnabled: true,\n  shapeMotion: 'float',\n  shapeMode: 'blend',\n  shapeChannel: 'alpha',\n  shapeSize: 0.82,\n  shapeTravel: 0.65,\n  shapeIntensity: 1,\n  shapeSoftness: 0.12,\n  shapeBackground: 0.18,\n  shapeRotation: 0,\n  shapeSpin: 0,\n  shapePulse: 0.08,\n  shapeCycles: 1,\n  spacing: 26,\n  minRadius: 1.05,\n  maxRadius: 5.1,\n  speed: 0.65,\n  duration: 24,\n  scale: 1,\n  depth: 1,\n  contrast: 1,\n  angle: 0,\n  dotColor: '#ececec',\n  backgroundColor: '#000000',\n  opacity: 0.97,\n  minOpacity: 0.19,\n  varyOpacity: true,\n  edgeFade: 0,\n  transparent: false,\n  respectReducedMotion: true,\n});\n\nconst TAU = Math.PI * 2;\nconst clamp = (x: number, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));\nconst smoothstep = (lo: number, hi: number, x: number) => {\n  const t = clamp((x - lo) / (hi - lo));\n  return t * t * (3 - 2 * t);\n};\nconst finite = (x: unknown, fallback: number, min: number, max: number) =>\n  clamp(typeof x === 'number' && Number.isFinite(x) ? x : fallback, min, max);\nconst colour = (x: unknown, fallback: string) => {\n  if (typeof x !== 'string' || !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(x)) return fallback;\n  return (x.length === 4 ? '#' + x.slice(1).split('').map(c => c + c).join('') : x).toLowerCase();\n};\n\n/** Validate imported settings and enforce non-overlapping dots. */\nexport function normalizeConfig(input: Partial<DotFieldConfig> = {}): DotFieldConfig {\n  const d = DEFAULT_CONFIG;\n  const spacing = finite(input.spacing, d.spacing, 8, 80);\n  const maxRadius = finite(input.maxRadius, d.maxRadius, 0.25, Math.min(24, spacing * 0.46));\n  return {\n    pattern: PATTERNS.includes(input.pattern as DotPattern) ? input.pattern! : d.pattern,\n    seed: Math.floor(finite(input.seed, d.seed, 0, 4294967295)),\n    complexity: Math.round(finite(input.complexity, d.complexity, 2, 7)),\n    shapeEnabled: typeof input.shapeEnabled === 'boolean' ? input.shapeEnabled : d.shapeEnabled,\n    shapeMotion: ['float', 'orbit', 'figure8', 'still'].includes(input.shapeMotion!) ? input.shapeMotion! : d.shapeMotion,\n    shapeMode: ['blend', 'only', 'cutout'].includes(input.shapeMode!) ? input.shapeMode! : d.shapeMode,\n    shapeChannel: ['alpha', 'dark', 'light'].includes(input.shapeChannel!) ? input.shapeChannel! : d.shapeChannel,\n    shapeSize: finite(input.shapeSize, d.shapeSize, 0.15, 1.6),\n    shapeTravel: finite(input.shapeTravel, d.shapeTravel, 0, 1),\n    shapeIntensity: finite(input.shapeIntensity, d.shapeIntensity, 0, 1),\n    shapeSoftness: finite(input.shapeSoftness, d.shapeSoftness, 0, 1),\n    shapeBackground: finite(input.shapeBackground, d.shapeBackground, 0, 1),\n    shapeRotation: finite(input.shapeRotation, d.shapeRotation, 0, 360),\n    shapeSpin: Math.round(finite(input.shapeSpin, d.shapeSpin, -3, 3)),\n    shapePulse: finite(input.shapePulse, d.shapePulse, 0, 0.5),\n    shapeCycles: Math.round(finite(input.shapeCycles, d.shapeCycles, 1, 4)),\n    spacing,\n    minRadius: finite(input.minRadius, d.minRadius, 0, maxRadius),\n    maxRadius,\n    speed: finite(input.speed, d.speed, 0, 3),\n    duration: finite(input.duration, d.duration, 6, 120),\n    scale: finite(input.scale, d.scale, 0.35, 3),\n    depth: finite(input.depth, d.depth, 0, 1),\n    contrast: finite(input.contrast, d.contrast, 0.35, 3),\n    angle: finite(input.angle, d.angle, 0, 360),\n    dotColor: colour(input.dotColor, d.dotColor),\n    backgroundColor: colour(input.backgroundColor, d.backgroundColor),\n    opacity: finite(input.opacity, d.opacity, 0, 1),\n    minOpacity: finite(input.minOpacity, d.minOpacity, 0, 1),\n    varyOpacity: typeof input.varyOpacity === 'boolean' ? input.varyOpacity : d.varyOpacity,\n    edgeFade: finite(input.edgeFade, d.edgeFade, 0, 1),\n    transparent: typeof input.transparent === 'boolean' ? input.transparent : d.transparent,\n    respectReducedMotion: typeof input.respectReducedMotion === 'boolean'\n      ? input.respectReducedMotion : d.respectReducedMotion,\n  };\n}\n\n/** Deterministic PRNG. Used for recipes, never for per-frame noise. */\nfunction seededRandom(seed: number): () => number {\n  let a = seed >>> 0;\n  return () => {\n    a = (a + 0x6d2b79f5) | 0;\n    let t = Math.imul(a ^ (a >>> 15), 1 | a);\n    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);\n    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;\n  };\n}\nexport function newRandomSeed(): number {\n  if (typeof globalThis.crypto?.getRandomValues === 'function') {\n    return globalThis.crypto.getRandomValues(new Uint32Array(1))[0];\n  }\n  return Math.floor(Math.random() * 4294967296);\n}\n\n/** Keep the grid, colours, vector asset and accessibility choices intact. */\nexport function randomizeConfig(\n  base: Partial<DotFieldConfig> = {}, seed = newRandomSeed(),\n): DotFieldConfig {\n  seed = Math.floor(finite(seed, DEFAULT_CONFIG.seed, 0, 4294967295));\n  const random = seededRandom(seed);\n  const between = (a: number, b: number) => a + random() * (b - a);\n  const round = (v: number) => Math.round(v * 100) / 100;\n  const choose = <T,>(values: readonly T[]): T => values[Math.floor(random() * values.length)];\n  return normalizeConfig({\n    ...normalizeConfig(base), pattern: 'generated', seed,\n    complexity: choose([3, 4, 4, 5, 6]),\n    scale: round(between(0.65, 1.65)),\n    angle: Math.round(between(0, 360)),\n    contrast: round(between(1.05, 2.15)),\n    depth: round(between(0.85, 1)),\n    speed: choose([0.5, 0.65, 0.8, 1, 1.2]),\n    duration: choose([12, 16, 18, 20, 24, 30, 36]),\n    shapeMotion: choose<ShapeMotion>(['float', 'orbit', 'figure8']),\n    shapeTravel: round(between(0.35, 0.9)),\n    shapeSpin: choose([-1, 0, 0, 0, 1]),\n    shapePulse: round(between(0.04, 0.18)),\n    shapeCycles: choose([1, 1, 1, 2]),\n  });\n}\n\ninterface Wave { ax: number; ay: number; cycle: number; counter: number; offset: number; warp: number; weight: number; }\nconst recipeCache = new Map<string, Wave[]>();\nfunction getRecipe(seed: number, count: number): Wave[] {\n  const key = `${seed}:${count}`;\n  const existing = recipeCache.get(key);\n  if (existing) return existing;\n  const random = seededRandom(seed);\n  const result: Wave[] = [];\n  for (let i = 0; i < count; i++) {\n    const direction = random() * TAU;\n    const frequency = 3 + random() * 8;\n    result.push({\n      ax: Math.cos(direction) * frequency, ay: Math.sin(direction) * frequency,\n      cycle: (1 + Math.floor(random() * 3)) * (random() > 0.5 ? 1 : -1),\n      counter: 1 + Math.floor(random() * 2), offset: random() * TAU,\n      warp: 0.2 + random() * 1.1, weight: (i === 0 ? 1.8 : 0.3 + random() * 0.7),\n    });\n  }\n  if (recipeCache.size >= 32) recipeCache.delete(recipeCache.keys().next().value!);\n  recipeCache.set(key, result);\n  return result;\n}\n\nexport const BUILTIN_SHAPES: readonly DotFieldShape[] = [\n  { name: 'Bloom', svg: '<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 200\"><g fill=\"white\"><ellipse cx=\"100\" cy=\"61\" rx=\"26\" ry=\"49\"/><ellipse cx=\"100\" cy=\"61\" rx=\"26\" ry=\"49\" transform=\"rotate(60 100 100)\"/><ellipse cx=\"100\" cy=\"61\" rx=\"26\" ry=\"49\" transform=\"rotate(120 100 100)\"/><ellipse cx=\"100\" cy=\"61\" rx=\"26\" ry=\"49\" transform=\"rotate(180 100 100)\"/><ellipse cx=\"100\" cy=\"61\" rx=\"26\" ry=\"49\" transform=\"rotate(240 100 100)\"/><ellipse cx=\"100\" cy=\"61\" rx=\"26\" ry=\"49\" transform=\"rotate(300 100 100)\"/></g></svg>' },\n  { name: 'Ring', svg: '<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 200\"><circle cx=\"100\" cy=\"100\" r=\"69\" fill=\"none\" stroke=\"white\" stroke-width=\"40\"/></svg>' },\n  { name: 'Bolt', svg: '<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 240\"><path fill=\"white\" d=\"M113 10 28 136H88L68 229 174 96H112L143 10Z\"/></svg>' },\n  { name: 'Heart', svg: '<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 190\"><path fill=\"white\" d=\"M100 176C81 160 14 112 14 65 14 17 70 2 100 43 130 2 186 17 186 65 186 112 119 160 100 176Z\"/></svg>' },\n];\n\nconst SVG_NS = 'http://www.w3.org/2000/svg';\nexport const MAX_SVG_BYTES = 1_000_000;\nconst SVG_TAGS = new Set(['svg', 'g', 'path', 'circle', 'rect', 'ellipse', 'line', 'polygon', 'polyline',\n  'defs', 'clipPath', 'mask', 'linearGradient', 'radialGradient', 'stop', 'pattern', 'symbol', 'use',\n  'text', 'tspan', 'title', 'desc', 'style']);\nconst SVG_ATTRS = new Set(('id class viewBox preserveAspectRatio x y x1 y1 x2 y2 dx dy cx cy r rx ry width height d points '\n  + 'transform fill fill-opacity fill-rule clip-rule stroke stroke-width stroke-opacity stroke-linecap stroke-linejoin '\n  + 'stroke-miterlimit stroke-dasharray stroke-dashoffset opacity color clip-path mask gradientUnits gradientTransform '\n  + 'spreadMethod offset stop-color stop-opacity fx fy fr patternUnits patternContentUnits patternTransform '\n  + 'clipPathUnits maskUnits maskContentUnits font-family font-size font-weight font-style text-anchor '\n  + 'dominant-baseline letter-spacing word-spacing textLength lengthAdjust display visibility vector-effect').split(' '));\nconst STYLE_ATTRS = new Set(('fill fill-opacity fill-rule clip-rule stroke stroke-width stroke-opacity stroke-linecap '\n  + 'stroke-linejoin stroke-miterlimit stroke-dasharray stroke-dashoffset opacity color clip-path mask stop-color '\n  + 'stop-opacity font-family font-size font-weight font-style text-anchor dominant-baseline letter-spacing '\n  + 'word-spacing display visibility vector-effect transform transform-origin transform-box').split(' '));\nfunction safeSVGValue(value: string): string | null {\n  if (value.length > 200_000 || /[\\\\<>@]|javascript\\s*:|data\\s*:|https?\\s*:|\\/\\/|expression\\s*\\(|var\\s*\\(|env\\s*\\(/i.test(value)) return null;\n  // Only local fragment references are allowed. No files, remote URLs or data URIs.\n  if (/url\\s*\\(/i.test(value)\n    && !/^url\\(\\s*['\"]?#[\\w.:-]+['\"]?\\s*\\)(?:\\s+(?:none|#[\\da-f]+))?$/i.test(value.trim())) return null;\n  return value;\n}\nfunction cleanDeclarations(css: string): string {\n  return css.split(';').map(declaration => {\n    const colon = declaration.indexOf(':');\n    if (colon < 0) return '';\n    const key = declaration.slice(0, colon).trim().toLowerCase();\n    const value = safeSVGValue(declaration.slice(colon + 1).trim());\n    return STYLE_ATTRS.has(key) && value !== null ? `${key}:${value}` : '';\n  }).filter(Boolean).join(';');\n}\nfunction cleanStylesheet(css: string): string {\n  css = css.replace(/\\/\\*[\\s\\S]*?\\*\\//g, '');\n  if (/[@\\\\]/.test(css)) return '';\n  let result = '';\n  for (const match of css.matchAll(/([^{}]+)\\{([^{}]*)\\}/g)) {\n    const selector = match[1].trim();\n    if (!/^[\\w\\s.#,:>+~*\\[\\]=\"'|()-]+$/.test(selector)) continue;\n    const declarations = cleanDeclarations(match[2]);\n    if (declarations) result += `${selector}{${declarations}}`;\n  }\n  return result;\n}\n\n/**\n * Restrict an SVG to static, self-contained vector artwork. This is not a general\n * HTML sanitizer. The result must only be used as an image, never as innerHTML.\n * No script, external resources, embedded bitmap, HTML, or SVG/CSS animation.\n */\nexport function sanitizeSVGShape(source: string, name = 'Custom shape'): DotFieldShape {\n  if (typeof source !== 'string' || !source.trim()) throw new Error('Choose an SVG file containing vector artwork.');\n  if (new TextEncoder().encode(source).length > MAX_SVG_BYTES) throw new Error('Use an SVG smaller than 1 MB.');\n  if (/<!ENTITY/i.test(source) || /<!DOCTYPE[^>]*\\[/i.test(source)) throw new Error('SVG documents with custom entities are not supported.');\n  source = source.replace(/<!DOCTYPE[^>]*>/gi, '');\n  const doc = new DOMParser().parseFromString(source, 'image/svg+xml');\n  const root = doc.documentElement;\n  if (doc.querySelector('parsererror') || root.localName !== 'svg'\n    || (root.namespaceURI && root.namespaceURI !== SVG_NS)) throw new Error('This file is not a valid SVG. Re-export the artwork as SVG.');\n  if (doc.getElementsByTagName('*').length > 4000) throw new Error('This SVG is too complex. Simplify it to fewer than 4,000 elements.');\n  const output = document.implementation.createDocument(SVG_NS, 'svg', null);\n  function copyNode(node: Element, depth = 0): Element | null {\n    if (depth > 64) throw new Error('This SVG is too deeply nested. Flatten the artwork before exporting.');\n    if (!SVG_TAGS.has(node.localName) || (node.namespaceURI && node.namespaceURI !== SVG_NS)) return null;\n    const target = output.createElementNS(SVG_NS, node.localName);\n    for (const attr of Array.from(node.attributes)) {\n      if (attr.localName === 'href' && /^#[\\w.:-]+$/.test(attr.value)) target.setAttribute('href', attr.value);\n      else if (attr.name === 'style') target.setAttribute('style', cleanDeclarations(attr.value));\n      else if (SVG_ATTRS.has(attr.name)) {\n        const safe = safeSVGValue(attr.value);\n        if (safe !== null) target.setAttribute(attr.name, safe);\n      }\n    }\n    if (node.localName === 'style') target.textContent = cleanStylesheet(node.textContent || '');\n    else for (const child of Array.from(node.childNodes)) {\n      if (child.nodeType === 1) {\n        const copied = copyNode(child as Element, depth + 1);\n        if (copied) target.appendChild(copied);\n      } else if (child.nodeType === 3) target.appendChild(output.createTextNode(child.textContent || ''));\n    }\n    return target;\n  }\n  const clean = copyNode(root)!;\n  output.replaceChild(clean, output.documentElement);\n  clean.setAttribute('xmlns', SVG_NS);\n  const parts = (clean.getAttribute('viewBox') || '').trim().split(/[\\s,]+/).map(Number);\n  if (parts.length !== 4 || !parts.every(Number.isFinite) || parts[2] <= 0 || parts[3] <= 0) {\n    const numeric = (attr: string) => {\n      const v = clean.getAttribute(attr) || '';\n      return /^\\d+(\\.\\d+)?(?:px)?$/.test(v) ? parseFloat(v) : 0;\n    };\n    const w = numeric('width'), h = numeric('height');\n    if (!w || !h) throw new Error('The SVG needs a viewBox or numeric width and height. Re-export with an artboard.');\n    clean.setAttribute('viewBox', `0 0 ${w} ${h}`);\n    parts.splice(0, parts.length, 0, 0, w, h);\n  }\n  const ratio = parts[2] / parts[3];\n  if (ratio < 0.02 || ratio > 50) throw new Error('Use an SVG with a less extreme aspect ratio.');\n  // Bound the raster dimensions regardless of the source's artboard units.\n  clean.setAttribute('width', String(Math.round(ratio >= 1 ? 768 : 768 * ratio)));\n  clean.setAttribute('height', String(Math.round(ratio >= 1 ? 768 / ratio : 768)));\n  if (!clean.getAttribute('color')) clean.setAttribute('color', '#ffffff');\n  if (!clean.querySelector('path,circle,rect,ellipse,line,polygon,polyline,text,use')) {\n    throw new Error('No supported vector artwork found. Export shapes or outlined text, not an embedded image.');\n  }\n  // Reject reference cycles, which can make tiny SVGs expensive to render.\n  const byId = new Map<string, Element>();\n  for (const el of Array.from(clean.querySelectorAll('[id]'))) byId.set(el.id, el);\n  const visiting = new Set<Element>(), costs = new Map<Element, number>();\n  function estimate(el: Element, depth: number): number {\n    if (depth > 64 || visiting.has(el)) throw new Error('The SVG contains circular or deeply nested references. Expand its symbols.');\n    const known = costs.get(el);\n    if (known !== undefined) return known;\n    visiting.add(el);\n    let cost = 1;\n    for (const child of Array.from(el.children)) {\n      cost += estimate(child, depth + 1);\n      if (cost > 20000) throw new Error('The SVG expands to too many shapes. Simplify repeated symbols.');\n    }\n    if (el.localName === 'use') {\n      const ref = el.getAttribute('href')?.slice(1);\n      if (ref && byId.has(ref)) cost += estimate(byId.get(ref)!, depth + 1);\n    }\n    if (cost > 20000) throw new Error('The SVG expands to too many shapes. Simplify repeated symbols.');\n    visiting.delete(el); costs.set(el, cost); return cost;\n  }\n  estimate(clean, 0);\n  return { name: String(name || 'Custom shape').slice(0, 120), svg: new XMLSerializer().serializeToString(clean) };\n}\n\ninterface ShapeRaster { width: number; height: number; pixels: Uint8ClampedArray; }\nconst rasterCache = new Map<string, Promise<ShapeRaster>>();\nasync function rasterizeShape(shape: DotFieldShape): Promise<ShapeRaster> {\n  const cached = rasterCache.get(shape.svg);\n  if (cached) return cached;\n  const promise = (async (): Promise<ShapeRaster> => {\n    const url = URL.createObjectURL(new Blob([shape.svg], { type: 'image/svg+xml' }));\n    const img = new Image();\n    try {\n      await new Promise<void>((resolve, reject) => {\n        const timeout = setTimeout(() => { img.src = ''; reject(new Error('The SVG took too long to load. Simplify the artwork.')); }, 8000);\n        img.onload = () => { clearTimeout(timeout); resolve(); };\n        img.onerror = () => { clearTimeout(timeout); reject(new Error('The browser could not render this SVG. Export a plain SVG with outlined shapes.')); };\n        img.src = url;\n      });\n      const canvas = document.createElement('canvas');\n      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;\n      const ctx = canvas.getContext('2d', { willReadFrequently: true });\n      if (!ctx || !canvas.width || !canvas.height) throw new Error('Could not prepare the vector mask.');\n      ctx.drawImage(img, 0, 0);\n      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;\n      let visible = false;\n      for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 2) { visible = true; break; }\n      if (!visible) throw new Error('The SVG has no visible artwork inside its artboard. Check fills and the viewBox.');\n      return { width: canvas.width, height: canvas.height, pixels };\n    } finally { URL.revokeObjectURL(url); img.onload = null; img.onerror = null; }\n  })();\n  if (rasterCache.size >= 4) rasterCache.delete(rasterCache.keys().next().value!);\n  rasterCache.set(shape.svg, promise);\n  try { return await promise; }\n  catch (error) { if (rasterCache.get(shape.svg) === promise) rasterCache.delete(shape.svg); throw error; }\n}\n\n/** Read and validate an SVG locally, including a renderability check. */\nexport async function loadSVGShape(source: string, name = 'Custom shape'): Promise<DotFieldShape> {\n  const shape = sanitizeSVGShape(source, name);\n  await rasterizeShape(shape);\n  return shape;\n}\nexport async function readSVGFile(file: File): Promise<DotFieldShape> {\n  if (!/\\.svg$/i.test(file.name) && file.type !== 'image/svg+xml') throw new Error('Choose an .svg file. Export AI or EPS artwork as SVG first.');\n  if (file.size > MAX_SVG_BYTES) throw new Error('Use an SVG smaller than 1 MB.');\n  return loadSVGShape(await file.text(), file.name);\n}\n\nexport interface ShapeMask { size: number; values: Float32Array; }\nfunction softenMask(values: Float32Array, size: number, radius: number): Float32Array {\n  if (radius < 1) return values;\n  let src = values;\n  let dst = new Float32Array(src.length);\n  const divisor = radius * 2 + 1;\n  // Three separable box passes approximate a Gaussian. No per-frame raster work.\n  for (let pass = 0; pass < 3; pass++) {\n    for (let y = 0; y < size; y++) {\n      const offset = y * size;\n      let sum = 0;\n      for (let x = 0; x <= radius; x++) sum += src[offset + x];\n      for (let x = 0; x < size; x++) {\n        dst[offset + x] = sum / divisor;\n        if (x - radius >= 0) sum -= src[offset + x - radius];\n        if (x + radius + 1 < size) sum += src[offset + x + radius + 1];\n      }\n    }\n    [src, dst] = [dst, src];\n    for (let x = 0; x < size; x++) {\n      let sum = 0;\n      for (let y = 0; y <= radius; y++) sum += src[y * size + x];\n      for (let y = 0; y < size; y++) {\n        dst[y * size + x] = sum / divisor;\n        if (y - radius >= 0) sum -= src[(y - radius) * size + x];\n        if (y + radius + 1 < size) sum += src[(y + radius + 1) * size + x];\n      }\n    }\n    [src, dst] = [dst, src];\n  }\n  return src;\n}\nfunction makeShapeMask(raster: ShapeRaster, channel: ShapeChannel, softness: number): ShapeMask {\n  const { width, height, pixels } = raster;\n  const source = new Float32Array(width * height);\n  let minX = width, minY = height, maxX = -1, maxY = -1;\n  for (let i = 0; i < source.length; i++) {\n    const j = i * 4;\n    const alpha = pixels[j + 3] / 255;\n    const light = (pixels[j] * 0.2126 + pixels[j + 1] * 0.7152 + pixels[j + 2] * 0.0722) / 255;\n    const value = alpha * (channel === 'dark' ? 1 - light : channel === 'light' ? light : 1);\n    source[i] = value;\n    if (value > 0.01) {\n      const x = i % width, y = Math.floor(i / width);\n      minX = Math.min(minX, x); maxX = Math.max(maxX, x);\n      minY = Math.min(minY, y); maxY = Math.max(maxY, y);\n    }\n  }\n  const size = 512;\n  const values = new Float32Array(size * size);\n  if (maxX < 0) return { size, values }; // A blank channel is reversible using the channel selector.\n  const cropW = maxX - minX + 1, cropH = maxY - minY + 1;\n  const unit = Math.max(cropW, cropH) / (size * 0.86);\n  const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;\n  const get = (x: number, y: number) => x < 0 || x >= width || y < 0 || y >= height ? 0 : source[y * width + x];\n  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {\n    const sx = midX + (x - (size - 1) / 2) * unit;\n    const sy = midY + (y - (size - 1) / 2) * unit;\n    const ix = Math.floor(sx), iy = Math.floor(sy), fx = sx - ix, fy = sy - iy;\n    values[y * size + x] = (get(ix, iy) * (1 - fx) + get(ix + 1, iy) * fx) * (1 - fy)\n      + (get(ix, iy + 1) * (1 - fx) + get(ix + 1, iy + 1) * fx) * fy;\n  }\n  return { size, values: softenMask(values, size, Math.round(softness * 13)) };\n}\n\nexport interface ShapeTransform { x: number; y: number; size: number; cos: number; sin: number; }\n/** Integer phase harmonics keep translation, rotation and pulse on the same closed loop. */\nexport function getShapeTransform(phase: number, config: DotFieldConfig, width: number, height: number): ShapeTransform {\n  const p = phase * config.shapeCycles;\n  let dx = 0, dy = 0;\n  if (config.shapeMotion === 'orbit') { dx = Math.cos(p); dy = Math.sin(p); }\n  else if (config.shapeMotion === 'figure8') { dx = Math.sin(p); dy = Math.sin(2 * p); }\n  else if (config.shapeMotion === 'float') {\n    dx = 0.72 * Math.sin(p) + 0.22 * Math.sin(2 * p + 0.6);\n    dy = 0.72 * Math.cos(p + 0.8) + 0.22 * Math.sin(3 * p);\n  }\n  const baseSize = Math.min(width, height) * config.shapeSize;\n  const rangeX = Math.max(0, (width - baseSize * 0.86) * 0.5) * config.shapeTravel;\n  const rangeY = Math.max(0, (height - baseSize * 0.86) * 0.5) * config.shapeTravel;\n  const rotation = config.shapeRotation * Math.PI / 180 + phase * config.shapeSpin;\n  return { x: width / 2 + dx * rangeX, y: height / 2 + dy * rangeY,\n    size: baseSize * (1 + config.shapePulse * Math.sin(p)), cos: Math.cos(rotation), sin: Math.sin(rotation) };\n}\nexport function sampleShapeMask(mask: ShapeMask, x: number, y: number, t: ShapeTransform): number {\n  const dx = (x - t.x) / t.size, dy = (y - t.y) / t.size;\n  const u = dx * t.cos + dy * t.sin + 0.5, v = -dx * t.sin + dy * t.cos + 0.5;\n  if (u <= 0 || u >= 1 || v <= 0 || v >= 1) return 0;\n  const sx = u * (mask.size - 1), sy = v * (mask.size - 1);\n  const ix = Math.floor(sx), iy = Math.floor(sy), fx = sx - ix, fy = sy - iy;\n  const a = iy * mask.size + ix, b = a + mask.size;\n  return clamp((mask.values[a] * (1 - fx) + mask.values[a + 1] * fx) * (1 - fy)\n    + (mask.values[b] * (1 - fx) + mask.values[b + 1] * fx) * fy);\n}\nexport function blendShapeField(base: number, mask: number, config: DotFieldConfig): number {\n  const background = base * config.shapeBackground;\n  const target = config.shapeMode === 'only' ? mask : config.shapeMode === 'cutout'\n    ? base * (1 - mask) : background + mask * (1 - background);\n  return clamp(base * (1 - config.shapeIntensity) + target * config.shapeIntensity);\n}\n\n\n/**\n * The field is independent of the grid: evaluate it at any fixed u/v position.\n * `phase` is radians, and every pattern loops seamlessly at 2π.\n * `aspect` keeps circular ripples circular on a rectangular canvas.\n */\nexport function sampleField(\n  u: number, v: number, phase: number,\n  config: DotFieldConfig, aspect = 1,\n): number {\n  const angle = config.angle * Math.PI / 180;\n  const cx = (u - 0.5) * aspect;\n  const cy = v - 0.5;\n  const x = (cx * Math.cos(angle) - cy * Math.sin(angle)) / config.scale + 0.5;\n  const y = (cx * Math.sin(angle) + cy * Math.cos(angle)) / config.scale + 0.5;\n  let value: number;\n  switch (config.pattern) {\n    case 'generated': {\n      const recipe = getRecipe(config.seed, config.complexity);\n      let sum = 0, weights = 0;\n      for (const wave of recipe) {\n        const warped = wave.ax * x + wave.ay * y + wave.offset + phase * wave.cycle\n          + wave.warp * Math.sin(wave.ay * x - wave.ax * y + phase * wave.counter + wave.offset);\n        sum += wave.weight * Math.sin(warped);\n        weights += wave.weight;\n      }\n      value = 0.5 + 0.78 * sum / weights;\n      break;\n    }\n    case 'tide':\n      value = 0.5 + 0.5 * Math.sin(y * 5.2 - phase + 0.9 * Math.sin(x * 4.5 + phase));\n      break;\n    case 'crosswave':\n      value = 0.5\n        + 0.25 * Math.sin(x * 7 + Math.sin(y * 4 - phase))\n        + 0.22 * Math.cos(y * 5.5 - phase)\n        + 0.10 * Math.sin((x + y) * 7 + phase);\n      break;\n    case 'ripple': {\n      const radius = Math.hypot(x - 0.5, y - 0.5);\n      value = 0.5 + 0.5 * Math.cos(radius * 15 - phase);\n      break;\n    }\n    case 'breath': {\n      const envelope = 0.75 + 0.25 * Math.cos((x - 0.5) * 2.5) * Math.cos((y - 0.5) * 2.5);\n      value = (0.5 - 0.5 * Math.cos(phase)) * envelope;\n      break;\n    }\n    case 'sweep': {\n      const center = 0.5 + 0.63 * Math.sin(phase);\n      const delta = (y - center + 0.08 * Math.sin(x * 5 + phase)) / 0.23;\n      value = Math.exp(-delta * delta);\n      break;\n    }\n    default: {\n      // Broad vertical light band and two gentle horizontal lobes, inspired\n      // by the supplied still. It is an original approximation, not copied code.\n      const band = 0.5 + 0.5 * Math.cos((y - 0.76) * Math.PI * 1.25 - phase);\n      const folds = 0.84 + 0.16 * Math.cos((x - 0.2) * Math.PI * 3.7 + 0.8 * Math.sin(phase));\n      value = band * folds + 0.02 * Math.sin(x * 8 + y * 4 - phase);\n    }\n  }\n  value = clamp(value);\n  if (config.contrast !== 1) {\n    const a = Math.pow(value, config.contrast);\n    const b = Math.pow(1 - value, config.contrast);\n    value = a / (a + b);\n  }\n  return clamp(0.5 + (value - 0.5) * config.depth);\n}\n\n/**\n * Canvas implementation, also usable without React.\n * Stops scheduling frames when paused, offscreen or in a background tab.\n * Respects reduced motion unless the caller explicitly opts out.\n */\nexport function createDotField(\n  canvas: HTMLCanvasElement,\n  initialConfig: Partial<DotFieldConfig> = {},\n  onStats?: (stats: DotFieldStats) => void,\n): DotFieldController {\n  const ctx = canvas.getContext('2d', { alpha: true });\n  if (!ctx) throw new Error('Dotfield needs a browser with Canvas 2D support.');\n\n  let config = normalizeConfig(initialConfig);\n  let raster: ShapeRaster | null = null;\n  let shapeMask: ShapeMask | null = null;\n  let shapeTicket = 0;\n  let shapeState: DotFieldStats['shapeState'] = 'empty';\n  let shapeError: string | null = null;\n  let width = 0, height = 0, dpr = 1;\n  let columns = 0, rows = 0, actualSpacing = config.spacing;\n  let points = new Float32Array(0);\n  let elapsed = 0;\n  let requestedPlaying = true;\n  let inView = true;\n  let destroyed = false;\n  let frameId = 0;\n  let lastFrame: number | null = null;\n  let lastReport = 0;\n  let dirty = true;\n  const motion = window.matchMedia('(prefers-reduced-motion: reduce)');\n\n  const canAnimate = () => requestedPlaying && config.speed > 0 && !document.hidden\n    && inView && !(motion.matches && config.respectReducedMotion);\n\n  const getStats = (): DotFieldStats => ({\n    columns, rows, count: columns * rows, width, height, spacing: actualSpacing,\n    time: elapsed, progress: (elapsed % config.duration) / config.duration,\n    running: canAnimate(), reducedMotion: motion.matches && config.respectReducedMotion,\n    shapeState, shapeError,\n  });\n\n  const report = () => { onStats?.(getStats()); };\n\n  function rebuildGrid(): void {\n    // A hard cap protects very large screens at very small spacing.\n    actualSpacing = Math.max(config.spacing, Math.sqrt(width * height / 16000));\n    columns = Math.max(0, Math.floor((width - actualSpacing) / actualSpacing) + 1);\n    rows = Math.max(0, Math.floor((height - actualSpacing) / actualSpacing) + 1);\n    const offsetX = (width - (columns - 1) * actualSpacing) / 2;\n    const offsetY = (height - (rows - 1) * actualSpacing) / 2;\n    points = new Float32Array(columns * rows * 4);\n    for (let row = 0, i = 0; row < rows; row++) {\n      for (let col = 0; col < columns; col++, i += 4) {\n        const x = offsetX + col * actualSpacing;\n        const y = offsetY + row * actualSpacing;\n        points[i] = x;\n        points[i + 1] = y;\n        points[i + 2] = x / Math.max(1, width);\n        points[i + 3] = y / Math.max(1, height);\n      }\n    }\n  }\n\n  function draw(): void {\n    if (!width || !height || destroyed) return;\n    ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);\n    ctx!.globalAlpha = 1;\n    if (config.transparent) ctx!.clearRect(0, 0, width, height);\n    else {\n      ctx!.fillStyle = config.backgroundColor;\n      ctx!.fillRect(0, 0, width, height);\n    }\n    ctx!.fillStyle = config.dotColor;\n    const phase = (elapsed % config.duration) / config.duration * TAU;\n    const radiusRange = config.maxRadius - config.minRadius;\n    const fadeWidth = config.edgeFade * 0.25;\n    const aspect = width / height;\n    const activeMask = config.shapeEnabled ? shapeMask : null;\n    const transform = activeMask ? getShapeTransform(phase, config, width, height) : null;\n    for (let i = 0; i < points.length; i += 4) {\n      const x = points[i], y = points[i + 1];\n      const u = points[i + 2], v = points[i + 3];\n      const base = sampleField(u, v, phase, config, aspect);\n      const mask = activeMask && transform ? sampleShapeMask(activeMask, x, y, transform) : 0;\n      const field = activeMask ? blendShapeField(base, mask, config) : base;\n      const radius = config.minRadius + radiusRange * field;\n      if (radius < 0.05) continue;\n      let alpha = config.opacity;\n      if (activeMask && config.shapeMode === 'only') alpha *= 1 - config.shapeIntensity + mask * config.shapeIntensity;\n      if (config.varyOpacity) {\n        alpha *= config.minOpacity + (1 - config.minOpacity) * smoothstep(0.025, 0.58, field);\n      }\n      if (fadeWidth > 0) {\n        alpha *= smoothstep(0, fadeWidth, u) * smoothstep(0, fadeWidth, 1 - u)\n          * smoothstep(0, fadeWidth, v) * smoothstep(0, fadeWidth, 1 - v);\n      }\n      if (alpha < 0.003) continue;\n      ctx!.globalAlpha = alpha;\n      ctx!.beginPath();\n      ctx!.arc(x, y, radius, 0, TAU);\n      ctx!.fill();\n    }\n    ctx!.globalAlpha = 1;\n    dirty = false;\n  }\n\n  function tick(now: number): void {\n    frameId = 0;\n    if (destroyed) return;\n    const running = canAnimate();\n    if (running && lastFrame !== null) {\n      // Do not jump after stalls or after returning to a hidden tab.\n      elapsed += Math.min((now - lastFrame) / 1000, 0.1) * config.speed;\n    }\n    lastFrame = running ? now : null;\n    if (dirty || running) draw();\n    if (now - lastReport >= 200 || !running) { report(); lastReport = now; }\n    if (running && width > 0 && height > 0) frameId = requestAnimationFrame(tick);\n  }\n\n  function invalidate(): void {\n    dirty = true;\n    if (!destroyed && !frameId && !document.hidden && inView) frameId = requestAnimationFrame(tick);\n  }\n\n  function resize(): void {\n    if (destroyed) return;\n    const rect = canvas.getBoundingClientRect();\n    const nextDpr = Math.min(window.devicePixelRatio || 1, 2);\n    const nextWidth = Math.max(0, rect.width);\n    const nextHeight = Math.max(0, rect.height);\n    if (nextWidth === width && nextHeight === height && nextDpr === dpr) return;\n    width = nextWidth; height = nextHeight; dpr = nextDpr;\n    canvas.width = Math.max(1, Math.round(width * dpr));\n    canvas.height = Math.max(1, Math.round(height * dpr));\n    rebuildGrid();\n    invalidate();\n    report();\n  }\n\n  function refreshVisibility(): void {\n    lastFrame = null;\n    if (!canAnimate() && frameId) { cancelAnimationFrame(frameId); frameId = 0; }\n    invalidate();\n    report();\n  }\n\n  const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;\n  resizeObserver?.observe(canvas);\n  const intersectionObserver = typeof IntersectionObserver !== 'undefined'\n    ? new IntersectionObserver(entries => {\n      inView = entries[0]?.isIntersecting ?? true;\n      refreshVisibility();\n    }, { threshold: 0 }) : null;\n  intersectionObserver?.observe(canvas);\n  window.addEventListener('resize', resize);\n  document.addEventListener('visibilitychange', refreshVisibility);\n  motion.addEventListener('change', refreshVisibility);\n  resize();\n  invalidate();\n\n  return {\n    configure(partial) {\n      if (destroyed) return;\n      const oldSpacing = config.spacing;\n      const oldChannel = config.shapeChannel, oldSoftness = config.shapeSoftness;\n      config = normalizeConfig({ ...config, ...partial });\n      if (config.spacing !== oldSpacing) rebuildGrid();\n      if (raster && (oldChannel !== config.shapeChannel || oldSoftness !== config.shapeSoftness)) {\n        shapeMask = makeShapeMask(raster, config.shapeChannel, config.shapeSoftness);\n      }\n      lastFrame = null;\n      invalidate();\n      report();\n    },\n    async setShape(asset) {\n      if (destroyed) return false;\n      const ticket = ++shapeTicket;\n      shapeError = null;\n      if (!asset) {\n        raster = null; shapeMask = null; shapeState = 'empty';\n        invalidate(); report(); return true;\n      }\n      shapeState = 'loading'; report();\n      try {\n        const safe = sanitizeSVGShape(asset.svg, asset.name);\n        const result = await rasterizeShape(safe);\n        if (destroyed || ticket !== shapeTicket) return false;\n        const mask = makeShapeMask(result, config.shapeChannel, config.shapeSoftness);\n        raster = result; shapeMask = mask; shapeState = 'ready';\n        invalidate(); report(); return true;\n      } catch (cause) {\n        if (destroyed || ticket !== shapeTicket) return false;\n        shapeError = cause instanceof Error ? cause.message : 'Could not read this SVG.';\n        // A bad replacement never erases the last working vector.\n        shapeState = raster ? 'ready' : 'error';\n        invalidate(); report();\n        throw new Error(shapeError);\n      }\n    },\n    setPlaying(playing) {\n      if (destroyed) return;\n      requestedPlaying = !!playing;\n      lastFrame = null;\n      invalidate();\n      report();\n    },\n    seek(progress) {\n      if (destroyed || !Number.isFinite(progress)) return;\n      elapsed = clamp(progress, 0, 0.9999999) * config.duration;\n      lastFrame = null;\n      invalidate();\n      report();\n    },\n    reset() {\n      if (destroyed) return;\n      elapsed = 0;\n      lastFrame = null;\n      invalidate();\n      report();\n    },\n    getStats,\n    getConfig: () => ({ ...config }),\n    snapshot() {\n      if (destroyed) return null;\n      draw();\n      try { return canvas.toDataURL('image/png'); } catch { return null; }\n    },\n    destroy() {\n      if (destroyed) return;\n      destroyed = true;\n      shapeTicket++;\n      raster = null; shapeMask = null;\n      cancelAnimationFrame(frameId);\n      resizeObserver?.disconnect();\n      intersectionObserver?.disconnect();\n      window.removeEventListener('resize', resize);\n      document.removeEventListener('visibilitychange', refreshVisibility);\n      motion.removeEventListener('change', refreshVisibility);\n      points = new Float32Array(0);\n    },\n  };\n}\n\n// ---------------------------------------------------------------------------\n// React bindings. The renderer above can also be used without React.\n// ---------------------------------------------------------------------------\n\nexport interface DotFieldHandle {\n  reset(): void;\n  seek(progress: number): void;\n  snapshot(): string | null;\n  getStats(): DotFieldStats | null;\n}\nexport interface DotFieldProps {\n  config?: Partial<DotFieldConfig>;\n  shape?: DotFieldShape | null;\n  playing?: boolean;\n  className?: string;\n  style?: CSSProperties;\n  /** Omit to treat the canvas as decorative, which is appropriate for backgrounds. */\n  ariaLabel?: string;\n  onStats?: (stats: DotFieldStats) => void;\n  onError?: (error: Error) => void;\n}\n\n/** Fill a parent with an explicit height. No stylesheet is required. */\nexport const DotField = forwardRef<DotFieldHandle, DotFieldProps>(function DotField({\n  config, shape = null, playing = true, className, style, ariaLabel, onStats, onError,\n}, ref) {\n  const canvasRef = useRef<HTMLCanvasElement>(null);\n  const rendererRef = useRef<DotFieldController | null>(null);\n  const statsCallback = useRef(onStats);\n  const errorCallback = useRef(onError);\n  const [error, setError] = useState<string | null>(null);\n\n  useEffect(() => { statsCallback.current = onStats; }, [onStats]);\n  useEffect(() => { errorCallback.current = onError; }, [onError]);\n  useEffect(() => {\n    const canvas = canvasRef.current;\n    if (!canvas) return;\n    try {\n      const controller = createDotField(canvas, {}, stats => statsCallback.current?.(stats));\n      rendererRef.current = controller;\n      return () => {\n        controller.destroy();\n        rendererRef.current = null;\n      };\n    } catch (cause) {\n      const err = cause instanceof Error ? cause : new Error('Could not start Dotfield.');\n      setError(err.message);\n      errorCallback.current?.(err);\n    }\n  }, []);\n  useEffect(() => { rendererRef.current?.configure(normalizeConfig(config)); }, [config]);\n  useEffect(() => {\n    const controller = rendererRef.current;\n    if (!controller) return;\n    let active = true;\n    setError(null);\n    controller.setShape(shape).catch(cause => {\n      if (!active) return;\n      const err = cause instanceof Error ? cause : new Error('Could not load this SVG.');\n      setError(err.message); errorCallback.current?.(err);\n    });\n    return () => { active = false; };\n  }, [shape]);\n  useEffect(() => { rendererRef.current?.setPlaying(playing); }, [playing]);\n  useImperativeHandle(ref, () => ({\n    reset: () => rendererRef.current?.reset(),\n    seek: progress => rendererRef.current?.seek(progress),\n    snapshot: () => rendererRef.current?.snapshot() ?? null,\n    getStats: () => rendererRef.current?.getStats() ?? null,\n  }), []);\n\n  return <>\n    <canvas ref={canvasRef} className={className}\n      aria-hidden={ariaLabel ? undefined : true}\n      aria-label={ariaLabel} role={ariaLabel ? 'img' : undefined}\n      style={{ display: 'block', width: '100%', height: '100%', pointerEvents: 'none', ...style }} />\n    {error && <span role=\"alert\">{error}</span>}\n  </>;\n});\n\ntype NumericKey = 'speed' | 'scale' | 'depth' | 'angle' | 'duration' | 'spacing'\n  | 'minRadius' | 'maxRadius' | 'contrast' | 'edgeFade' | 'opacity' | 'minOpacity'\n  | 'complexity' | 'shapeSize' | 'shapeTravel' | 'shapeIntensity' | 'shapeSoftness'\n  | 'shapeRotation' | 'shapeSpin' | 'shapePulse' | 'shapeCycles' | 'shapeBackground';\ntype ControlTab = 'motion' | 'shape' | 'dots' | 'colour';\ninterface SliderSpec {\n  key: NumericKey;\n  label: string;\n  min: number;\n  max: number | ((c: DotFieldConfig) => number);\n  step: number;\n  format(value: number): string;\n}\nconst percent = (v: number) => `${Math.round(v * 100)}%`;\nconst multiplier = (v: number) => `${v.toFixed(2)}×`;\nconst diameter = (v: number) => `${(v * 2).toFixed(1)}px`;\nconst SLIDERS: Record<ControlTab | 'shapeExtra' | 'generated', SliderSpec[]> = {\n  generated: [{ key: 'complexity', label: 'Wave layers', min: 2, max: 7, step: 1, format: v => String(v) }],\n  shape: [\n    { key: 'shapeSize', label: 'Shape size', min: 0.15, max: 1.6, step: 0.01, format: percent },\n    { key: 'shapeTravel', label: 'Travel distance', min: 0, max: 1, step: 0.01, format: percent },\n    { key: 'shapeIntensity', label: 'Shape influence', min: 0, max: 1, step: 0.01, format: percent },\n    { key: 'shapeSoftness', label: 'Edge softness', min: 0, max: 1, step: 0.01, format: percent },\n  ],\n  shapeExtra: [\n    { key: 'shapeSpin', label: 'Turns per loop', min: -3, max: 3, step: 1, format: v => `${v}×` },\n    { key: 'shapeRotation', label: 'Starting angle', min: 0, max: 360, step: 1, format: v => `${v}°` },\n    { key: 'shapePulse', label: 'Size pulse', min: 0, max: 0.5, step: 0.01, format: percent },\n    { key: 'shapeCycles', label: 'Trips per loop', min: 1, max: 4, step: 1, format: v => `${v}×` },\n    { key: 'shapeBackground', label: 'Background waves', min: 0, max: 1, step: 0.01, format: percent },\n  ],\n  motion: [\n    { key: 'speed', label: 'Speed', min: 0, max: 3, step: 0.05, format: multiplier },\n    { key: 'scale', label: 'Wave scale', min: 0.35, max: 3, step: 0.05, format: percent },\n    { key: 'depth', label: 'Size variation', min: 0, max: 1, step: 0.01, format: percent },\n    { key: 'angle', label: 'Wave angle', min: 0, max: 360, step: 1, format: v => `${Math.round(v)}°` },\n    { key: 'duration', label: 'Base loop length (at 1×)', min: 6, max: 120, step: 1, format: v => `${v}s` },\n  ],\n  dots: [\n    { key: 'spacing', label: 'Grid spacing', min: 8, max: 64, step: 1, format: v => `${v}px` },\n    { key: 'minRadius', label: 'Smallest diameter', min: 0, max: c => c.maxRadius, step: 0.05, format: diameter },\n    { key: 'maxRadius', label: 'Largest diameter', min: 0.25, max: c => Math.min(16, c.spacing * 0.46), step: 0.05, format: diameter },\n    { key: 'contrast', label: 'Field contrast', min: 0.35, max: 3, step: 0.05, format: multiplier },\n    { key: 'edgeFade', label: 'Edge fade', min: 0, max: 1, step: 0.01, format: percent },\n  ],\n  colour: [\n    { key: 'opacity', label: 'Overall opacity', min: 0, max: 1, step: 0.01, format: percent },\n    { key: 'minOpacity', label: 'Dim-dot brightness', min: 0, max: 1, step: 0.01, format: percent },\n  ],\n};\nconst PATTERN_LABELS: Record<DotPattern, string> = {\n  reference: 'Reference', tide: 'Tide', crosswave: 'Crosswave',\n  ripple: 'Ripple', breath: 'Breath', sweep: 'Sweep', generated: 'Generated',\n};\nconst COLOUR_PRESETS = [\n  ['Original', '#ececec', '#000000'], ['Chalk', '#eeeddb', '#191a16'],\n  ['Cobalt', '#95baff', '#071323'], ['Moss', '#b2d19a', '#101a0c'],\n  ['Paper', '#30372b', '#eeeee5'], ['Ember', '#efb491', '#21120d'],\n] as const;\n\nconst CONTROL_CSS = `\n.df-controls{--df-text:#f0f0e8;--df-muted:#a7af9c;--df-line:#37412e;--df-accent:#d6e9b4;background:#171b13;border:1px solid var(--df-line);border-radius:14px;color:var(--df-text);padding:21px;box-sizing:border-box;font:12px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;min-width:0;color-scheme:dark}\n.df-controls *{box-sizing:border-box}.df-controls button,.df-controls input,.df-controls select{font:inherit}.df-controls button{cursor:pointer}.df-controls button:focus-visible,.df-controls input:focus-visible{outline:2px solid var(--df-accent);outline-offset:3px}\n.dfc-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:10px}.dfc-heading h3{font-weight:550;font-size:16px;margin:0}.dfc-reset{background:none;border:0;color:var(--df-muted);padding:0;font-size:11px}\n.dfc-tabs{display:flex;gap:3px;background:#0e120b;border-radius:7px;padding:3px;margin-bottom:20px}.dfc-tabs button{background:none;color:var(--df-muted);border:0;border-radius:5px;padding:7px 5px;flex:1;text-transform:capitalize;font-size:11px}.dfc-tabs button[aria-selected=true]{background:#313e25;color:var(--df-text)}\n.dfc-patterns,.dfc-palettes{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:22px}.dfc-patterns button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:9px 3px;background:#10150c;border:1px solid var(--df-line);border-radius:7px;color:var(--df-muted);font-size:10px}.dfc-patterns button[aria-pressed=true]{border-color:#b5d18e;background:#2b391f;color:var(--df-accent)}.dfc-patterns svg{width:65px;max-width:100%;height:28px}\n.dfc-range{display:block;margin:0 0 19px}.dfc-range>span{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px}.dfc-range output{font:10px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--df-accent)}.dfc-range input{display:block;width:100%;margin:0;accent-color:var(--df-accent);cursor:pointer}.dfc-range input:disabled{opacity:.35}\n.dfc-palette{border:1px solid var(--df-line);background:#0e130a;color:var(--df-muted);border-radius:6px;padding:0;overflow:hidden;font-size:10px}.dfc-palette[aria-pressed=true]{border-color:var(--df-accent);color:var(--df-accent)}.dfc-palette>span:first-child{display:block;height:28px;letter-spacing:4px;font-size:14px;padding-top:1px}.dfc-palette>span:last-child{display:block;padding:6px 2px}\n.dfc-colour{display:flex;justify-content:space-between;align-items:center;margin:15px 0;gap:10px}.dfc-colour>span:last-child{display:flex;align-items:center;gap:8px;font:10px ui-monospace,SFMono-Regular,monospace;color:var(--df-muted)}.dfc-colour input{padding:0;border:1px solid var(--df-line);border-radius:4px;width:30px;height:25px;cursor:pointer;background:none}\n.dfc-check{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:17px 0;color:var(--df-muted)}.dfc-check input{accent-color:var(--df-accent);width:15px;height:15px}.dfc-note{font-size:11px;color:var(--df-muted);line-height:1.7;margin:14px 0 0}.dfc-actions{display:flex;gap:8px;align-items:center;margin-top:19px;padding-top:16px;border-top:1px solid var(--df-line)}.dfc-actions button{border:1px solid var(--df-line);border-radius:6px;background:#303f23;color:var(--df-accent);padding:7px 13px;font-size:11px}.dfc-phase{margin-top:17px}.dfc-warning{padding:9px 10px;border:1px solid #566b3e;background:#28371a;border-radius:6px;font-size:11px;color:var(--df-accent);margin-bottom:15px}\n.df-playground{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:stretch;width:100%;height:min(800px,90vh);min-height:560px}.df-playground-canvas{min-width:0;min-height:0;overflow:hidden;border-radius:14px;background:#000}.df-playground .df-controls{overflow-y:auto;scrollbar-width:thin;scrollbar-color:#465737 transparent}\n.df-controls [hidden]{display:none!important}.df-controls button:disabled{opacity:.4;cursor:not-allowed}.df-controls select:focus-visible,.df-controls summary:focus-visible{outline:2px solid var(--df-accent);outline-offset:3px}\n.dfc-random-row{display:flex;gap:8px;margin-bottom:18px}.dfc-random-row button{border:1px solid var(--df-line);border-radius:7px;padding:10px 12px;background:none;color:var(--df-muted);font-size:11px}.dfc-random-row button:first-child{flex:1;display:flex;align-items:center;gap:9px;background:var(--df-accent);color:#243119;border-color:var(--df-accent);font-weight:550}.dfc-random-row svg{width:15px;height:15px}.dfc-patterns .dfc-generated{grid-column:1/-1;flex-direction:row;justify-content:center;gap:12px;padding:7px}.dfc-patterns .dfc-generated svg{height:22px}\n.dfc-seed{background:#1b2613;border:1px solid var(--df-line);border-radius:8px;padding:12px;margin-bottom:22px}.dfc-seed>label{font-size:11px;display:block;margin-bottom:7px}.dfc-seed>div{display:flex;gap:6px;margin-bottom:16px}.dfc-seed input[type=text]{min-width:0;width:100%;background:#10170b;border:1px solid var(--df-line);border-radius:5px;color:var(--df-accent);font:11px ui-monospace,monospace;padding:7px 8px}.dfc-seed button{background:#303f23;color:var(--df-accent);border:1px solid var(--df-line);border-radius:5px;padding:0 10px;font-size:10px}.dfc-seed .dfc-range{margin-bottom:0}\n.dfc-note.dfc-shape-intro{margin:0 0 15px}.dfc-upload{width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;min-height:100px;justify-content:center;padding:15px 10px;background:#10170c;color:var(--df-text);border:1px dashed #617b47;border-radius:9px}.dfc-upload:hover{background:#24351b}.dfc-upload strong{font-weight:500;font-size:11px}.dfc-upload span{font-size:10px;color:var(--df-muted)}.dfc-shape-card{display:flex;gap:10px;align-items:center;padding:12px;border:1px solid var(--df-line);border-radius:9px;background:#10170b}.dfc-shape-preview{display:flex;align-items:center;justify-content:center;width:47px;height:47px;background:repeating-conic-gradient(#727867 0% 25%,#8e9580 0% 50%) 50%/12px 12px;border-radius:5px;flex-shrink:0}.dfc-shape-preview img{width:38px;height:38px;object-fit:contain}.dfc-shape-card>div{flex:1;min-width:0}.dfc-shape-card strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:500;margin-bottom:6px}.dfc-shape-card button{background:none;color:var(--df-muted);border:0;font-size:10px;padding:0}.dfc-shape-card>button{align-self:flex-start;font-size:17px}\n.dfc-shape-samples{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:9px 0 19px}.dfc-shape-samples button{display:flex;flex-direction:column;align-items:center;gap:7px;border:1px solid var(--df-line);background:#11190c;color:var(--df-muted);padding:10px 4px;border-radius:7px;font-size:9px}.dfc-shape-samples button[aria-pressed=true]{border-color:var(--df-accent);background:#293c1c;color:var(--df-accent)}.dfc-shape-samples img{width:27px;height:27px;object-fit:contain}.dfc-select{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:19px;font-size:11px}.dfc-select select{min-width:0;max-width:63%;background:#10170b;color:var(--df-accent);border:1px solid var(--df-line);border-radius:6px;padding:7px;font-size:10px}.dfc-details{border-top:1px solid var(--df-line);border-bottom:1px solid var(--df-line);margin-bottom:18px}.dfc-details summary{cursor:pointer;font-size:11px;color:var(--df-muted);padding:13px 0}.dfc-details[open] summary{margin-bottom:5px;color:var(--df-accent)}.dfc-note.dfc-channel-note{margin:-5px 0 18px;font-size:10px}\n\n@media(max-width:760px){.df-playground{grid-template-columns:1fr;height:auto;min-height:0}.df-playground-canvas{height:440px}.df-playground .df-controls{overflow:visible}}\n@media(prefers-reduced-motion:reduce){.df-controls *{transition:none!important}}\n`;\n\n/** Always render imported artwork in an image context, never as inline markup. */\nfunction ShapePreview({ shape }: { shape: DotFieldShape }) {\n  const [src, setSrc] = useState('');\n  useEffect(() => {\n    try { setSrc(`data:image/svg+xml,${encodeURIComponent(sanitizeSVGShape(shape.svg, shape.name).svg)}`); }\n    catch { setSrc(''); }\n  }, [shape]);\n  return <span className=\"dfc-shape-preview\">{src && <img src={src} alt=\"Loaded vector preview\" />}</span>;\n}\n\nexport interface DotFieldControlsProps {\n  value: DotFieldConfig;\n  shape?: DotFieldShape | null;\n  onShapeChange?: (shape: DotFieldShape | null) => void;\n  onChange(config: DotFieldConfig): void;\n  playing?: boolean;\n  onPlayingChange?: (playing: boolean) => void;\n  onReset?: () => void;\n  onRestart?: () => void;\n  progress?: number;\n  onSeek?: (progress: number) => void;\n  reducedMotion?: boolean;\n  className?: string;\n  style?: CSSProperties;\n}\n\n/** Optional, controlled configuration panel. Includes its own scoped CSS. */\nexport function DotFieldControls({\n  value, onChange, playing = true, onPlayingChange, onReset, onRestart,\n  progress, onSeek, reducedMotion = false, className = '', style, shape = null, onShapeChange,\n}: DotFieldControlsProps) {\n  const [tab, setTab] = useState<ControlTab>('motion');\n  const [shapeBusy, setShapeBusy] = useState(false);\n  const [message, setMessage] = useState('');\n  const [seedDraft, setSeedDraft] = useState(String(value.seed));\n  const [canUndo, setCanUndo] = useState(false);\n  const upload = useRef<HTMLInputElement>(null);\n  const uploadTicket = useRef(0);\n  const history = useRef<DotFieldConfig[]>([]);\n  const latestValue = useRef(value);\n  latestValue.current = value;\n  useEffect(() => { setSeedDraft(String(value.seed)); }, [value.seed]);\n  useEffect(() => () => { uploadTicket.current++; }, []);\n  useEffect(() => { if (shape) setTab('shape'); }, [shape]);\n  const randomize = (seed?: number) => {\n    history.current.push({ ...latestValue.current });\n    if (history.current.length > 20) history.current.shift();\n    setCanUndo(true);\n    let nextSeed = seed ?? newRandomSeed();\n    if (seed === undefined && nextSeed === latestValue.current.seed) nextSeed = (nextSeed + 1) >>> 0;\n    onChange(randomizeConfig(latestValue.current, nextSeed));\n    onRestart?.(); onPlayingChange?.(true); setMessage('');\n  };\n  const applySeed = () => {\n    if (!/^\\d{1,10}$/.test(seedDraft) || Number(seedDraft) > 4294967295) {\n      setMessage('Enter a seed from 0 to 4294967295.'); return;\n    }\n    randomize(Number(seedDraft));\n  };\n  const removeShape = () => {\n    uploadTicket.current++; setShapeBusy(false); setMessage(''); onShapeChange?.(null);\n  };\n  const loadShape = async (input: File | DotFieldShape) => {\n    if (!onShapeChange) return;\n    const ticket = ++uploadTicket.current;\n    setShapeBusy(true); setMessage(''); setTab('shape');\n    try {\n      const next = input instanceof File ? await readSVGFile(input) : await loadSVGShape(input.svg, input.name);\n      if (ticket !== uploadTicket.current) return;\n      onShapeChange(next);\n      onChange(normalizeConfig({ ...latestValue.current, shapeEnabled: true, shapeChannel: 'alpha' }));\n    } catch (cause) {\n      if (ticket === uploadTicket.current) setMessage(cause instanceof Error ? cause.message : 'Could not load this SVG.');\n    } finally { if (ticket === uploadTicket.current) setShapeBusy(false); }\n  };\n  const id = useId();\n  const tabs: ControlTab[] = ['motion', 'shape', 'dots', 'colour'];\n  const patch = (partial: Partial<DotFieldConfig>) => onChange(normalizeConfig({ ...latestValue.current, ...partial }));\n  const renderSlider = (spec: SliderSpec) => <label className=\"dfc-range\" key={spec.key}>\n    <span>{spec.label}<output>{spec.format(value[spec.key])}</output></span>\n    <input type=\"range\" min={spec.min} max={typeof spec.max === 'function' ? spec.max(value) : spec.max}\n      step={spec.step} value={value[spec.key]}\n      disabled={(spec.key === 'minOpacity' && !value.varyOpacity) || (spec.key === 'shapeBackground' && value.shapeMode !== 'blend')}\n      onChange={event => patch({ [spec.key]: Number(event.currentTarget.value) })} />\n  </label>;\n  const renderCheck = (key: 'varyOpacity' | 'transparent' | 'respectReducedMotion' | 'shapeEnabled', label: string) =>\n    <label className=\"dfc-check\"><span>{label}</span><input type=\"checkbox\" checked={value[key]}\n      onChange={event => patch({ [key]: event.currentTarget.checked })} /></label>;\n\n  return <section className={`df-controls ${className}`} style={style} aria-label=\"Dotfield controls\">\n    <style>{CONTROL_CSS}</style>\n    <div className=\"dfc-heading\"><h3>Field controls</h3><button type=\"button\" className=\"dfc-reset\"\n      onClick={() => {\n        uploadTicket.current++; setShapeBusy(false); setMessage('');\n        history.current = []; setCanUndo(false);\n        if (onReset) onReset(); else { onChange(normalizeConfig()); onShapeChange?.(null); }\n      }}>Reset</button></div>\n    <div className=\"dfc-random-row\"><button type=\"button\" onClick={() => randomize()}>\n      <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeWidth=\"1.6\" aria-hidden=\"true\"><path d=\"m17 3 4 4-4 4m0 2 4 4-4 4M3 7h3c6 0 6 10 12 10h3M3 17h3c2 0 3-1 4-3m4-4c1-2 3-3 5-3h2\" /></svg>Randomise</button>\n      <button type=\"button\" disabled={!canUndo} aria-label=\"Undo randomisation\" onClick={() => {\n        const previous = history.current.pop();\n        if (previous) { onChange(previous); onRestart?.(); }\n        setCanUndo(history.current.length > 0);\n      }}>Undo</button></div>\n    <div className=\"dfc-tabs\" role=\"tablist\" aria-label=\"Control categories\">\n      {tabs.map((name, index) => <button type=\"button\" key={name} role=\"tab\"\n        id={`${id}-${name}-tab`} aria-controls={`${id}-${name}-panel`}\n        aria-selected={tab === name} tabIndex={tab === name ? 0 : -1}\n        onClick={() => setTab(name)}\n        onKeyDown={event => {\n          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;\n          event.preventDefault();\n          const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1\n            : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;\n          setTab(tabs[next]);\n          (event.currentTarget.parentElement?.children[next] as HTMLButtonElement | undefined)?.focus();\n        }}>{name}</button>)}\n    </div>\n    {message && <p className=\"dfc-warning\" role=\"alert\">{message}</p>}\n    {reducedMotion && <p className=\"dfc-warning\">Paused for your device's reduced-motion preference.</p>}\n    <div id={`${id}-motion-panel`} role=\"tabpanel\" aria-labelledby={`${id}-motion-tab`} hidden={tab !== 'motion'}>\n      <div className=\"dfc-patterns\">\n        {PATTERNS.map(pattern => <button type=\"button\" key={pattern} className={pattern === 'generated' ? 'dfc-generated' : undefined} aria-pressed={value.pattern === pattern}\n          onClick={() => patch({ pattern })}>\n          <svg viewBox=\"0 0 65 28\" fill=\"currentColor\" aria-hidden=\"true\">\n            {Array.from({ length: 55 }, (_, i) => {\n              const col = i % 11, row = Math.floor(i / 11);\n              const field = sampleField(col / 10, row / 4, pattern === 'breath' ? 2 : 0.3,\n                normalizeConfig({ pattern, seed: value.seed, complexity: value.complexity }));\n              return <circle key={i} cx={3 + col * 5.8} cy={3 + row * 5.2}\n                r={0.5 + field * 1.3} opacity={0.3 + field * 0.7} />;\n            })}\n          </svg>{PATTERN_LABELS[pattern]}\n        </button>)}\n      </div>\n      {value.pattern === 'generated' && <div className=\"dfc-seed\">\n        <label htmlFor={`${id}-seed`}>Loop seed</label>\n        <div><input id={`${id}-seed`} type=\"text\" inputMode=\"numeric\" value={seedDraft} maxLength={10}\n          onChange={event => setSeedDraft(event.currentTarget.value)}\n          onKeyDown={event => { if (event.key === 'Enter') applySeed(); }} />\n          <button type=\"button\" onClick={applySeed}>Apply</button></div>\n        {SLIDERS.generated.map(renderSlider)}\n      </div>}\n      {SLIDERS.motion.map(renderSlider)}\n      <p className=\"dfc-note\">{value.speed > 0\n        ? `One loop takes ${(value.duration / value.speed).toFixed(1)} seconds at this speed.`\n        : 'Increase the speed above zero to animate.'}</p>\n    </div>\n    <div id={`${id}-shape-panel`} role=\"tabpanel\" aria-labelledby={`${id}-shape-tab`} hidden={tab !== 'shape'}>\n      <p className=\"dfc-note dfc-shape-intro\">Move a vector through the field. The dots stay fixed and reveal its silhouette.</p>\n      <input ref={upload} type=\"file\" accept=\".svg,image/svg+xml\" hidden onChange={event => {\n        const file = event.currentTarget.files?.[0]; event.currentTarget.value = '';\n        if (file) void loadShape(file);\n      }} />\n      {shape ? <div className=\"dfc-shape-card\"><ShapePreview shape={shape} />\n        <div><strong>{shape.name}</strong><button type=\"button\" disabled={!onShapeChange || shapeBusy} onClick={() => upload.current?.click()}>Replace SVG</button></div>\n        <button type=\"button\" onClick={removeShape} disabled={!onShapeChange} aria-label=\"Remove shape\">×</button>\n      </div> : <button type=\"button\" className=\"dfc-upload\" disabled={!onShapeChange || shapeBusy}\n        onClick={() => upload.current?.click()}\n        onDragOver={event => event.preventDefault()}\n        onDrop={event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) void loadShape(file); }}>\n        <strong>{shapeBusy ? 'Preparing your SVG…' : 'Drop an SVG, or choose a file'}</strong><span>A logo, icon or simple vector. Up to 1 MB.</span>\n      </button>}\n      <p className=\"dfc-note\">Or try a shape</p>\n      <div className=\"dfc-shape-samples\">{BUILTIN_SHAPES.map(asset => <button type=\"button\" key={asset.name}\n        disabled={!onShapeChange || shapeBusy} aria-pressed={shape?.name === asset.name} onClick={() => void loadShape(asset)}>\n        <img src={`data:image/svg+xml,${encodeURIComponent(asset.svg)}`} alt=\"\" /><span>{asset.name}</span>\n      </button>)}</div>\n      {shape && <>\n        {renderCheck('shapeEnabled', 'Show vector layer')}\n        <label className=\"dfc-select\"><span>Path</span><select value={value.shapeMotion} onChange={event => patch({ shapeMotion: event.currentTarget.value as ShapeMotion })}>\n          <option value=\"float\">Gentle float</option><option value=\"orbit\">Orbit</option><option value=\"figure8\">Figure of eight</option><option value=\"still\">Centred</option>\n        </select></label>\n        <label className=\"dfc-select\"><span>Appearance</span><select value={value.shapeMode} onChange={event => patch({ shapeMode: event.currentTarget.value as ShapeMode })}>\n          <option value=\"blend\">Dots + shape</option><option value=\"only\">Shape only</option><option value=\"cutout\">Cut-out</option>\n        </select></label>\n        {SLIDERS.shape.map(renderSlider)}\n        <details className=\"dfc-details\"><summary>Rotation & detail</summary>\n          <label className=\"dfc-select\"><span>Read artwork from</span><select value={value.shapeChannel} onChange={event => patch({ shapeChannel: event.currentTarget.value as ShapeChannel })}>\n            <option value=\"alpha\">Transparency / silhouette</option><option value=\"dark\">Dark artwork on light</option><option value=\"light\">Light artwork on dark</option>\n          </select></label>\n          <p className=\"dfc-note dfc-channel-note\">Seeing a rectangle? Choose dark or light artwork to ignore an opaque background.</p>\n          {SLIDERS.shapeExtra.map(renderSlider)}\n        </details>\n      </>}\n      <p className=\"dfc-note\">SVG artwork stays in this browser. Convert text to outlines for consistent lettering. Embedded images and external assets are removed.</p>\n      {!onShapeChange && <p className=\"dfc-note\">Pass shape and onShapeChange to enable uploads in a controlled layout.</p>}\n    </div>\n    <div id={`${id}-dots-panel`} role=\"tabpanel\" aria-labelledby={`${id}-dots-tab`} hidden={tab !== 'dots'}>\n      {SLIDERS.dots.map(renderSlider)}\n      <p className=\"dfc-note\">Dot centres stay fixed. Only resizing the canvas or changing spacing rebuilds the grid.</p>\n    </div>\n    <div id={`${id}-colour-panel`} role=\"tabpanel\" aria-labelledby={`${id}-colour-tab`} hidden={tab !== 'colour'}>\n      <div className=\"dfc-palettes\">{COLOUR_PRESETS.map(([name, dotColor, backgroundColor]) =>\n        <button className=\"dfc-palette\" type=\"button\" key={name}\n          aria-pressed={value.dotColor === dotColor && value.backgroundColor === backgroundColor}\n          onClick={() => patch({ dotColor, backgroundColor, transparent: false })}>\n          <span style={{ backgroundColor, color: dotColor }}>•••••</span><span>{name}</span>\n        </button>)}</div>\n      {(['dotColor', 'backgroundColor'] as const).map(key => <label className=\"dfc-colour\" key={key}>\n        <span>{key === 'dotColor' ? 'Dots' : 'Background'}</span>\n        <span>{value[key].toUpperCase()}<input type=\"color\" value={value[key]}\n          onChange={event => patch({ [key]: event.currentTarget.value })} /></span>\n      </label>)}\n      {renderCheck('transparent', 'Transparent background')}\n      {renderCheck('varyOpacity', 'Brightness follows size')}\n      {SLIDERS.colour.map(renderSlider)}\n      {renderCheck('respectReducedMotion', 'Respect reduced motion')}\n    </div>\n    {(onPlayingChange || onRestart) && <div className=\"dfc-actions\">\n      {onPlayingChange && <button type=\"button\" disabled={reducedMotion || value.speed === 0}\n        onClick={() => onPlayingChange(!playing)}>{playing && !reducedMotion && value.speed > 0 ? 'Pause' : 'Play'}</button>}\n      {onRestart && <button type=\"button\" onClick={onRestart}>Restart</button>}\n    </div>}\n    {onSeek && progress !== undefined && <label className=\"dfc-range dfc-phase\"><span>Animation phase\n      <output>{Math.floor(progress * 100)}%</output></span><input type=\"range\" min=\"0\" max=\"1\" step=\"0.001\"\n        value={progress} onChange={event => {\n          const nextProgress = Number(event.currentTarget.value);\n          onPlayingChange?.(false);\n          onSeek(nextProgress);\n        }} /></label>}\n  </section>;\n}\n\nexport interface DotFieldPlaygroundProps {\n  initialConfig?: Partial<DotFieldConfig>;\n  initialShape?: DotFieldShape | null;\n  className?: string;\n  style?: CSSProperties;\n}\n\n/** Ready-to-use responsive canvas and controls. No additional CSS file needed. */\nexport function DotFieldPlayground({ initialConfig, initialShape = null, className = '', style }: DotFieldPlaygroundProps) {\n  const [config, setConfig] = useState(() => normalizeConfig(initialConfig));\n  const [shape, setShape] = useState<DotFieldShape | null>(initialShape);\n  const [playing, setPlaying] = useState(true);\n  const [stats, setStats] = useState<DotFieldStats | null>(null);\n  const field = useRef<DotFieldHandle>(null);\n  return <div className={`df-playground ${className}`} style={style}>\n    <style>{CONTROL_CSS}</style>\n    <div className=\"df-playground-canvas\" style={{ background: config.transparent ? 'transparent' : config.backgroundColor }}>\n      <DotField ref={field} config={config} shape={shape} playing={playing} onStats={setStats}\n        ariaLabel=\"Animated fixed grid of dots\" />\n    </div>\n    <DotFieldControls value={config} onChange={setConfig} shape={shape} onShapeChange={setShape} playing={playing} onPlayingChange={setPlaying}\n      progress={stats?.progress ?? 0} reducedMotion={stats?.reducedMotion ?? false}\n      onSeek={progress => field.current?.seek(progress)} onRestart={() => field.current?.reset()}\n      onReset={() => { setConfig(normalizeConfig(initialConfig)); setShape(initialShape); field.current?.reset(); setPlaying(true); }} />\n  </div>;\n}\n\nexport default DotField;\n";
+// The HTML preview uses the same renderer as the React component, without
+// requiring React or any CDN to be available when opening the file.
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector)];
+const ICONS = {
+  upload: '<path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5"/>',
+  shuffle: '<path d="m17 3 4 4-4 4m0 2 4 4-4 4M3 7h3c6 0 6 10 12 10h3M3 17h3c2 0 3-1 4-3m4-4c1-2 3-3 5-3h2"/>',
+  undo: '<path d="m8 4-5 5 5 5M3 9h10a7 7 0 0 1 0 14" transform="translate(0 -2)"/>',
+  pause: '<path d="M8 5v14M16 5v14" stroke-width="3"/>',
+  play: '<path d="m8 5 11 7-11 7Z" fill="currentColor" stroke="none"/>',
+  restart: '<path d="M3 10a9 9 0 1 1 1.8 8M3 4v6h6"/>',
+  expand: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
+  collapse: '<path d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m21 16-5-5L5 21"/>',
+  'arrow-up-right': '<path d="M6 18 18 6M6 6h12v12"/>',
+  crosshair: '<circle cx="12" cy="12" r="6"/><path d="M12 2v5m0 10v5M2 12h5m10 0h5"/>',
+  close: '<path d="m6 6 12 12M6 18 18 6"/>',
+  download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
+  copy: '<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>',
+};
+const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+$$('[data-icon]').forEach(el => { el.innerHTML = icon(el.dataset.icon); });
+const PATTERN_NAMES = { reference: 'Reference', tide: 'Tide', crosswave: 'Crosswave', ripple: 'Ripple', breath: 'Breath', sweep: 'Sweep', generated: 'Generated' };
+const PALETTES = [
+  { name: 'Original', dot: '#ececec', bg: '#000000' },
+  { name: 'Chalk', dot: '#eeeddb', bg: '#191a16' },
+  { name: 'Cobalt', dot: '#95baff', bg: '#071323' },
+  { name: 'Moss', dot: '#b2d19a', bg: '#101a0c' },
+  { name: 'Paper', dot: '#30372b', bg: '#eeeee5' },
+  { name: 'Ember', dot: '#efb491', bg: '#21120d' },
+];
+const CONTROL_GROUPS = {
+  generated: [
+    { key: 'complexity', label: 'Wave layers', min: 2, max: 7, step: 1, format: v => String(v), ends: ['Simple', 'Complex'] },
+  ],
+  shape: [
+    { key: 'shapeSize', label: 'Shape size', min: 0.15, max: 1.6, step: 0.01, format: v => `${Math.round(v * 100)}%`, ends: ['Small', 'Oversized'] },
+    { key: 'shapeTravel', label: 'Travel distance', min: 0, max: 1, step: 0.01, format: v => `${Math.round(v * 100)}%`, ends: ['Centred', 'Wide'] },
+    { key: 'shapeIntensity', label: 'Shape influence', min: 0, max: 1, step: 0.01, format: v => `${Math.round(v * 100)}%`, ends: ['Waves only', 'Full shape'] },
+    { key: 'shapeSoftness', label: 'Edge softness', min: 0, max: 1, step: 0.01, format: v => `${Math.round(v * 100)}%`, ends: ['Sharp', 'Diffused'] },
+  ],
+  'shape-extra': [
+    { key: 'shapeSpin', label: 'Turns per loop', min: -3, max: 3, step: 1, format: v => `${v}×`, ends: ['Anticlockwise', 'Clockwise'] },
+    { key: 'shapeRotation', label: 'Starting angle', min: 0, max: 360, step: 1, format: v => `${v}°`, ends: ['0°', '360°'] },
+    { key: 'shapePulse', label: 'Size pulse', min: 0, max: 0.5, step: 0.01, format: v => `${Math.round(v * 100)}%`, ends: ['None', 'Full'] },
+    { key: 'shapeCycles', label: 'Trips per loop', min: 1, max: 4, step: 1, format: v => `${v}×`, ends: ['One', 'Four'] },
+    { key: 'shapeBackground', label: 'Background waves', min: 0, max: 1, step: 0.01, format: v => `${Math.round(v * 100)}%`, ends: ['Quiet', 'Full'] },
+  ],
+  motion: [
+    { key: 'speed', label: 'Speed', min: 0, max: 3, step: 0.05, format: v => `${v.toFixed(2)}×`, ends: ['Still', 'Fast'] },
+    { key: 'scale', label: 'Wave scale', min: 0.35, max: 3, step: 0.05, format: v => `${Math.round(v * 100)}%`, ends: ['Fine', 'Broad'] },
+    { key: 'depth', label: 'Size variation', min: 0, max: 1, step: 0.01, format: v => `${Math.round(v * 100)}%`, ends: ['Uniform', 'Full range'] },
+    { key: 'angle', label: 'Wave angle', min: 0, max: 360, step: 1, format: v => `${Math.round(v)}°`, ends: ['0°', '360°'] },
+    { key: 'duration', label: 'Base loop length', min: 6, max: 120, step: 1, format: v => `${Math.round(v)}s`, ends: ['Short', 'Long'], title: 'Loop duration at 1× speed. Actual duration is this number divided by speed.' },
+  ],
+  dots: [
+    { key: 'spacing', label: 'Grid spacing', min: 8, max: 64, step: 1, format: v => `${Math.round(v)}px`, ends: ['Dense', 'Sparse'] },
+    { key: 'minRadius', label: 'Smallest dot', min: 0, max: c => c.maxRadius, step: 0.05, format: v => `${(v * 2).toFixed(1)}px`, ends: ['Invisible', 'Larger'], title: 'Dot diameter in CSS pixels. The React config uses radius.' },
+    { key: 'maxRadius', label: 'Largest dot', min: 0.25, max: c => Math.min(16, c.spacing * 0.46), step: 0.05, format: v => `${(v * 2).toFixed(1)}px`, ends: ['Small', 'Large'], title: 'Dot diameter in CSS pixels. Capped to prevent overlap.' },
+    { key: 'contrast', label: 'Field contrast', min: 0.35, max: 3, step: 0.05, format: v => `${v.toFixed(2)}×`, ends: ['Soft', 'Defined'] },
+    { key: 'edgeFade', label: 'Edge fade', min: 0, max: 1, step: 0.01, format: v => `${Math.round(v * 100)}%`, ends: ['None', 'Soft edges'] },
+  ],
+  colour: [
+    { key: 'opacity', label: 'Overall opacity', min: 0, max: 1, step: 0.01, format: v => `${Math.round(v * 100)}%`, ends: ['Invisible', 'Solid'] },
+    { key: 'minOpacity', label: 'Dim-dot brightness', min: 0, max: 1, step: 0.01, format: v => `${Math.round(v * 100)}%`, ends: ['Dark', 'Bright'], title: 'Minimum brightness as a fraction of overall opacity.' },
+  ],
+};
+const STORAGE_KEY = 'dotfield-lab-v1';
+let config = normalizeConfig();
+let shape = null;
+let pendingSavedShape = null;
+let shapeBusy = false;
+let shapeRequest = 0;
+const undoStack = [];
+let storageAvailable = true;
+try {
+  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+  if (saved && [1, 2].includes(saved.version) && saved.config) {
+    config = normalizeConfig(saved.config);
+    pendingSavedShape = saved.shape || null;
+  }
+} catch { storageAvailable = false; }
+let playing = true;
+let focusMode = false;
+let previousFocus = null;
+let exportFormat = 'react';
+let toastTimer;
+let saveTimer;
+let lastStats = null;
+
+function thumbnail(pattern) {
+  const sampleConfig = normalizeConfig({ ...DEFAULT_CONFIG, pattern });
+  let dots = '';
+  for (let row = 0; row < 5; row++) for (let col = 0; col < 11; col++) {
+    const v = sampleField(col / 10, row / 4, pattern === 'breath' ? 2 : 0.3, sampleConfig);
+    dots += `<circle cx="${3 + col * 5.8}" cy="${3 + row * 5.2}" r="${(0.5 + v * 1.3).toFixed(2)}" opacity="${(0.3 + v * 0.7).toFixed(2)}"/>`;
+  }
+  return `<svg viewBox="0 0 65 27" fill="currentColor" aria-hidden="true">${dots}</svg>`;
+}
+$('#patterns').innerHTML = PATTERNS.map(p => `<button class="pattern-card" data-pattern="${p}" aria-pressed="false">${thumbnail(p)}<span>${PATTERN_NAMES[p]}</span></button>`).join('');
+$('#shape-samples').innerHTML = BUILTIN_SHAPES.map((asset, index) => `<button class="shape-sample" data-shape="${index}" aria-pressed="false"><img src="data:image/svg+xml,${encodeURIComponent(asset.svg)}" alt=""><span>${asset.name}</span></button>`).join('');
+$('#palettes').innerHTML = PALETTES.map((p, i) => `<button class="colour-preset" data-palette="${i}" aria-pressed="false" aria-label="${p.name} colour palette"><span class="colour-preview" style="background:${p.bg};color:${p.dot}"><i></i><i></i><i></i><i></i><i></i></span><span>${p.name}</span></button>`).join('');
+for (const [group, controls] of Object.entries(CONTROL_GROUPS)) {
+  const container = $(`#${group === 'dots' ? 'dot' : group}-sliders`);
+  container.innerHTML = controls.map(s => `<div class="slider-control" id="control-${s.key}"><div class="slider-heading"><label for="setting-${s.key}"${s.title ? ` title="${s.title}"` : ''}>${s.label}</label><output class="slider-value" id="value-${s.key}" for="setting-${s.key}"></output></div><input type="range" id="setting-${s.key}" data-key="${s.key}" min="${s.min}" max="${typeof s.max === 'function' ? s.max(config) : s.max}" step="${s.step}" value="${config[s.key]}"><div class="range-labels"><span>${s.ends[0]}</span><span>${s.ends[1]}</span></div></div>`).join('');
+}
+function toggleMarkup(key, title, note) {
+  return `<label class="toggle-control"><span class="toggle-text">${title}<small>${note}</small></span><span class="switch"><input type="checkbox" id="setting-${key}" data-key="${key}" aria-label="${title}"><span class="switch-track"></span></span></label>`;
+}
+$('#shape-toggle').innerHTML = toggleMarkup('shapeEnabled', 'Show vector layer', 'Keep the shape loaded while trying other waves.');
+$('#colour-toggles').innerHTML = toggleMarkup('transparent', 'Transparent background', 'Useful as a layer over your own content.')
+  + toggleMarkup('varyOpacity', 'Brightness follows size', 'Turn off for size-only animation.');
+$('#accessibility-toggle').innerHTML = toggleMarkup('respectReducedMotion', 'Respect reduced motion', 'Pause when the device requests less animation.');
+const loopReadout = document.createElement('p');
+loopReadout.className = 'note';
+loopReadout.style.marginTop = '10px';
+$('#panel-motion').appendChild(loopReadout);
+
+function announce(message) {
+  clearTimeout(toastTimer);
+  $('#toast').textContent = message;
+  $('#toast').classList.add('visible');
+  toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 3200);
+}
+function persist() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, config, shape }));
+      storageAvailable = true;
+      $('#save-status').textContent = 'Settings saved on this device';
+    } catch {
+      storageAvailable = false;
+      $('#save-status').textContent = 'Settings kept for this session';
+    }
+    syncShapeControls();
+  }, 200);
+}
+function syncControls() {
+  for (const controls of Object.values(CONTROL_GROUPS)) for (const s of controls) {
+    const input = $(`#setting-${s.key}`);
+    const max = typeof s.max === 'function' ? s.max(config) : s.max;
+    input.max = String(max);
+    input.value = String(config[s.key]);
+    input.style.setProperty('--fill', `${100 * (config[s.key] - s.min) / Math.max(0.001, max - s.min)}%`);
+    $(`#value-${s.key}`).textContent = s.format(config[s.key]);
+  }
+  for (const key of ['transparent', 'varyOpacity', 'respectReducedMotion', 'shapeEnabled']) $(`#setting-${key}`).checked = config[key];
+  for (const key of ['dotColor', 'backgroundColor']) {
+    $(`#${key}`).value = config[key];
+    $(`#${key}-hex`).value = config[key].toUpperCase();
+  }
+  $$('.pattern-card').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pattern === config.pattern)));
+  $$('.colour-preset').forEach(b => {
+    const p = PALETTES[Number(b.dataset.palette)];
+    b.setAttribute('aria-pressed', String(p.dot === config.dotColor && p.bg === config.backgroundColor));
+  });
+  $('#pattern-count').textContent = `${String(PATTERNS.indexOf(config.pattern) + 1).padStart(2, '0')} / ${String(PATTERNS.length).padStart(2, '0')}`;
+  $('#seed-controls').hidden = config.pattern !== 'generated';
+  if (document.activeElement !== $('#seed-input')) $('#seed-input').value = String(config.seed);
+  $('#undo-random').disabled = undoStack.length === 0;
+  $$('select[data-select]').forEach(select => { select.value = config[select.dataset.select]; });
+  syncShapeControls();
+  $('#stage').classList.toggle('checkered', config.transparent);
+  $('#setting-shapeBackground').disabled = config.shapeMode !== 'blend';
+  $('#control-shapeBackground').style.opacity = config.shapeMode === 'blend' ? '1' : '0.4';
+  $('#setting-minOpacity').disabled = !config.varyOpacity;
+  $('#control-minOpacity').style.opacity = config.varyOpacity ? '1' : '0.4';
+  loopReadout.textContent = config.speed === 0 ? 'Speed is set to zero. Increase it to animate.'
+    : `One loop takes ${(config.duration / config.speed).toFixed(1)} seconds at this speed.`;
+  if (!storageAvailable) $('#save-status').textContent = 'Settings kept for this session';
+  if ($('#export-dialog').open) updateExport();
+}
+function updatePlayback(stats) {
+  const isRunning = stats.running;
+  const blocked = stats.reducedMotion || config.speed === 0;
+  $('#play').innerHTML = icon(isRunning ? 'pause' : 'play');
+  $('#play').title = stats.reducedMotion ? 'Reduced motion is enabled. Change this under Colour.'
+    : config.speed === 0 ? 'Increase speed to animate.' : `${isRunning ? 'Pause' : 'Play'} (Space)`;
+  $('#play').setAttribute('aria-label', isRunning ? 'Pause animation' : 'Play animation');
+  $('#play').setAttribute('aria-disabled', String(blocked));
+  $('#live-dot').classList.toggle('paused', !isRunning);
+  $('#canvas-state').textContent = `${PATTERN_NAMES[config.pattern]}${shape && config.shapeEnabled ? ' / ' + shape.name.replace(/\.svg$/i, '') : ''} · ${stats.reducedMotion ? 'Reduced motion' : isRunning ? 'Live' : 'Paused'}`;
+  $('#reduced-notice').classList.toggle('visible', stats.reducedMotion);
+}
+let renderer;
+try {
+  renderer = createDotField($('#field'), config, stats => {
+    lastStats = stats;
+    $('#grid-info').textContent = `${stats.count.toLocaleString()} dots · ${stats.columns} × ${stats.rows}`;
+    const percent = stats.progress * 100;
+    $('#timeline').value = String(percent);
+    $('#timeline').style.setProperty('--progress', `${percent}%`);
+    $('#phase').textContent = `${Math.floor(percent)}%`;
+    updatePlayback(stats);
+  });
+} catch (error) {
+  $('#stage').innerHTML = '<div class="error-state">This browser could not start the canvas renderer. Try opening the file in a current browser.</div>';
+  console.error(error);
+  throw error;
+}
+// Exposed for integration experiments and deterministic testing.
+window.dotfield = renderer;
+
+function applyPatch(patch, resetPhase = false) {
+  config = normalizeConfig({ ...config, ...patch });
+  renderer.configure(config);
+  if (resetPhase) renderer.reset();
+  syncControls();
+  persist();
+}
+function setPlaying(value) {
+  playing = value;
+  renderer.setPlaying(value);
+}
+function togglePlayback() {
+  if (lastStats?.reducedMotion) { announce('Reduced motion is enabled. You can change this under Colour.'); return; }
+  if (config.speed === 0) { announce('Increase the speed above zero to animate.'); return; }
+  setPlaying(!playing);
+}
+function selectTab(name, moveFocus = false) {
+  $$('.tab').forEach(tab => {
+    const selected = tab.dataset.tab === name;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    $(`#panel-${tab.dataset.tab}`).hidden = !selected;
+    if (selected && moveFocus) tab.focus();
+  });
+}
+$$('.tab').forEach(tab => {
+  tab.addEventListener('click', () => selectTab(tab.dataset.tab));
+  tab.addEventListener('keydown', e => {
+    const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (!keys.includes(e.key)) return;
+    e.preventDefault();
+    const names = ['motion', 'shape', 'dots', 'colour'];
+    const index = names.indexOf(tab.dataset.tab);
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? names.length - 1 : (index + (e.key === 'ArrowRight' ? 1 : -1) + names.length) % names.length;
+    selectTab(names[next], true);
+  });
+});
+$$('input[data-key]').forEach(input => input.addEventListener('input', () => applyPatch({ [input.dataset.key]: input.type === 'checkbox' ? input.checked : Number(input.value) })));
+$$('.pattern-card').forEach(button => button.addEventListener('click', () => applyPatch({ pattern: button.dataset.pattern }, true)));
+$$('select[data-select]').forEach(select => select.addEventListener('change', () => applyPatch({ [select.dataset.select]: select.value })));
+$$('.colour-preset').forEach(button => button.addEventListener('click', () => {
+  const p = PALETTES[Number(button.dataset.palette)];
+  applyPatch({ dotColor: p.dot, backgroundColor: p.bg, transparent: false });
+}));
+for (const key of ['dotColor', 'backgroundColor']) {
+  $(`#${key}`).addEventListener('input', e => applyPatch({ [key]: e.target.value }));
+  $(`#${key}-hex`).addEventListener('change', e => {
+    let value = e.target.value.trim();
+    if (!value.startsWith('#')) value = '#' + value;
+    if (/^#([a-f\d]{3}|[a-f\d]{6})$/i.test(value)) applyPatch({ [key]: value });
+    else { announce('Use a colour such as #ECECEC.'); syncControls(); }
+  });
+}
+$('#play').addEventListener('click', togglePlayback);
+$('#restart').addEventListener('click', () => renderer.reset());
+$('#timeline').addEventListener('input', e => { const progress = Number(e.target.value) / 100; setPlaying(false); renderer.seek(progress); });
+$('#reset').addEventListener('click', () => {
+  shapeRequest++; shapeBusy = false; shape = null; void renderer.setShape(null); undoStack.length = 0; showShapeError();
+  config = normalizeConfig(DEFAULT_CONFIG);
+  renderer.configure(config);
+  renderer.reset();
+  setPlaying(true);
+  syncControls();
+  selectTab('motion');
+  persist();
+  announce('Reference settings restored.');
+});
+
+function setFocusMode(value) {
+  focusMode = value;
+  if (value) previousFocus = document.activeElement;
+  $('#stage').classList.toggle('focused', value);
+  $('#focus').setAttribute('aria-pressed', String(value));
+  $('#focus').setAttribute('aria-label', value ? 'Exit focus mode' : 'Enter focus mode');
+  $('#focus').querySelector('[data-icon]').innerHTML = icon(value ? 'collapse' : 'expand');
+  document.body.style.overflow = value ? 'hidden' : '';
+  for (const el of [$('header'), $('.sidebar'), $('.section-top'), $('.preview-footer')]) el.inert = value;
+  if (value) {
+    $('#stage').setAttribute('role', 'dialog');
+    $('#stage').setAttribute('aria-modal', 'true');
+    $('#stage').setAttribute('aria-label', 'Focused animation preview');
+    $('#focus').focus();
+  } else {
+    $('#stage').removeAttribute('role');
+    $('#stage').removeAttribute('aria-modal');
+    $('#stage').removeAttribute('aria-label');
+    previousFocus?.focus?.();
+  }
+}
+$('#focus').addEventListener('click', () => setFocusMode(!focusMode));
+document.addEventListener('keydown', event => {
+  if ($('#export-dialog').open) return;
+  if (event.key === 'Escape' && focusMode) { event.preventDefault(); setFocusMode(false); return; }
+  if (focusMode && event.key === 'Tab') {
+    const elements = [...$('#stage').querySelectorAll('button,input')];
+    const first = elements[0], last = elements.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    return;
+  }
+  const target = event.target;
+  if (target instanceof HTMLElement && (target.matches('input,select,textarea,button,a') || target.isContentEditable)) return;
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (event.code === 'Space') { event.preventDefault(); togglePlayback(); }
+  else if (event.key.toLowerCase() === 'f') { event.preventDefault(); setFocusMode(!focusMode); }
+  else if (event.key.toLowerCase() === 'n') { event.preventDefault(); randomize(); }
+  else if (event.key.toLowerCase() === 'r') { event.preventDefault(); renderer.reset(); }
+});
+
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+function saveFrame() {
+  const url = renderer.snapshot();
+  if (!url) { announce('The browser could not create a PNG.'); return; }
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `dotfield-${config.pattern}.png`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  announce('Frame saved, without the controls.');
+}
+$('#save-frame').addEventListener('click', saveFrame);
+$('#dialog-save-frame').addEventListener('click', saveFrame);
+function settingsJSON() { return JSON.stringify({ version: 2, config, shape }, null, 2); }
+function reactSnippet() {
+  const cfg = JSON.stringify(config, null, 2).replace(/^/gm, '  ').trimStart();
+  const vector = shape ? `\nconst shape = ${JSON.stringify(shape, null, 2)};\n` : '';
+  return `import { DotFieldPlayground } from "./DotField";\n\nconst settings = ${cfg} as const;\n${vector}\nexport default function App() {\n  return <DotFieldPlayground initialConfig={settings}${shape ? ' initialShape={shape}' : ''} />;\n}\n\n// Renderer only, without controls:\n// import { DotField } from "./DotField";\n// <div style={{ height: 600 }}>\n//   <DotField config={settings}${shape ? ' shape={shape}' : ''} />\n// </div>`;
+}
+function updateExport() {
+  $('#export-code').textContent = exportFormat === 'react' ? reactSnippet() : settingsJSON();
+  $('#code-language').textContent = exportFormat === 'react' ? 'TSX · no animation library' : 'JSON · includes your SVG';
+  $('#copy-code').innerHTML = icon('copy') + (exportFormat === 'react' ? 'Copy snippet' : 'Copy JSON');
+  $('#code-export').setAttribute('aria-labelledby', `export-tab-${exportFormat}`);
+  $$('.code-tab').forEach(button => {
+    const selected = button.dataset.format === exportFormat;
+    button.setAttribute('aria-selected', String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  });
+}
+$('#open-export').addEventListener('click', () => { updateExport(); $('#export-dialog').showModal(); });
+$('#close-export').addEventListener('click', () => $('#export-dialog').close());
+$('#export-dialog').addEventListener('click', event => {
+  if (event.target !== $('#export-dialog')) return;
+  const rect = $('#export-dialog').getBoundingClientRect();
+  if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) $('#export-dialog').close();
+});
+$$('.code-tab').forEach(button => {
+  button.addEventListener('click', () => { exportFormat = button.dataset.format; updateExport(); });
+  button.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    exportFormat = event.key === 'Home' ? 'react' : event.key === 'End' ? 'json' : exportFormat === 'react' ? 'json' : 'react';
+    updateExport();
+    $(`#export-tab-${exportFormat}`).focus();
+  });
+});
+$('#copy-code').addEventListener('click', async () => {
+  const text = exportFormat === 'react' ? reactSnippet() : settingsJSON();
+  try {
+    if (navigator.clipboard?.writeText && window.isSecureContext) await navigator.clipboard.writeText(text);
+    else {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.style.cssText = 'position:fixed;left:-9999px;top:0';
+      $('#export-dialog').appendChild(area);
+      area.select();
+      const copied = document.execCommand('copy');
+      area.remove();
+      if (!copied) throw new Error('Clipboard is not available.');
+    }
+    announce('Copied to the clipboard.');
+  } catch { announce('Clipboard unavailable. Select and copy the code shown here.'); }
+});
+$('#download-settings').addEventListener('click', () => saveBlob(new Blob([settingsJSON()], { type: 'application/json' }), 'dotfield-settings.json'));
+$('#download-react').addEventListener('click', () => saveBlob(new Blob([REACT_SOURCE], { type: 'text/plain;charset=utf-8' }), 'DotField.tsx'));
+$('#import-settings').addEventListener('click', () => $('#import-file').click());
+$('#import-file').addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  try {
+    if (file.size > 2_000_000) throw new Error('Settings files should be smaller than 2 MB.');
+    const parsed = JSON.parse(await file.text());
+    const incoming = parsed?.config || parsed;
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)
+      || !Object.keys(DEFAULT_CONFIG).some(key => Object.hasOwn(incoming, key))) {
+      throw new Error('This file has no recognised Dotfield settings.');
+    }
+    const ticket = ++shapeRequest;
+    const incomingShape = parsed.shape ? await loadSVGShape(parsed.shape.svg, parsed.shape.name) : null;
+    if (ticket !== shapeRequest) return;
+    const committed = await renderer.setShape(incomingShape);
+    if (!committed || ticket !== shapeRequest) return;
+    shape = incomingShape; shapeBusy = false; showShapeError();
+    config = normalizeConfig(incoming);
+    renderer.configure(config);
+    renderer.reset();
+    syncControls();
+    persist();
+    announce('Settings imported.');
+  } catch (error) { announce(error instanceof Error ? error.message : 'Could not read this settings file.'); }
+});
+window.addEventListener('pagehide', () => { renderer.setPlaying(false); });
+window.addEventListener('pageshow', () => { renderer.setPlaying(playing); });
+syncControls();
+if (pendingSavedShape) loadShape(pendingSavedShape, false).catch(() => {});
+else persist();
+
+// --------------------------------------------------------------------------
+// Vector loading. Uploaded markup is only used through an image decoder.
+// --------------------------------------------------------------------------
+function syncShapeControls() {
+  $('#upload-shape').hidden = !!shape;
+  $('#upload-shape').disabled = shapeBusy;
+  $('#replace-shape').disabled = shapeBusy;
+  $('#upload-shape strong').textContent = shapeBusy ? 'Preparing your SVG…' : 'Drop an SVG, or choose a file';
+  $('#shape-card').hidden = !shape;
+  $('#shape-settings').hidden = !shape;
+  $('#shape-indicator').classList.toggle('active', !!shape && config.shapeEnabled);
+  if (shape) {
+    $('#shape-name').textContent = shape.name;
+    $('#shape-card .shape-file-detail > span').textContent = storageAvailable ? 'SVG · saved on this device' : 'SVG · kept for this session';
+    const src = `data:image/svg+xml,${encodeURIComponent(shape.svg)}`;
+    if ($('#shape-preview').getAttribute('src') !== src) $('#shape-preview').src = src;
+  } else $('#shape-preview').removeAttribute('src');
+  $$('.shape-sample').forEach(button => {
+    button.setAttribute('aria-pressed', String(BUILTIN_SHAPES[Number(button.dataset.shape)].name === shape?.name));
+    button.disabled = shapeBusy;
+  });
+}
+function showShapeError(message = '') {
+  $('#shape-error').textContent = message;
+  $('#shape-error').hidden = !message;
+}
+async function loadShape(input, openTab = true) {
+  const ticket = ++shapeRequest;
+  shapeBusy = true; showShapeError(); syncShapeControls();
+  if (openTab) selectTab('shape');
+  try {
+    const asset = input instanceof File ? await readSVGFile(input) : await loadSVGShape(input.svg, input.name);
+    if (ticket !== shapeRequest) return;
+    const committed = await renderer.setShape(asset);
+    if (!committed || ticket !== shapeRequest) return;
+    shape = asset;
+    if (openTab) applyPatch({ shapeEnabled: true, shapeChannel: 'alpha' });
+    else { syncControls(); persist(); }
+    if (openTab) announce(`${asset.name} added to the dot field.`);
+  } catch (error) {
+    if (ticket !== shapeRequest) return;
+    const message = error instanceof Error ? error.message : 'Could not load this SVG.';
+    showShapeError(message); announce(message);
+  } finally {
+    if (ticket === shapeRequest) { shapeBusy = false; syncShapeControls(); }
+  }
+}
+$('#upload-shape').addEventListener('click', () => $('#shape-file').click());
+$('#replace-shape').addEventListener('click', () => $('#shape-file').click());
+$('#shape-file').addEventListener('change', event => {
+  const file = event.target.files?.[0]; event.target.value = '';
+  if (file) void loadShape(file);
+});
+$('#remove-shape').addEventListener('click', () => {
+  shapeRequest++; shapeBusy = false; shape = null; void renderer.setShape(null);
+  showShapeError(); syncControls(); persist(); announce('Vector layer removed.');
+});
+$$('.shape-sample').forEach(button => button.addEventListener('click', () => {
+  void loadShape(BUILTIN_SHAPES[Number(button.dataset.shape)]);
+}));
+// Drop on either the canvas or the upload tile. Never navigate away to a file.
+for (const target of [$('#stage'), $('#upload-shape'), $('#shape-card')]) {
+  let enters = 0;
+  target.addEventListener('dragenter', event => {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault(); enters++; target.classList.add('dragging');
+  });
+  target.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } });
+  target.addEventListener('dragleave', event => { event.preventDefault(); if (--enters <= 0) { enters = 0; target.classList.remove('dragging'); } });
+  target.addEventListener('drop', event => {
+    event.preventDefault(); event.stopPropagation(); enters = 0; target.classList.remove('dragging');
+    const file = event.dataTransfer?.files[0]; if (file) void loadShape(file);
+  });
+}
+window.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault(); });
+window.addEventListener('drop', event => { if (event.dataTransfer?.files.length) { event.preventDefault(); announce('Drop an SVG onto the preview or the Shape upload area.'); } });
+
+function randomize(seed) {
+  undoStack.push({ ...config }); if (undoStack.length > 20) undoStack.shift();
+  let next = seed ?? newRandomSeed();
+  if (seed === undefined && next === config.seed) next = (next + 1) >>> 0;
+  config = randomizeConfig(config, next);
+  renderer.configure(config); renderer.reset(); setPlaying(true);
+  syncControls(); persist();
+  announce(`New loop · seed ${config.seed}. Colours, grid and artwork kept.`);
+}
+$('#randomize').addEventListener('click', () => randomize());
+$('#undo-random').addEventListener('click', () => {
+  const previous = undoStack.pop(); if (!previous) return;
+  config = previous; renderer.configure(config); renderer.reset();
+  syncControls(); persist(); announce('Previous loop restored.');
+});
+function applySeed() {
+  const input = $('#seed-input').value.trim();
+  if (!/^\d{1,10}$/.test(input) || Number(input) > 4294967295) {
+    announce('Enter a seed from 0 to 4294967295.'); return;
+  }
+  randomize(Number(input));
+}
+$('#apply-seed').addEventListener('click', applySeed);
+$('#seed-input').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); applySeed(); } });
+window.dotfieldLab = { randomize, loadShape, getShape: () => shape, sanitizeSVGShape };
+</script>
+</body>
+</html>
