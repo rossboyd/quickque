@@ -5,6 +5,66 @@
 .scene-reader .scene-hud > div { position: static; flex-direction: row; justify-content: flex-end; align-items: center; padding: 4px 12px; gap: 8px; }
 .scene-reader [aria-label="Presentation timing"] { padding: 4px 8px; }
 .scene-reader [aria-label="Presentation timing"] > :not(:first-child) { display: none; }
+
+.present-titlebar {
+  background: linear-gradient(180deg, hsl(var(--background) / 0.2), transparent);
+}
+
+.present-glass-button,
+.present-transport {
+  border: 1px solid hsl(var(--foreground) / 0.12);
+  background: hsl(var(--background) / 0.66);
+  box-shadow:
+    inset 0 1px 0 hsl(var(--foreground) / 0.1),
+    0 10px 30px hsl(222 47% 4% / 0.18);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+
+.present-glass-button:hover {
+  background: hsl(var(--background) / 0.82);
+}
+
+.present-transparency-active {
+  border-color: hsl(var(--primary) / 0.48);
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.78));
+  box-shadow:
+    inset 0 1px 0 hsl(var(--primary-foreground) / 0.3),
+    0 8px 24px hsl(var(--primary) / 0.28);
+}
+
+.present-transparency-active:hover {
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.92), hsl(var(--primary) / 0.7));
+}
+
+.present-overlay-active {
+  border-color: hsl(var(--primary) / 0.34);
+  background: hsl(var(--primary) / 0.12);
+}
+
+.present-transport {
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  border-radius: 18px;
+}
+
+@media (max-width: 700px) {
+  .present-transport {
+    width: calc(100% - 16px);
+    justify-content: center;
+    flex-wrap: wrap;
+    bottom: 8px;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .present-glass-button,
+  .present-transport {
+    background: hsl(var(--background) / 0.96);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
 @media (max-height: 500px) {
   .scene-cues .scene-cast-summary, .scene-cues .scene-next-words { display: none; }
   .scene-cues > div > .grid { padding: 4px 8px; gap: 8px; }

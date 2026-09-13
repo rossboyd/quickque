@@ -7,8 +7,10 @@ import { useStore } from '@/lib/store';
 import type { PresentationPreferences, Settings } from '@/lib/types';
 import { useLocation, useParams } from 'wouter';
 import { 
-  Play, Pause, X, Minus, Plus, Settings2, Maximize2, Minimize2, ChevronLeft, ChevronRight, Droplets, Loader2, Smartphone, Palette
+  Play, Pause, Minus, Plus, ChevronLeft, ChevronRight, Droplets, Loader2, Smartphone,
+  RotateCcw, Layers, SlidersHorizontal, LayoutTemplate
 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { isDesktop, setOverlayMode, setAlwaysOnTop, startDragging } from '@/lib/desktop';
 import { useLocalFlow } from '@/hooks/use-local-flow';
 import { useScenePartner } from '@/hooks/use-scene-partner';
@@ -1302,54 +1304,97 @@ export default function Reader() {
             <button onClick={() => setDesktopError(null)}>Dismiss</button>
           </div>
         )}
-        <div className="scene-titlebar flex items-center justify-between p-3">
-          <div className="flex items-center gap-4">
+        <div className={`scene-titlebar flex items-start sm:items-center justify-between p-3 gap-3 ${!sceneEnabled ? 'present-titlebar' : ''}`}>
+          <div className="flex items-center gap-3">
             <button 
               onClick={exitReader}
-              className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors backdrop-blur-md"
+              className="present-glass-button flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full transition-colors text-sm font-medium"
               title="Exit (Esc)"
-               aria-label="Exit reader"
+              aria-label="Exit reader"
+              data-testid="button-exit-reader"
             >
-               <X className="w-5 h-5" aria-hidden="true" />
+              <ChevronLeft className="w-5 h-5" aria-hidden="true" />
+              <span className="max-w-[150px] sm:max-w-[200px] truncate">{script?.title || 'Script'}</span>
             </button>
-            
-            <div className="flex items-center gap-1">
-              <button 
-                onClick={toggleCompactMode}
-                className={`p-2 rounded-full transition-colors backdrop-blur-md ${settings.compactMode ? 'bg-primary text-primary-foreground' : 'hover:bg-black/10 dark:hover:bg-white/10'}`}
-                title="Toggle Compact Overlay"
-              >
-                {settings.compactMode ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
-              </button>
-
-              <div className="flex items-center">
-                <RemoteControlDialog
-                  trigger={
-                    <button
-                      className="p-2 rounded-full transition-colors backdrop-blur-md hover:bg-black/10 dark:hover:bg-white/10"
-                      title="Phone Remote"
-                      aria-label="Open phone remote"
-                    >
-                      <Smartphone className="w-4 h-4" aria-hidden="true" />
-                    </button>
-                  }
-                />
-              </div>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <button
-                    type="button"
-                    className="p-2 rounded-full transition-colors backdrop-blur-md hover:bg-black/10 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                     title={isPerformance ? 'Rehearsal settings' : 'Present settings'}
-                     aria-label={isPerformance ? 'Open rehearsal settings' : 'Open present settings'}
+          </div>
+          
+          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+            {!sceneEnabled && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button 
+                    className={`present-glass-button flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors text-sm font-medium ${
+                      presentation.backgroundOpacity < 100 
+                        ? 'present-transparency-active text-primary-foreground' 
+                        : 'text-foreground'
+                    }`}
+                    title="Background Transparency"
+                    data-testid="button-transparency-popover"
                   >
-                    <Palette className="w-4 h-4" aria-hidden="true" />
+                    <Droplets className="w-4 h-4" /> 
+                    <span className="hidden sm:inline">Transparency</span>
+                    {presentation.backgroundOpacity < 100 && (
+                      <span className="tabular-nums font-mono text-xs ml-1 opacity-90">
+                        {presentation.backgroundOpacity}%
+                      </span>
+                    )}
                   </button>
-                </DialogTrigger>
-                <DialogContent className="max-w-[min(92vw,32rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto p-4 sm:p-6">
-                  <DialogHeader>
-                     <DialogTitle>{isPerformance ? 'Rehearsal settings' : 'Present settings'}</DialogTitle>
-                    <DialogDescription>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-72 p-4 z-[100] rounded-xl bg-background/95 backdrop-blur-xl border border-border shadow-xl">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-sm">Background Opacity</h4>
+                      <span className="text-xs font-mono tabular-nums text-muted-foreground">{presentation.backgroundOpacity}%</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="100" 
+                      value={presentation.backgroundOpacity}
+                      onChange={e => updatePresentation({ backgroundOpacity: parseInt(e.target.value) })}
+                      className="w-full accent-primary"
+                      aria-label="Adjust background opacity"
+                      data-testid="input-transparency"
+                    />
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Lower the opacity to see other windows through the prompter while presenting.
+                    </p>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+
+            <button 
+              onClick={toggleCompactMode}
+              className={`present-glass-button flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors text-sm font-medium ${
+                settings.compactMode 
+                  ? 'present-overlay-active text-primary' 
+                  : 'text-foreground'
+              }`}
+              title="Toggle Compact Overlay"
+              data-testid="button-always-on-top"
+            >
+              <Layers className="w-4 h-4" />
+              <span className="hidden sm:inline">Overlay</span>
+            </button>
+
+            <Dialog>
+              <DialogTrigger asChild>
+                <button
+                  type="button"
+                  className="present-glass-button flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  title={isPerformance ? 'Rehearsal settings' : 'Present settings'}
+                  aria-label={isPerformance ? 'Open rehearsal settings' : 'Open present settings'}
+                  data-testid="button-present-settings"
+                >
+                  <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">Display</span>
+                </button>
+              </DialogTrigger>
+              <DialogContent className="max-w-[min(92vw,32rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto p-4 sm:p-6">
+                <DialogHeader>
+                   <DialogTitle>{isPerformance ? 'Rehearsal settings' : 'Present settings'}</DialogTitle>
+                  <DialogDescription>
                        Adjust this script's reader layout and appearance.
                     </DialogDescription>
                   </DialogHeader>
@@ -1397,103 +1442,49 @@ export default function Reader() {
             </div>
           </div>
 
-          <div className={`scene-options-bar flex items-center gap-2 bg-background/50 backdrop-blur-md px-3 py-1.5 border border-border/50 text-sm max-w-full ${sceneEnabled ? 'flex-wrap rounded-xl' : 'rounded-full overflow-hidden'}`}>
-            <div className={`flex items-center gap-1.5 ${sceneEnabled ? 'basis-full min-w-0' : 'flex-1 min-w-[80px]'}`}>
-               {sceneEnabled ? (
-                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
-                   <span className="font-semibold whitespace-nowrap">
-                     {sceneSilentManual
-                       ? 'Scene: silent manual cues'
-                       : sceneMyRoleIds.length === 0
-                       ? 'Scene: full read-through'
-                       : characters.length > 0 && characters.every(character => sceneMyRoleIds.includes(character.id))
-                         ? 'Scene: silent cue reader'
-                         : 'Scene partner'}
-                   </span>
-                   <label className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
-                     <input
-                       type="checkbox"
-                       checked={sceneFlowEnabled}
-                       onChange={event => setSceneFlowEnabled(event.target.checked)}
-                     />
-                     Follow my turn
-                   </label>
-                   {!isDesktop() && (
-                     <label className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
-                       <input
-                         type="checkbox"
-                         checked={sceneSilentManual}
-                         onChange={event => setSceneSilentManual(event.target.checked)}
-                       />
-                       Silent cues
-                     </label>
-                   )}
-                 </div>
-               ) : (
-                 <select
-                   value={readMode}
-                   onChange={e => {
-                     dispatchCommand({ action: 'setReadMode', mode: e.target.value as "manual" | "flow" });
-                   }}
-                   className="bg-transparent border-none outline-none text-foreground font-semibold text-xs cursor-pointer"
-                 >
-                   <option value="manual">Manual Scroll</option>
-                   <option value="flow">Voice Follow</option>
-                 </select>
-               )}
+        {sceneEnabled && (
+          <div className="scene-options-bar flex items-center justify-between px-3 pb-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs bg-background/50 backdrop-blur-md px-3 py-1.5 border border-border/50 rounded-xl">
+              <span className="font-semibold whitespace-nowrap">
+                {sceneSilentManual
+                  ? 'Scene: silent manual cues'
+                  : sceneMyRoleIds.length === 0
+                  ? 'Scene: full read-through'
+                  : characters.length > 0 && characters.every(character => sceneMyRoleIds.includes(character.id))
+                    ? 'Scene: silent cue reader'
+                    : 'Scene partner'}
+              </span>
+              <label className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={sceneFlowEnabled}
+                  onChange={event => setSceneFlowEnabled(event.target.checked)}
+                />
+                Follow my turn
+              </label>
+              {!isDesktop() && (
+                <label className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={sceneSilentManual}
+                    onChange={event => setSceneSilentManual(event.target.checked)}
+                  />
+                  Silent cues
+                </label>
+              )}
             </div>
-
-            <div className="w-px h-4 bg-border mx-1" />
-
-            <div className="flex items-center gap-1">
-              <button 
-                onClick={() => dispatchCommand({ action: 'fontSize', value: -4 })}
-                className="p-1 hover:text-primary transition-colors"
-              >
+            
+            <div className="flex items-center gap-2 bg-background/50 backdrop-blur-md px-3 py-1.5 border border-border/50 rounded-xl">
+              <button onClick={() => dispatchCommand({ action: 'fontSize', value: -4 })} className="p-1 hover:text-primary transition-colors">
                 <Minus className="w-3 h-3" />
               </button>
-               <span className="font-mono min-w-[3ch] text-center text-xs">{presentation.fontSize}</span>
-              <button 
-                onClick={() => dispatchCommand({ action: 'fontSize', value: 4 })}
-                className="p-1 hover:text-primary transition-colors"
-              >
+              <span className="font-mono min-w-[3ch] text-center text-xs">{presentation.fontSize}</span>
+              <button onClick={() => dispatchCommand({ action: 'fontSize', value: 4 })} className="p-1 hover:text-primary transition-colors">
                 <Plus className="w-3 h-3" />
               </button>
             </div>
-            
-            <div className="w-px h-4 bg-border mx-1" />
-            
-            <div className="flex items-center gap-1.5 flex-1 min-w-[60px]">
-              <Settings2 className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-              <input 
-                type="range" 
-                min="10" 
-                max="150" 
-                 value={presentation.speed}
-                title="Scroll Speed"
-                 onChange={e => dispatchCommand({ action: 'scrollSpeed', value: parseInt(e.target.value) - presentation.speed })}
-                className="w-12 md:w-20 accent-primary"
-                 disabled={sceneEnabled || readMode === 'flow'}
-                 style={{ opacity: sceneEnabled || readMode === 'flow' ? 0.5 : 1 }}
-              />
-            </div>
-
-            <div className="w-px h-4 bg-border mx-1" />
-
-            <div className="flex items-center gap-1.5 flex-1 min-w-[60px]">
-              <Droplets className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-              <input 
-                type="range" 
-                min="0" 
-                max="100" 
-                 value={presentation.backgroundOpacity}
-                title="Background Opacity"
-                 onChange={e => updatePresentation({ backgroundOpacity: parseInt(e.target.value) })}
-                className="w-12 md:w-20 accent-primary"
-              />
-            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="contents scene-hud">
@@ -1820,75 +1811,192 @@ export default function Reader() {
       )}
 
       {/* Bottom Controls / Section Navigation */}
-      <div className={`scene-transport absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-4 p-2 md:p-3 rounded-full bg-background/80 backdrop-blur-xl border border-border shadow-2xl z-50 transition-all duration-300 ${showControls || (sceneEnabled ? scene.phase !== 'speaking' && scene.phase !== 'preparing' : readMode === 'manual' ? !isPlaying : flow.status !== 'listening') ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+      <div className={`scene-transport ${!sceneEnabled ? 'present-transport' : ''} absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1.5 md:gap-2 p-1.5 md:p-2 rounded-2xl bg-background/90 backdrop-blur-2xl border border-border shadow-2xl z-50 transition-all duration-300 ${showControls || (sceneEnabled ? scene.phase !== 'speaking' && scene.phase !== 'preparing' : readMode === 'manual' ? !isPlaying : flow.status !== 'listening') ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
         
-        <button
-          onClick={() => dispatchCommand({ action: 'previous' })}
-          disabled={activeSectionIdx === 0}
-          className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
-          title={sceneEnabled ? 'Previous turn (Left Arrow)' : 'Previous section (Left Arrow)'}
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
+        {/* Primary Transport Controls */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => dispatchCommand({ action: 'playPause' })}
+            aria-label={['countdown', 'starting', 'playing'].includes(playbackState.phase) ? isPerformance ? 'Pause rehearsal' : 'Pause presentation' : sceneEnabled ? 'Start or resume scene' : 'Play presentation'}
+            disabled={!sceneEnabled && readMode === 'flow' && !['ready', 'listening', 'paused', 'silence-stopped', 'stopped', 'loading', 'error'].includes(flow.status)}
+            className={`w-12 h-12 flex items-center justify-center rounded-xl shadow-md transition-all focus:outline-none focus:ring-4 focus:ring-primary/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed ${
+              ['countdown', 'starting', 'playing'].includes(playbackState.phase) 
+                ? 'bg-amber-500 hover:bg-amber-600 text-white' 
+                : 'bg-primary hover:bg-primary/90 hover:scale-105 text-primary-foreground'
+            }`}
+            data-testid="button-play-pause"
+          >
+            {!sceneEnabled && readMode === 'flow' && flow.status === 'loading' ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              ['countdown', 'starting', 'playing'].includes(playbackState.phase) ?
+                <Pause className="w-5 h-5 fill-current" /> : 
+                <Play className="w-5 h-5 fill-current ml-0.5" />
+            )}
+          </button>
+
+          <button 
+            onClick={startOver}
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-muted/50 hover:bg-muted text-foreground transition-colors"
+            title="Start Over"
+            aria-label="Start over"
+            data-testid="button-start-over"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="w-px h-8 bg-border/50 mx-1" />
+
+        {/* Document Navigation */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => dispatchCommand({ action: 'previous' })}
+            disabled={activeSectionIdx === 0}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted/80 disabled:opacity-30 transition-colors"
+            title={sceneEnabled ? 'Previous turn (Left Arrow)' : 'Previous section (Left Arrow)'}
+            data-testid="button-previous-section"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          <select
+            aria-label={isPerformance ? 'Turn navigation' : 'Section navigation'}
+            value={activeSectionIdx}
+            onChange={(e) => dispatchCommand({ action: 'jumpToSection', value: Number(e.target.value) })}
+            className="bg-transparent font-medium text-foreground appearance-none outline-none text-center text-sm px-2 w-28 md:w-40 truncate cursor-pointer hover:bg-muted/50 rounded-lg h-8 transition-colors"
+            data-testid="select-section"
+          >
+            {enrichedSections.map((sec, idx) => (
+              <option key={sec.id} value={idx}>
+                {idx + 1}. {isPerformance
+                  ? `${characters.find(character => character.id === script.sections[idx]?.characterId)?.name ?? 'Unassigned'} · ${sceneMyRoleIds.includes(script.sections[idx]?.characterId ?? '') ? 'In Person' : 'AI Partner'} · ${sec.title || 'Untitled'}`
+                  : sec.title || 'Untitled'}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={() => dispatchCommand({ action: 'next' })}
+            disabled={!sceneEnabled && activeSectionIdx === enrichedSections.length - 1}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted/80 disabled:opacity-30 transition-colors"
+            title={sceneEnabled ? 'Next turn (Right Arrow)' : 'Next section (Right Arrow)'}
+            data-testid="button-next-section"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
 
         {sceneEnabled && (
-          <button
-            type="button"
-            onClick={() => {
-              // A paused replay is a new active playback interval, not speech
-              // running behind a paused presentation clock.
-              if (playback.state.phase === 'playing') void scene.replay();
-              else playback.requestStart(0);
-            }}
-            disabled={scene.phase === 'completed' || ['countdown', 'starting'].includes(playbackState.phase)}
-            className="px-2 text-xs underline whitespace-nowrap"
-            title="Replay current turn"
-          >
-            Replay
-          </button>
+          <>
+            <div className="w-px h-8 bg-border/50 mx-1" />
+            <button
+              type="button"
+              onClick={() => {
+                // A paused replay is a new active playback interval, not speech
+                // running behind a paused presentation clock.
+                if (playback.state.phase === 'playing') void scene.replay();
+                else playback.requestStart(0);
+              }}
+              disabled={scene.phase === 'completed' || ['countdown', 'starting'].includes(playbackState.phase)}
+              className="px-3 h-8 rounded-lg hover:bg-muted/80 text-xs font-medium whitespace-nowrap transition-colors"
+              title="Replay current turn"
+              data-testid="button-replay-turn"
+            >
+              Replay
+            </button>
+          </>
         )}
 
-        <select
-          aria-label={isPerformance ? 'Turn navigation' : 'Section navigation'}
-          value={activeSectionIdx}
-          onChange={(e) => dispatchCommand({ action: 'jumpToSection', value: Number(e.target.value) })}
-          className="bg-transparent font-medium text-foreground appearance-none outline-none text-center text-sm px-2 w-32 md:w-48 truncate cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 rounded"
-        >
-          {enrichedSections.map((sec, idx) => (
-            <option key={sec.id} value={idx}>
-              {idx + 1}. {isPerformance
-                ? `${characters.find(character => character.id === script.sections[idx]?.characterId)?.name ?? 'Unassigned'} · ${sceneMyRoleIds.includes(script.sections[idx]?.characterId ?? '') ? 'In Person' : 'AI Partner'} · ${sec.title || 'Untitled'}`
-                : sec.title || 'Untitled'}
-            </option>
-          ))}
-        </select>
+        <div className="w-px h-8 bg-border/50 mx-1" />
 
-        <button
-          onClick={() => dispatchCommand({ action: 'next' })}
-          disabled={!sceneEnabled && activeSectionIdx === enrichedSections.length - 1}
-          className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
-          title={sceneEnabled ? 'Next turn (Right Arrow)' : 'Next section (Right Arrow)'}
-        >
-          <span className="flex items-center gap-1">{sceneEnabled && <span className="text-sm font-medium">Next</span>}<ChevronRight className="w-5 h-5" /></span>
-        </button>
-        
-        <div className="w-px h-6 bg-border mx-1" />
-        
-        <button
-          onClick={() => dispatchCommand({ action: 'playPause' })}
-          aria-label={['countdown', 'starting', 'playing'].includes(playbackState.phase) ? isPerformance ? 'Pause rehearsal' : 'Pause presentation' : sceneEnabled ? 'Start or resume scene' : 'Play presentation'}
-          disabled={!sceneEnabled && readMode === 'flow' && !['ready', 'listening', 'paused', 'silence-stopped', 'stopped', 'loading', 'error'].includes(flow.status)}
-          className="w-14 h-14 flex items-center justify-center bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 hover:scale-105 transition-all focus:outline-none focus:ring-4 focus:ring-primary/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
-        >
-          {!sceneEnabled && readMode === 'flow' && flow.status === 'loading' ? (
-            <Loader2 className="w-6 h-6 animate-spin" />
-          ) : (
-            ['countdown', 'starting', 'playing'].includes(playbackState.phase) ?
-              <Pause className="w-6 h-6 fill-current" /> : 
-              <Play className="w-6 h-6 fill-current ml-1" />
+        {/* Options group */}
+        <div className="flex items-center gap-1 bg-muted/30 rounded-xl p-1">
+          {!sceneEnabled && (
+            <div className="flex items-center">
+              <button
+                onClick={() => dispatchCommand({ action: 'setReadMode', mode: 'manual' })}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${readMode === 'manual' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                data-testid="button-mode-manual"
+              >
+                Manual
+              </button>
+              <button
+                onClick={() => dispatchCommand({ action: 'setReadMode', mode: 'flow' })}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${readMode === 'flow' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                data-testid="button-mode-flow"
+              >
+                Flow
+              </button>
+            </div>
           )}
-        </button>
-        <button onClick={startOver} className="px-3 text-xs underline whitespace-nowrap">Start over</button>
+
+          {/* Quick Settings */}
+          {!sceneEnabled && (
+            <>
+              <div className="w-px h-4 bg-border/50 mx-1" />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors" title="Quick Layout Settings">
+                    <LayoutTemplate className="w-4 h-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="center" side="top" className="w-56 p-4 mb-2 rounded-xl z-[100] shadow-xl">
+                  <div className="space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center text-xs font-semibold">
+                        <span>Font Size</span>
+                        <span className="tabular-nums font-mono text-muted-foreground">{presentation.fontSize}px</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => dispatchCommand({ action: 'fontSize', value: -4 })} className="w-6 h-6 flex items-center justify-center rounded bg-muted hover:bg-muted/80 text-foreground transition-colors">
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <div className="flex-1 h-2 bg-muted/50 rounded overflow-hidden">
+                           <div className="h-full bg-primary/40" style={{ width: `${Math.min(100, Math.max(0, (presentation.fontSize - 12) / 60 * 100))}%` }} />
+                        </div>
+                        <button onClick={() => dispatchCommand({ action: 'fontSize', value: 4 })} className="w-6 h-6 flex items-center justify-center rounded bg-muted hover:bg-muted/80 text-foreground transition-colors">
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                    {readMode === 'manual' && (
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center text-xs font-semibold">
+                          <span>Scroll Speed</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="10" 
+                          max="150" 
+                          value={presentation.speed}
+                          onChange={e => dispatchCommand({ action: 'scrollSpeed', value: parseInt(e.target.value) - presentation.speed })}
+                          className="w-full accent-primary"
+                          data-testid="input-scroll-speed"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </>
+          )}
+
+          {/* Remote */}
+          <div className="w-px h-4 bg-border/50 mx-1" />
+          <RemoteControlDialog
+            trigger={
+              <button
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                title="Phone Remote"
+                aria-label="Open phone remote"
+                data-testid="button-phone-remote"
+              >
+                <Smartphone className="w-4 h-4" aria-hidden="true" />
+              </button>
+            }
+          />
+        </div>
       </div>
 
     </div>
