@@ -37,7 +37,10 @@ function toError(value: unknown): Error {
 
 function DefaultFallback({ error, resetError }: ErrorFallbackProps) {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background p-6">
+    <div
+      className="min-h-screen w-full flex items-center justify-center bg-background p-6"
+      data-quickque-startup-error
+    >
       <div className="max-w-lg w-full text-center">
         <h1 className="text-xl font-semibold text-foreground">
           Something went wrong

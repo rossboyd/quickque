@@ -1,7 +1,6 @@
 import React from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { ClientApp, readInitialSiteData } from './main';
-import './index.css';
 
 const root = document.getElementById('root');
 if (root) {

@@ -5,16 +5,94 @@ import os from 'node:os';
 import path from 'node:path';
 import { loadSiteDataSync, readSiteConfigSync, serializeSiteData, validateProductionOrigin, routePath } from '../lib/server/content.js';
 import { render } from '../dist/server/entry-server.js';
+import { createServer } from '../server.js';
 
 const data = loadSiteDataSync();
 
 test('local font assets are actual font binaries, not downloaded error pages', () => {
   const css = fs.readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
-  for (const [, filename] of css.matchAll(/url\(['"]\/fonts\/([^'"]+)['"]\)/g)) {
+  const premiumCss = fs.readFileSync(new URL('../src/premium.css', import.meta.url), 'utf8');
+  const fontUrls = [...css.matchAll(/url\(['"](\/fonts\/[^'"]+)['"]\)/g)].map(([, url]) => url);
+  assert.deepEqual(new Set(fontUrls), new Set([
+    '/fonts/DMSerifDisplay-Regular.ttf',
+    '/fonts/Inter-Variable.ttf',
+    '/fonts/manrope-variable.ttf'
+  ]));
+  for (const url of fontUrls) {
+    const filename = url.split('/').at(-1);
     const bytes = fs.readFileSync(new URL(`../public/fonts/${filename}`, import.meta.url));
     const signature = bytes.subarray(0, 4).toString('hex');
     assert.ok(['00010000', '4f54544f', '774f4646', '774f4632'].includes(signature), `Invalid font binary: ${filename}`);
   }
+});
+
+test('first-frame HTML owns CSS ordering and only preloads useful local faces', () => {
+  const template = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const premiumCss = fs.readFileSync(new URL('../src/premium.css', import.meta.url), 'utf8');
+  const stylesheet = template.indexOf('data-site-stylesheet');
+  const clientModule = template.indexOf('/src/entry-client.tsx');
+  assert.ok(stylesheet >= 0 && stylesheet < clientModule, 'stylesheet must precede the client module');
+  assert.match(template, /rel="preload" href="\/fonts\/Inter-Variable\.ttf"[^>]*as="font"/);
+  assert.match(template, /rel="preload" href="\/fonts\/manrope-variable\.ttf"[^>]*as="font"/);
+  assert.doesNotMatch(template, /preload[^>]+DMSerifDisplay/);
+
+  const css = fs.readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  assert.match(css, /font-display:\s*swap/);
+  assert.match(css, /font-size-adjust:\s*0\.52/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce/);
+  assert.match(premiumCss, /@media\s*\(max-width:\s*800px\)/);
+});
+
+test('SSR remains readable without JavaScript and has no remote first-frame dependencies', () => {
+  const { html } = render('/website/', {}, data);
+  const head = html;
+  assert.match(head, /<h1[^>]*>Your words\./);
+  assert.match(head, /src="\/website\/images\/library\.webp"/);
+  assert.doesNotMatch(head, /https?:\/\/[^"]+\.(?:css|woff2?|ttf)/);
+  assert.doesNotMatch(head, /Loading (article|manual)/);
+});
+
+test('production revalidates HTML and stable assets while fingerprinted assets are immutable', async (t) => {
+  const { httpServer } = await createServer(undefined, true);
+  await new Promise((resolve, reject) => {
+    httpServer.once('error', reject);
+    httpServer.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => httpServer.close());
+  const address = httpServer.address();
+  assert.ok(address && typeof address === 'object');
+  const base = `http://127.0.0.1:${address.port}`;
+
+  const htmlResponse = await fetch(`${base}/website/`);
+  assert.equal(htmlResponse.status, 200);
+  assert.equal(htmlResponse.headers.get('cache-control'), 'public, max-age=0, must-revalidate');
+  const html = await htmlResponse.text();
+  const stylesheet = html.indexOf('rel="stylesheet"');
+  const clientModule = html.indexOf('type="module"');
+  assert.ok(stylesheet >= 0 && stylesheet < clientModule, 'built SSR head must load CSS before hydration');
+  assert.match(html, /<h1[^>]*>Your words\./);
+
+  const stylesheetHref = html.match(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/)?.[1];
+  assert.ok(stylesheetHref, 'SSR must advertise a stylesheet');
+  const cssResponse = await fetch(new URL(stylesheetHref, base));
+  assert.equal(cssResponse.status, 200);
+  assert.match(cssResponse.headers.get('content-type') || '', /text\/css/);
+  assert.equal(cssResponse.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  assert.match(await cssResponse.text(), /@font-face/);
+
+  const fontResponse = await fetch(`${base}/website/fonts/Inter-Variable.ttf`);
+  assert.equal(fontResponse.status, 200);
+  assert.match(fontResponse.headers.get('content-type') || '', /font|octet-stream/);
+  assert.equal(fontResponse.headers.get('cache-control'), 'public, max-age=604800, must-revalidate');
+
+  const imageResponse = await fetch(`${base}/website/images/library.webp`);
+  assert.equal(imageResponse.status, 200);
+  assert.equal(imageResponse.headers.get('cache-control'), 'public, max-age=604800, must-revalidate');
+
+  const privateResponse = await fetch(`${base}/website/checkout/result`);
+  assert.equal(privateResponse.status, 200);
+  assert.equal(privateResponse.headers.get('cache-control'), 'no-store');
+  assert.equal(privateResponse.headers.get('x-robots-tag'), 'noindex, nofollow');
 });
 
 test('production origin accepts confirmed published origins but excludes previews', () => {

@@ -5,10 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="site-runtime" content="development" />
     <!--app-head-->
+    <!-- Keep the two faces used in the first viewport warm. DM Serif is loaded
+         on demand by the long-form pages instead of delaying the homepage. -->
+    <link rel="preload" href="/fonts/Inter-Variable.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="/fonts/manrope-variable.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="stylesheet" href="/src/index.css" data-site-stylesheet />
+    <script type="module" src="/src/entry-client.tsx"></script>
   </head>
   <body>
     <div id="root"><!--app-html--></div>
     <!--site-data-->
-    <script type="module" src="/src/entry-client.tsx"></script>
   </body>
 </html>

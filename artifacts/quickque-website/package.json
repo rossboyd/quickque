@@ -9,6 +9,7 @@
     "build": "node scripts/build.js",
     "serve": "NODE_ENV=production node server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test tests/*.test.mjs",
     "check:content": "node scripts/check-site.mjs --content-only",
     "check:site": "node scripts/check-site.mjs"
   },

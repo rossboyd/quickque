@@ -153,6 +153,84 @@
   }
 }
 
+/* The shell is deliberately opaque: native/local hydration must not expose
+   half-painted editor chrome or a light flash over a dark persisted theme. */
+.quickque-startup-shell {
+  min-height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 2rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  text-align: center;
+  font-family: var(--app-font-sans);
+}
+
+.quickque-startup-mark {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  margin-bottom: 0.4rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.7rem;
+  background: hsl(var(--card));
+  color: hsl(var(--primary));
+  font-weight: 700;
+}
+
+.quickque-startup-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.quickque-startup-detail {
+  max-width: 34rem;
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.quickque-startup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 0.65rem;
+}
+
+.quickque-startup-actions button {
+  border: 0;
+  border-radius: 0.45rem;
+  padding: 0.45rem 0.8rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.quickque-startup-actions .quickque-startup-secondary {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Base transparent overlay support */
 html.is-overlay, html.is-overlay body, html.is-overlay #root {
   background: transparent !important;

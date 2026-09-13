@@ -10,3 +10,4 @@
 - [Native test exit status](native-test-exit-status.md) — a passing XCTest summary can precede command-entry-point failure; check the entire Swift invocation.
 - [Local cloned voice ownership](local-cloned-voice-ownership.md) — Quickque voices are user-created, device-local assets; onboarding uses a rehearsal-style reference recording.
 - [Chatterbox word timing](chatterbox-word-timing.md) — bundled generation exposes passage audio and duration, not word timestamps; exact highlights require local alignment.
+- [Vite public assets under a base path](vite-public-assets-base-path.md) — source URLs should not include Vite’s configured base; Vite adds it during dev and build.

@@ -55,6 +55,10 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  /* Keep system fallback proportions close to Inter while the local face is
+     being fetched. This prevents a late font swap from moving the hero. */
+  font-size-adjust: 0.52;
+  font-synthesis: none;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

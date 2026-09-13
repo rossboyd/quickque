@@ -63,6 +63,8 @@ import {
   cloneActorWithFreshCharacterIds,
   cloneScriptData,
 } from './actor-model.ts';
+import { StartupShell } from '@/components/startup-shell';
+import { getStartupContract, type HydrationPhase } from './startup';
 
 const SEED_SCRIPTS: Script[] = createInitialScripts();
 type StoreContextType = {
@@ -192,6 +194,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [recoveryRequired, setRecoveryRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [settingsHydration, setSettingsHydration] =
+    useState<HydrationPhase>('pending');
+  const [libraryHydration, setLibraryHydration] =
+    useState<HydrationPhase>('pending');
+  const [libraryHydrationRevision, setLibraryHydrationRevision] = useState(0);
   const [profile, setProfile] = useState<Profile>(() => readStoredProfile());
   const [libraryDirectory, setLibraryDirectory] = useState<string | null>(null);
   const [localSaveStatus, setLocalSaveStatus] = useState('Loading local library…');
@@ -210,6 +217,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const profileRef = useRef(profile);
   const localSaveStatusRef = useRef(localSaveStatus);
   const nativeDirectoryRef = useRef<string | null>(null);
+  const libraryCacheHydrationErrorRef = useRef(false);
   const nativeReadyRef = useRef(false);
   const nativeAutosaveBlockedRef = useRef(false);
   const nativePickerOpenRef = useRef(false);
@@ -275,6 +283,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     storageRef.current = getLocalStorage();
     const storage = storageRef.current;
     if (!storage) {
+      libraryCacheHydrationErrorRef.current = true;
       cancelNativeAutosaves();
       savesDisabledRef.current = true;
       scriptsRef.current = [];
@@ -307,6 +316,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       legacyPresentationFallback,
     );
     if ('error' in loaded) {
+      libraryCacheHydrationErrorRef.current = true;
       cancelNativeAutosaves();
       savesDisabledRef.current = true;
       scriptsRef.current = [];
@@ -328,6 +338,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    libraryCacheHydrationErrorRef.current = false;
     applyLoaded(loaded);
     if (loaded.needsMigration || loaded.wasMissing) {
       const persisted = persistLibrary(
@@ -351,6 +362,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     storageRef.current = getLocalStorage();
     const storage = storageRef.current;
+    let settingsFailed = false;
     if (storage) {
       try {
         const loadedSettings = loadSettings(storage);
@@ -369,9 +381,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!persisted.ok) setError('Failed to save presentation defaults.');
         }
       } catch {
+        settingsFailed = true;
         setError('Failed to load settings.');
       }
     }
+    setSettingsHydration(settingsFailed ? 'error' : 'ready');
     loadCurrentLibrary(
       presentationDefaultsRef.current,
       legacyPresentationRef.current,
@@ -489,6 +503,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const hydrationGeneration = nativeGenerationRef.current;
     const hydrationRevision = scriptMutationRevisionRef.current;
+    setLibraryHydration('pending');
     setSaveStatus('Loading local library…');
 
     void getLocalLibrary()
@@ -506,6 +521,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           nativeReadyRef.current = false;
           nativeAutosaveBlockedRef.current = false;
           setSaveStatus('No local library selected');
+          setLibraryHydration(
+            libraryCacheHydrationErrorRef.current ? 'error' : 'ready',
+          );
           return;
         }
 
@@ -519,12 +537,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             'The selected local library is invalid. Your cached scripts are shown; reselect the folder to resume native saves.';
           setSaveStatus(message);
           setError(current => current ?? message);
+           setLibraryHydration('error');
           return;
         }
 
         if (recoveryRequiredRef.current) {
           cancelNativeAutosaves();
           setSaveStatus('Local library recovery is required before native saves');
+          setLibraryHydration('error');
           return;
         }
 
@@ -533,6 +553,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (nativeScripts === null) {
           setSaveStatus('Loaded local library');
           scheduleNativeSave(serializeScripts(scriptsRef.current));
+          setLibraryHydration('ready');
           return;
         }
 
@@ -546,11 +567,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (decision.source === 'local') {
           setSaveStatus('Using cached scripts; saving local edits');
           scheduleNativeSave(serializeScripts(decision.scripts));
+          setLibraryHydration('ready');
           return;
         }
 
         const commit = commitLibraryRef.current;
-        if (!commit) return;
+        if (!commit) {
+          setLibraryHydration('error');
+          return;
+        }
         const nextScripts = decision.scripts.map(cloneScript);
         const nextScriptIds = new Set(nextScripts.map(script => script.id));
         const nextActiveScriptId =
@@ -567,9 +592,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!committed.ok) {
           cancelNativeAutosaves();
           setSaveStatus('Native library was not adopted; your cached scripts remain active');
+          setLibraryHydration('error');
           return;
         }
         setSaveStatus('Loaded local library');
+        setLibraryHydration('ready');
       })
       .catch((loadError) => {
         if (cancelled || hydrationGeneration !== nativeGenerationRef.current) return;
@@ -582,6 +609,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
         setSaveStatus(message);
         setError(current => current ?? message);
+        setLibraryHydration('error');
       });
 
     return () => {
@@ -593,6 +621,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     recoveryRequired,
     scheduleNativeSave,
     setSaveStatus,
+    libraryHydrationRevision,
   ]);
 
   useEffect(() => {
@@ -1116,6 +1145,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [applyLoaded]);
 
   const retryLoadLibrary = useCallback(() => {
+    nativeGenerationRef.current += 1;
+    setLibraryHydration('pending');
+    setLibraryHydrationRevision(revision => revision + 1);
     loadCurrentLibrary();
   }, [loadCurrentLibrary]);
 
@@ -1209,11 +1241,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const clearError = useCallback(() => setError(null), []);
 
-  if (!isLoaded) {
+  const startup = getStartupContract({
+    settings: settingsHydration,
+    library: libraryHydration,
+    error,
+  });
+  const continueWithCachedData = useCallback(() => {
+    if (settingsHydration === 'error') setSettingsHydration('ready');
+    if (libraryHydration === 'error') setLibraryHydration('ready');
+  }, [libraryHydration, settingsHydration]);
+
+  if (startup.phase !== 'ready') {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-background text-sm text-muted-foreground">
-        Starting Quickque…
-      </div>
+      <StartupShell
+        phase={startup.phase === 'error' ? 'error' : 'pending'}
+        error={startup.error}
+        onRetry={retryLoadLibrary}
+        onContinue={continueWithCachedData}
+      />
     );
   }
 

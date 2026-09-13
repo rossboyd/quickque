@@ -21,6 +21,33 @@ export interface SettingsStorageLike {
   setItem(key: string, value: string): void;
 }
 
+/**
+ * Apply the persisted appearance before React creates any visible chrome.
+ * This accepts storage/document explicitly so the same contract is usable by
+ * the pre-bundle startup path and by focused tests.
+ */
+export function applyPersistedTheme(
+  target: Pick<Document, 'documentElement'> | null =
+    typeof document === 'undefined' ? null : document,
+  storage: SettingsStorageLike | null = (() => {
+    try {
+      return typeof localStorage === 'undefined' ? null : localStorage;
+    } catch {
+      return null;
+    }
+  })(),
+): boolean {
+  const darkTheme = loadSettings(storage).darkTheme;
+  if (target) {
+    target.documentElement.classList.toggle('dark', darkTheme);
+    target.documentElement.setAttribute(
+      'data-quickque-theme',
+      darkTheme ? 'dark' : 'light',
+    );
+  }
+  return darkTheme;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }

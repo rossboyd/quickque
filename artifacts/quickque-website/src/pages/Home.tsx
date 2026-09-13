@@ -42,7 +42,18 @@ const questions = [
 ];
 
 export function HomePage({ context }: { context?: any }) {
-  const { config } = useSiteConfig();
+  const { config: rawConfig } = useSiteConfig();
+  const config = rawConfig
+    ? { ...rawConfig, basePath: `${rawConfig.basePath.replace(/\/+$/, '')}/` }
+    : rawConfig;
+  // Browser and Node math libraries can differ in the last decimal places.
+  // Quantize the decorative waveform so its SSR style attributes hydrate exactly.
+  const Math = {
+    abs: globalThis.Math.abs,
+    max: globalThis.Math.max,
+    min: globalThis.Math.min,
+    sin: (value: number) => Number(globalThis.Math.sin(value).toFixed(6)),
+  };
   const rootRef = useRef<HTMLDivElement>(null);
   const [motionPaused, setMotionPaused] = useState(false);
   useEffect(() => {

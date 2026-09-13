@@ -184,6 +184,25 @@ function packageRootFor(value) {
   return packageRoot;
 }
 
+const immutableCacheControl = 'public, max-age=31536000, immutable';
+const stableAssetCacheControl = 'public, max-age=604800, must-revalidate';
+const htmlCacheControl = 'public, max-age=0, must-revalidate';
+
+function setStaticCacheHeaders(res, filePath, clientRoot) {
+  const relative = path.relative(clientRoot, filePath);
+  // Only Vite's fingerprinted output is immutable. Stable public filenames
+  // remain cacheable but must revalidate after a bounded period.
+  if (relative.startsWith(`assets${path.sep}`)) {
+    res.set('Cache-Control', immutableCacheControl);
+  } else if (
+    relative.startsWith(`fonts${path.sep}`) ||
+    relative.startsWith(`images${path.sep}`) ||
+    /(?:^|[\\/])(?:logo|favicon)\.(?:png|svg|webp|jpg|jpeg|avif)$/.test(relative)
+  ) {
+    res.set('Cache-Control', stableAssetCacheControl);
+  }
+}
+
 export async function createServer(
   root = packageRoot,
   isProd = process.env.NODE_ENV === 'production',
@@ -294,11 +313,13 @@ export async function createServer(
     });
     app.use(vite.middlewares);
   } else {
+    const clientRoot = path.resolve(contentRoot, 'dist/client');
     app.use(
       configBasePath || '/',
-      express.static(path.resolve(contentRoot, 'dist/client'), {
+      express.static(clientRoot, {
         index: false,
-        fallthrough: true
+        fallthrough: true,
+        setHeaders: (res, filePath) => setStaticCacheHeaders(res, filePath, clientRoot)
       })
     );
   }
@@ -337,6 +358,9 @@ export async function createServer(
       };
       if (status === 404) {
         Object.assign(metadata, metadataDefaults(Boolean(isProd), siteData.config, 404));
+      }
+      if (!res.hasHeader('Cache-Control')) {
+        res.set('Cache-Control', htmlCacheControl);
       }
       template = template
         .replace('<!--app-head-->', `${renderMetadata(metadata)}\n<link rel="icon" type="image/png" href="${htmlEscape(`${baseRoute}/logo.png`)}">`)
