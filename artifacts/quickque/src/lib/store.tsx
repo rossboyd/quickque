@@ -48,6 +48,7 @@ import {
   canWriteNativeLibrary,
 } from './library-data';
 import {
+  applyDocumentTheme,
   loadSettings,
   loadPresentationDefaults,
   persistPresentationDefaults,
@@ -396,11 +397,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isLoaded) return;
     if (typeof document === 'undefined') return;
-    if (settings.darkTheme) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    applyDocumentTheme(document, settings.darkTheme);
   }, [settings, isLoaded]);
 
   const enqueueNativeSave = useCallback(
@@ -1529,7 +1526,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       storage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
       if (typeof document !== 'undefined') {
-        document.documentElement.classList.toggle('dark', settings.darkTheme);
+        applyDocumentTheme(document, settings.darkTheme);
       }
     } catch (settingsError) {
       setError(describeError(settingsError, 'Failed to save settings.'));

@@ -115,6 +115,26 @@ async function nearestVisibleAnchor(page: Page) {
   });
 }
 
+test('reader stays dark while the workbench theme is light', async ({ page }) => {
+  await seed(page);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Dark Theme' }).evaluate(
+    element => (element as HTMLInputElement).click(),
+  );
+  await page.getByRole('button', { name: 'Close' }).click();
+
+  await expect(page.locator('html')).not.toHaveClass(/\bdark\b/);
+  await expect(page.locator('html')).toHaveAttribute('data-quickque-theme', 'light');
+
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  await expect(page.locator('html')).toHaveClass(/\bdark\b/);
+  await expect(page.locator('html')).toHaveAttribute('data-quickque-theme', 'dark');
+
+  await page.getByRole('button', { name: 'Exit reader' }).click();
+  await expect(page.locator('html')).not.toHaveClass(/\bdark\b/);
+  await expect(page.locator('html')).toHaveAttribute('data-quickque-theme', 'light');
+});
+
 test('reader preserves a saved middle token through mirrors, wheel, resize, and compact mode', async ({ page }) => {
   await seed(page);
   await page.getByRole('button', { name: 'Present', exact: true }).click();

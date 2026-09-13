@@ -15,10 +15,26 @@ import type { PresentationPreferences } from './types.ts';
 
 export const QUICKQUE_SETTINGS_KEY = 'quickque_settings';
 export const QUICKQUE_PRESENTATION_DEFAULTS_KEY = 'quickque_presentation_defaults';
+export const QUICKQUE_READER_THEME_ATTRIBUTE = 'data-quickque-reader-theme';
 
 export interface SettingsStorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+}
+
+export function applyDocumentTheme(
+  target: Pick<Document, 'documentElement'>,
+  workbenchDarkTheme: boolean,
+): boolean {
+  const readerDarkTheme =
+    target.documentElement.getAttribute(QUICKQUE_READER_THEME_ATTRIBUTE) === 'dark';
+  const darkTheme = readerDarkTheme || workbenchDarkTheme;
+  target.documentElement.classList.toggle('dark', darkTheme);
+  target.documentElement.setAttribute(
+    'data-quickque-theme',
+    darkTheme ? 'dark' : 'light',
+  );
+  return darkTheme;
 }
 
 /**
@@ -39,11 +55,7 @@ export function applyPersistedTheme(
 ): boolean {
   const darkTheme = loadSettings(storage).darkTheme;
   if (target) {
-    target.documentElement.classList.toggle('dark', darkTheme);
-    target.documentElement.setAttribute(
-      'data-quickque-theme',
-      darkTheme ? 'dark' : 'light',
-    );
+    applyDocumentTheme(target, darkTheme);
   }
   return darkTheme;
 }

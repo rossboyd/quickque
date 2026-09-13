@@ -82,20 +82,20 @@ test('timing preferences accept their bounds and nullable target duration', () =
   assert.equal(normalizePresentation({ targetDurationSeconds: null }).targetDurationSeconds, null);
 });
 
-test('legacy settings snapshot keeps the old theme surface at migration time', () => {
+test('legacy settings snapshot always uses the stable dark reader surface', () => {
   const light = presentationFromLegacySettings({
     ...DEFAULT_SETTINGS,
     darkTheme: false,
     fontSize: 36,
     textColor: '#123456',
   });
-  assert.equal(light.backgroundColor, '#FFFFFF');
-  assert.equal(light.cueColor, '#0B7084');
+  assert.equal(light.backgroundColor, DEFAULT_PRESENTATION.backgroundColor);
+  assert.equal(light.cueColor, DEFAULT_PRESENTATION.cueColor);
   assert.equal(light.cuePosition, 30);
   assert.equal(light.fontSize, 36);
   assert.equal(light.textColor, '#123456');
   const dark = presentationFromLegacySettings(DEFAULT_SETTINGS);
-  assert.equal(dark.backgroundColor, '#1A1A1A');
-  assert.equal(dark.cueColor, '#0DCCF2');
+  assert.equal(dark.backgroundColor, DEFAULT_PRESENTATION.backgroundColor);
+  assert.equal(dark.cueColor, DEFAULT_PRESENTATION.cueColor);
   assert.equal(DEFAULT_PRESENTATION.cuePosition, 30);
 });

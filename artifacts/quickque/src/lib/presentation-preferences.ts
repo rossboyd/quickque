@@ -156,7 +156,7 @@ export function normalizePresentation(
 export function presentationFromLegacySettings(
   settings: Pick<
     Settings,
-    'fontSize' | 'speed' | 'backgroundOpacity' | 'fontFamily' | 'textColor' | 'darkTheme'
+    'fontSize' | 'speed' | 'backgroundOpacity' | 'fontFamily' | 'textColor'
   >,
 ): PresentationPreferences {
   return normalizePresentation({
@@ -165,10 +165,10 @@ export function presentationFromLegacySettings(
     backgroundOpacity: settings.backgroundOpacity,
     fontFamily: settings.fontFamily,
     textColor: settings.textColor,
-    backgroundColor: settings.darkTheme ? '#1A1A1A' : '#FFFFFF',
-    // These are the exact hex equivalents of the old theme primary tokens:
-    // dark hsl(190 90% 50%), light hsl(190 85% 28%).
-    cueColor: settings.darkTheme ? '#FF5349' : '#C83F38',
+    // Reader presentation is always based on the main dark surface. The
+    // workbench theme toggle must never create a light reader snapshot.
+    backgroundColor: DEFAULT_PRESENTATION.backgroundColor,
+    cueColor: DEFAULT_PRESENTATION.cueColor,
   });
 }
 

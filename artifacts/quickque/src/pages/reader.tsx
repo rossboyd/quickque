@@ -55,6 +55,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  applyDocumentTheme,
+  QUICKQUE_READER_THEME_ATTRIBUTE,
+} from '@/lib/settings-persistence';
 
 type ReaderPositionSnapshot = {
   anchorId: string;
@@ -91,6 +95,17 @@ export default function Reader() {
     resetScriptPresentation,
     updateSettings: persistAppSettings,
   } = useStore();
+  const workbenchDarkThemeRef = useRef(settings.darkTheme);
+  workbenchDarkThemeRef.current = settings.darkTheme;
+  useLayoutEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.setAttribute(QUICKQUE_READER_THEME_ATTRIBUTE, 'dark');
+    applyDocumentTheme(document, true);
+    return () => {
+      document.documentElement.removeAttribute(QUICKQUE_READER_THEME_ATTRIBUTE);
+      applyDocumentTheme(document, workbenchDarkThemeRef.current);
+    };
+  }, []);
   const params = useParams();
   const [_, setLocation] = useLocation();
   const script = scripts.find(s => s.id === params.id);
@@ -1435,7 +1450,6 @@ export default function Reader() {
                      value={presentation}
                       readMode={sceneEnabled ? 'flow' : readMode}
                      onChange={updates => updatePresentation(updates as Partial<PresentationPreferences>)}
-                     globalDarkTheme={settings.darkTheme}
                    />
                    <div className="flex justify-end border-t border-border pt-4">
                      <button

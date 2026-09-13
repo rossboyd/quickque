@@ -27,12 +27,10 @@ function getContrast(hex1: string, hex2: string) {
 export function PresentationControls({
   value,
   onChange,
-  globalDarkTheme = true,
   readMode = undefined,
 }: {
   value: PresentationPreferences;
   onChange: (updates: Partial<PresentationPreferences>) => boolean;
-  globalDarkTheme?: boolean;
   /**
    * Global defaults do not have an active reader mode. When a reader supplies
    * its mode, timed scrolling is only available in Manual Scroll.
@@ -93,7 +91,7 @@ export function PresentationControls({
     speed: value.speed,
     fontFamily: value.fontFamily,
     textColor: value.textColor,
-    darkTheme: globalDarkTheme,
+    darkTheme: true,
     compactMode: false,
     backgroundOpacity: 100,
   };
@@ -111,7 +109,7 @@ export function PresentationControls({
     return onChange({ [field]: val });
   };
 
-  const resolvedTextColor = normalizeTextColor(value.textColor) ?? getThemeDefaultPickerColor(globalDarkTheme);
+  const resolvedTextColor = normalizeTextColor(value.textColor) ?? getThemeDefaultPickerColor(true);
   
   const contrast = value.backgroundColor.startsWith('#') 
     ? getContrast(resolvedTextColor, value.backgroundColor) 

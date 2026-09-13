@@ -204,7 +204,6 @@ export function SettingsDialog() {
               <PresentationControls 
                 value={presentationDefaults} 
                 onChange={updatePresentationDefaults} 
-                globalDarkTheme={settings.darkTheme}
               />
             </div>
           </div>
