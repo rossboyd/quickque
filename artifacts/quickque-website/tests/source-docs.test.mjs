@@ -19,7 +19,7 @@ test('guide control labels exist in the current app, not just in the guide', () 
     assert.ok(library.includes(label), `App label changed: ${label}; re-audit scripts guide`);
     assert.ok(article('scripts').includes(label), `Guide missing current label: ${label}`);
   }
-  for (const label of ['Export Full Backup', 'Import Backup JSON']) {
+  for (const label of ['Export script backup', 'Import script backup']) {
     assert.ok(settings.includes(label), `App backup label changed: ${label}`);
     assert.ok(article('backup-restore').includes(label), `Guide backup label changed: ${label}`);
   }

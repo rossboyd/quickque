@@ -46,7 +46,7 @@ test('first-frame HTML owns CSS ordering and only preloads useful local faces', 
 test('SSR remains readable without JavaScript and has no remote first-frame dependencies', () => {
   const { html } = render('/', {}, data);
   const head = html;
-  assert.match(head, /<h1[^>]*>Your words\./);
+  assert.match(head, /<h1[^>]*>Keep your place\./);
   assert.match(head, /src="\/images\/library\.webp"/);
   assert.doesNotMatch(head, /https?:\/\/[^"]+\.(?:css|woff2?|ttf)/);
   assert.doesNotMatch(head, /Loading (article|manual)/);
@@ -70,7 +70,7 @@ test('production revalidates HTML and stable assets while fingerprinted assets a
   const stylesheet = html.indexOf('rel="stylesheet"');
   const clientModule = html.indexOf('type="module"');
   assert.ok(stylesheet >= 0 && stylesheet < clientModule, 'built SSR head must load CSS before hydration');
-  assert.match(html, /<h1[^>]*>Your words\./);
+  assert.match(html, /<h1[^>]*>Keep your place\./);
 
   const stylesheetHref = html.match(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/)?.[1];
   assert.ok(stylesheetHref, 'SSR must advertise a stylesheet');

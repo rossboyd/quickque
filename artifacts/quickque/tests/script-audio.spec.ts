@@ -221,6 +221,9 @@ test('desktop security policy permits local WAV blob playback', async ({ page })
 
 test('audio panel shows truthful progress and retains it when reopened without status polling', async ({ page }) => {
   await page.goto('/');
+  await page.evaluate(() => localStorage.setItem('quickque_profile', JSON.stringify({ name: 'Sam', onboardingComplete: true })));
+  await page.reload();
+  await expect(page.getByRole('dialog', { name: 'Welcome setup guide' })).toHaveCount(0);
   await page.evaluate(async () => {
     const { default: React } = await import('/node_modules/.vite/deps/react.js');
     const { default: { createRoot } } = await import('/node_modules/.vite/deps/react-dom_client.js');

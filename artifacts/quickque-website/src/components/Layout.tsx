@@ -30,7 +30,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <nav aria-label="Main navigation" className="hidden md:flex items-center gap-8 text-base font-medium">
           <Link href="/pricing" className="hover:text-[var(--accent)] transition-colors">Pricing</Link>
           <Link href="/guide" className="hover:text-[var(--accent)] transition-colors">Manual</Link>
-          <Link href="/install" className="hover:text-[var(--accent)] transition-colors">Source</Link>
+          <Link href="/install" className="hover:text-[var(--accent)] transition-colors">Install</Link>
           <a href={config?.repository} target="_blank" rel="noreferrer" className="hover:text-[var(--accent)] transition-colors">GitHub</a>
         <Link href="/pricing" className="site-nav-cta">Get started <span aria-hidden="true">↗</span></Link>
         </nav>
@@ -69,7 +69,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex gap-6 font-medium">
             <Link href="/privacy" className="hover:text-[var(--foreground)]">Privacy</Link>
-            <Link href="/license" className="hover:text-[var(--foreground)]">License</Link>
+            <Link href="/license" className="hover:text-[var(--foreground)]">Licence</Link>
           </div>
         </div>
       </footer>

@@ -23,13 +23,15 @@ if (action === 'keys') {
       console.log('Revocation recorded. Existing offline leases remain valid until renewal or expiry.');
     } else {
       if (!['subscription', 'perpetual'].includes(options.plan)) throw new Error('grant plan=subscription paid-through=YYYY-MM-DD OR grant plan=perpetual');
+      const email = options.email?.trim();
+      if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('A customer email is required: email=customer@example.com');
       const paidThrough = options.plan === 'subscription' ? Math.floor(Date.parse(options['paid-through']) / 1000) : null;
       if (options.plan === 'subscription' && (!Number.isSafeInteger(paidThrough) || paidThrough <= Date.now() / 1000)) throw new Error('A future paid-through date is required');
       const anniversary = new Date(); anniversary.setUTCFullYear(anniversary.getUTCFullYear() + 1);
       const updatesUntil = options.plan === 'perpetual' ? Math.floor(anniversary.getTime() / 1000) : null;
       const key = `QQ-${randomBytes(32).toString('base64url')}`;
       const id = randomUUID();
-      await pool.query('INSERT INTO quickque_licences (id,key_hash,plan,paid_through,updates_until) VALUES ($1,$2,$3,$4,$5)', [id, createHash('sha256').update(key).digest('hex'), options.plan, paidThrough, updatesUntil]);
+      await pool.query('INSERT INTO quickque_licences (id,key_hash,plan,paid_through,updates_until,customer_email) VALUES ($1,$2,$3,$4,$5,$6)', [id, createHash('sha256').update(key).digest('hex'), options.plan, paidThrough, updatesUntil, email]);
       // This is the operator's one-time delivery output, not an application/request log.
       console.log(JSON.stringify({ id, licenceKey: key, updatesUntil, paidThrough }));
     }
