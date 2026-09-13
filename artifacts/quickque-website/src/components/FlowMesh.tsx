@@ -16,28 +16,21 @@ export function FlowMesh({ paused }: { paused: boolean }) {
     let pointerX = 0, pointerY = 0, scroll = 0;
     const draw = () => {
       ctx.clearRect(0, 0, width, height);
-      const project = (u: number, v: number) => {
-        const wave = Math.sin(u * 4.8 + time * .32) * .16 + Math.cos(v * 3.6 - time * .2) * .1;
-        const twist = v * .65 + time * .055;
-        const x = u * Math.cos(twist) - wave * Math.sin(twist);
-        const y = wave * Math.cos(twist) + u * Math.sin(twist);
-        return [width * .5 + x * width * .51 + v * width * .13 + pointerX * 22,
-          height * .52 + y * height * .8 + v * height * .31 + pointerY * 14 + scroll * .08];
-      };
-      const lines = width < 600 ? 28 : 46;
-      for (let axis = 0; axis < 2; axis++) {
-        for (let i = 0; i <= lines; i++) {
-          const fixed = i / lines * 2 - 1;
-          const opacity = .12 + .42 * Math.pow(Math.sin(i / lines * Math.PI), .6);
-          ctx.strokeStyle = `rgba(${axis ? '154,168,255' : '109,128,220'},${opacity})`;
-          ctx.lineWidth = .65;
-          ctx.beginPath();
-          for (let j = 0; j <= 64; j++) {
-            const moving = j / 64 * 2 - 1;
-            const [x, y] = project(axis ? fixed : moving, axis ? moving : fixed);
-            if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-          }
-          ctx.stroke();
+      const spacing = 26;
+      // Periodic, directional pulses keep dot centres fixed and loop seamlessly.
+      const phase = time / 8 * Math.PI * 2;
+      for (let y = spacing * .5; y < height; y += spacing) {
+        for (let x = spacing * .5; x < width; x += spacing) {
+          const u = x / Math.max(width, 1), v = y / Math.max(height, 1);
+          const field = (
+            Math.sin((u * .65 + v * 4.8) * Math.PI * 2 - phase * 3) * .42 +
+            Math.sin((u * 2.8 - v * .35) * Math.PI * 2 + phase * 5) * .28 +
+            Math.cos((u * 1.4 + v * 2.2) * Math.PI * 2 - phase * 2) * .2
+          );
+          const intensity = Math.max(0, Math.min(1, (field + .94) / 1.88));
+          const radius = 1 + intensity * 4;
+          ctx.fillStyle = "rgba(255, 83, 73, " + (.16 + intensity * .68) + ")";
+          ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
         }
       }
     };

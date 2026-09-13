@@ -30,7 +30,7 @@ export const DEFAULT_PRESENTATION: PresentationPreferences = {
   // The prior reader's `top-[30%]` marker used the active dark primary at
   // 70% opacity. Keep that visual as the default explicit cue.
   cuePosition: 30,
-  cueColor: '#0DCCF2',
+  cueColor: '#FF5349',
   cueOpacity: 70,
 };
 
@@ -168,7 +168,7 @@ export function presentationFromLegacySettings(
     backgroundColor: settings.darkTheme ? '#1A1A1A' : '#FFFFFF',
     // These are the exact hex equivalents of the old theme primary tokens:
     // dark hsl(190 90% 50%), light hsl(190 85% 28%).
-    cueColor: settings.darkTheme ? '#0DCCF2' : '#0B7084',
+    cueColor: settings.darkTheme ? '#FF5349' : '#C83F38',
   });
 }
 

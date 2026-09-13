@@ -20,19 +20,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
         Skip to main content
       </a>
 
-      <header className="site-header px-6 lg:px-12 h-24 flex items-center justify-between sticky top-0 bg-white/80 backdrop-blur-xl z-40">
+      <header className="site-header px-6 lg:px-12 h-24 flex items-center justify-between sticky top-0 bg-[var(--background)] backdrop-blur-xl z-40">
         <Link href="/" className="site-brand font-serif font-medium text-2xl flex items-center gap-3">
           <BrandMark className="w-9 h-7" />
           <span>Quickque</span>
         </Link>
 
         {/* Desktop Nav */}
-        <nav className="hidden md:flex items-center gap-8 text-base font-medium">
+        <nav aria-label="Main navigation" className="hidden md:flex items-center gap-8 text-base font-medium">
           <Link href="/pricing" className="hover:text-[var(--accent)] transition-colors">Pricing</Link>
           <Link href="/guide" className="hover:text-[var(--accent)] transition-colors">Manual</Link>
           <Link href="/install" className="hover:text-[var(--accent)] transition-colors">Source</Link>
           <a href={config?.repository} target="_blank" rel="noreferrer" className="hover:text-[var(--accent)] transition-colors">GitHub</a>
-        <Link href="/pricing" className="site-nav-cta">Get Quickque <span aria-hidden="true">↗</span></Link>
+        <Link href="/pricing" className="site-nav-cta">Get started <span aria-hidden="true">↗</span></Link>
         </nav>
 
         {/* Mobile Nav Toggle */}
@@ -49,7 +49,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Nav */}
       {menuOpen && (
-        <nav id="mobile-menu" className="site-mobile-menu md:hidden border-b border-[var(--border)] bg-white px-6 py-6 flex flex-col gap-6 text-lg font-medium shadow-lg absolute top-24 left-0 w-full z-30">
+        <nav aria-label="Mobile navigation" id="mobile-menu" className="site-mobile-menu md:hidden border-b border-[var(--border)] bg-[var(--surface)] px-6 py-6 flex flex-col gap-6 text-lg font-medium shadow-lg absolute top-24 left-0 w-full z-30">
           <Link href="/pricing" className="block py-2">Pricing</Link>
           <Link href="/guide" className="block py-2">Manual</Link>
           <Link href="/install" className="block py-2">Source build</Link>
@@ -61,7 +61,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      <footer className="site-footer border-t border-[var(--border)] py-12 mt-16 text-center text-[var(--text-muted)] bg-white">
+      <footer className="site-footer border-t border-[var(--border)] py-12 mt-16 text-center text-[var(--text-muted)] bg-[var(--surface)]">
         <div className="max-w-[1200px] mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-3">
             <BrandMark className="w-6 h-5 opacity-50" />

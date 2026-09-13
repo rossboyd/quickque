@@ -2,13 +2,13 @@
 
 ## Visual Language
 - **Soft Geometry & Space:** Rounded corners (`rounded-2xl`, `rounded-3xl`), spacious padding, airy layouts. Gentle drop shadows create depth without harsh edges.
-- **Typography-led (Sketch-Inspired):** 
-  - Headlines: Large, expressive Serif (`DM Serif Display`) to convey elegance and distinction.
+- **Typography-led (Sketch-Inspired):**
+  - Headlines: Manrope, medium weight, with tight tracking and generous line height. Use the same face for navigation branding and page headings.
   - Body: Clean, highly legible Sans-Serif (`Inter`) for utility and long-form reading. Keep the fonts' OFL notices.
-- **Atmospheric Palette:** 
-  - Pearl backgrounds (`#ffffff` overall, with `#f5f6f8` surfaces).
-  - Slate text (`#1c1d21`) with lighter muted tones (`#575a65`).
-  - Signature Blue accents (`#334ab3`) for primary actions, avoiding heavy gradients or neon.
+- **Dark brand palette:**
+  - Black background (`#080808`), charcoal surfaces (`#141414`), and fine translucent white borders.
+  - Off-white text (`#ededed`) and readable grey secondary text (`#a3a3a3`).
+  - Hot coral (`#FF5349`) for cues and primary actions, with dark button labels. Soft coral (`#FF8A82`) for small links on dark backgrounds. Keep the animated hero a fixed dot grid; no logo overlay, lines or glow.
 - **Structure:** Split layouts (content left / visual right), overlapping floating elements, clear distinct feature sections.
 
 ## Voice & Tone
@@ -17,7 +17,7 @@
 - **Quiet Confidence:** Explain the benefit without hype, forced jokes, profanity, emojis, or exclamation marks.
 
 ## Composition Notes
-- The hero is split: Strong, oversized serif headline driving the value proposition, paired with clear CTAs.
+- The hero is split: Strong, oversized sans-serif headline driving the value proposition, paired with clear CTAs.
 - The transparent float mode is the hero capability—celebrate it visually.
 - Do NOT fabricate features or copy Sketch's product claims.
 
@@ -34,8 +34,8 @@
 | “Phone control uses unencrypted HTTP. Use a trusted local network.” | “Secure control from anywhere.” |
 
 Use the supplied Quickque icon, not competitor assets. ONCE and 37signals are
-visual references, not partners or contributors. The website now follows the
-app's blue palette rather than the earlier cyan accents. Celebrate compact,
+visual references, not partners or contributors. The website uses black, white, neutral grey, and hot coral throughout.
+Use restrained surface highlights and consistent rounded buttons; never reintroduce navy or blue accents. Celebrate compact,
 transparent mode through practical benefits, keeping release/device caveats
 clear without making them the main pitch. Label illustrations honestly.
 Keep the website readable

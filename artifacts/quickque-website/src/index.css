@@ -37,14 +37,17 @@
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #1c1d21;
-  --surface: #ffffff;
-  --surface-hover: #f5f6f8;
-  --border: #e6e8eb;
-  --accent: #334ab3;
-  --accent-hover: #293d94;
-  --text-muted: #575a65;
+  --background: #080808;
+  --foreground: #ededed;
+  --surface: #141414;
+  --surface-hover: #1c1c1c;
+  --border: #303030;
+  --brand-coral: #FF5349;
+  --brand-coral-soft: #FF8A82;
+  --brand-coral-tint: #FFF0EE;
+  --accent: #FF8A82;
+  --accent-hover: #FFAEA8;
+  --text-muted: #a3a3a3;
 
   /* Font */
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -65,7 +68,7 @@ body {
 }
 
 .font-serif {
-  font-family: var(--font-serif);
+  font-family: 'Manrope', var(--font-sans);
 }
 
 /* Reduced motion respect */

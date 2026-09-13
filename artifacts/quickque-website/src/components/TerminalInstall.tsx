@@ -26,8 +26,8 @@ export function TerminalInstall({ command }: { command: string }) {
 
   return (
     <div className="mt-8 max-w-2xl mx-auto w-full text-left relative group">
-      <div className="bg-[#0f1524] text-white p-4 rounded-lg shadow-sm border border-[#232b3d] text-sm font-mono overflow-x-auto">
-        <div className="flex items-center gap-2 mb-2 text-[#8b99b0]">
+      <div className="bg-[#111111] text-white p-4 rounded-lg shadow-sm border border-[#303030] text-sm font-mono overflow-x-auto">
+        <div className="flex items-center gap-2 mb-2 text-[#b0b0b0]">
           <Terminal size={14} />
           <span>Build from source (Mac Apple Silicon)</span>
         </div>
@@ -35,10 +35,10 @@ export function TerminalInstall({ command }: { command: string }) {
       </div>
       <button 
         onClick={handleCopy}
-        className="absolute top-3 right-3 p-1.5 bg-[#232b3d] text-white border border-[#232b3d] rounded text-xs hover:bg-[#323d54] transition-colors flex items-center gap-1"
+        className="absolute top-3 right-3 p-1.5 bg-[#303030] text-white border border-[#303030] rounded text-xs hover:bg-[#444444] transition-colors flex items-center gap-1"
         aria-label="Copy command"
       >
-        {copied ? <Check size={14} className="text-[#6495ed]" /> : <Copy size={14} />}
+        {copied ? <Check size={14} className="text-[#FF8A82]" /> : <Copy size={14} />}
         {copied ? 'Copied' : 'Copy'}
       </button>
       <p role="status" className="text-sm mt-2 font-sans text-[var(--text-muted)]">{feedback}</p>

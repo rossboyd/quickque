@@ -5,7 +5,7 @@ import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export function CheckoutResultPage({ context }: { context?: any }) {
   return (
-    <div className="w-full min-h-[calc(100vh-200px)] bg-[#fafbfd] flex items-center justify-center">
+    <div className="w-full min-h-[calc(100vh-200px)] bg-[var(--background)] flex items-center justify-center">
       <Meta title="Dummy checkout complete" description="Quickque dummy checkout confirmation. No payment was made." context={context} noindex={true} />
       <div className="w-full max-w-3xl mx-auto px-6">
         <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -14,7 +14,7 @@ export function CheckoutResultPage({ context }: { context?: any }) {
           </div>
           <h1 className="font-serif text-5xl mb-6 text-[var(--foreground)] tracking-tight">Dummy checkout complete</h1>
           
-          <div className="bg-white p-8 rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.05)] border border-[var(--border)] w-full max-w-lg mb-8">
+          <div className="bg-[var(--surface)] p-8 rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.05)] border border-[var(--border)] w-full max-w-lg mb-8">
             <p className="text-[var(--text-muted)] text-lg mb-6">
               You completed the temporary local demo. This was not a purchase and no payment provider was contacted.
             </p>
