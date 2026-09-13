@@ -12,3 +12,4 @@
 - [Chatterbox word timing](chatterbox-word-timing.md) — bundled generation exposes passage audio and duration, not word timestamps; exact highlights require local alignment.
 - [Vite public assets under a base path](vite-public-assets-base-path.md) — source URLs should not include Vite’s configured base; Vite adds it during dev and build.
 - [Bare artifact path prefixes](bare-artifact-path-prefixes.md) — nested Vite apps may need to redirect the bare base before Vite rejects it.
+- [Expo 57 splash configuration](expo-57-splash-configuration.md) — Expo Doctor rejects the legacy top-level splash field in static app.json.

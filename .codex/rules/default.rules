@@ -1,1 +1,3 @@
 prefix_rule(pattern=["/bin/bash", "-lc", "pnpm run typecheck && pnpm --filter @workspace/quickque-website build && node artifacts/quickque-website/scripts/check-production.mjs && node --test artifacts/quickque-website/tests/*.test.mjs"], decision="allow")
+prefix_rule(pattern=["ls", "-a"], decision="allow")
+prefix_rule(pattern=["ls", "-la", ".agents", ".conversation", "attached_assets"], decision="allow")
