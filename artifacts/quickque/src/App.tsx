@@ -1,3 +1,4 @@
+import { AudioUpgradePrompt } from '@/components/upgrade-dialog';
 import { SavedScriptAudio } from '@/components/saved-script-audio';
 import { useEffect, type ReactNode } from 'react';
 import { FlowDebugOverlay } from '@/components/flow-debug-overlay';
@@ -54,6 +55,7 @@ function App() {
           <WouterRouter base={routerBase}>
             <Router />
             <WelcomeWizard />
+            <AudioUpgradePrompt />
           </WouterRouter>
           <Toaster />
         </TooltipProvider>

@@ -1,4 +1,4 @@
-import { useDebugLicence } from '../lib/debug-licence';
+import { useLicence } from '../lib/licence';
 import { useState, useEffect, useRef, useCallback, type MutableRefObject } from 'react';
 import { invokeAcknowledgedFlowCommand } from '../lib/flow/command-acknowledgement';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
@@ -103,7 +103,7 @@ function bridgeError(error: unknown, operation: string): string {
 }
 
 export function useLocalFlow({ tokens, enabled, sceneCompletion: sceneCompletionEnabled = false }: UseLocalFlowArgs): FlowState {
-  const licence = useDebugLicence();
+  const licence = useLicence();
   const readerSession = useRef(crypto.randomUUID());
   const [status, setStatus] = useState<FlowStatus>("unsupported");
   const [error, setError] = useState<string | null>(null);

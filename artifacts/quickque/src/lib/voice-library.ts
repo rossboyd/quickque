@@ -66,6 +66,7 @@ type AudioElementLike = {
   play(): Promise<void> | void;
   pause(): void;
   onended: (() => void) | null;
+  onerror?: (() => void) | null;
 };
 
 export type VoiceLibraryDependencies = {
@@ -116,10 +117,39 @@ export function validateVoiceName(name: string): string | null {
 export function validateRecording(recording: VoiceRecording): string | null {
   if (!recording.complete) return 'The recording did not finish. Please try again.';
   if (recording.sampleRate < 16_000 || recording.sampleRate > 48_000) return 'The microphone sample rate must be between 16 and 48 kHz.';
-  if (!Number.isFinite(recording.durationSeconds) || recording.durationSeconds < MIN_REFERENCE_SECONDS || recording.durationSeconds > MAX_REFERENCE_SECONDS) {
-    return `Record a clean sample between ${MIN_REFERENCE_SECONDS} and ${MAX_REFERENCE_SECONDS} seconds.`;
+  if (!Number.isFinite(recording.durationSeconds) || recording.durationSeconds <= MIN_REFERENCE_SECONDS || recording.durationSeconds > MAX_REFERENCE_SECONDS) {
+    return `Record a clean sample longer than ${MIN_REFERENCE_SECONDS} seconds and up to ${MAX_REFERENCE_SECONDS} seconds.`;
   }
+  if (!Number.isFinite(recording.levelPeak) || recording.levelPeak < 0.001) return 'The sample is silent or too quiet. Check your microphone and record again.';
   return null;
+}
+
+export function inspectVoiceWav(bytes: Uint8Array) {
+  const invalid = () => new VoiceLibraryError('VOICE_RECORDING_INVALID', 'The saved sample is not a complete mono PCM WAV recording.');
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const tag = (offset: number) => String.fromCharCode(...bytes.subarray(offset, offset + 4));
+  if (bytes.length < 44 || tag(0) !== 'RIFF' || tag(8) !== 'WAVE') throw invalid();
+  let sampleRate = 0; let pcm: Uint8Array | undefined;
+  for (let offset = 12; offset + 8 <= bytes.length;) {
+    const size = view.getUint32(offset + 4, true);
+    const start = offset + 8;
+    if (start + size > bytes.length) throw invalid();
+    if (tag(offset) === 'fmt ') {
+      if (size < 16 || view.getUint16(start, true) !== 1 || view.getUint16(start + 2, true) !== 1 || view.getUint16(start + 14, true) !== 16) throw invalid();
+      sampleRate = view.getUint32(start + 4, true);
+    }
+    if (tag(offset) === 'data') pcm = bytes.subarray(start, start + size);
+    offset = start + size + size % 2;
+  }
+  if (sampleRate < 16000 || sampleRate > 48000 || !pcm?.length || pcm.length % 2) throw invalid();
+  const data = new DataView(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+  let levelPeak = 0;
+  for (let i = 0; i < pcm.length; i += 2) levelPeak = Math.max(levelPeak, Math.abs(data.getInt16(i, true)) / 32768);
+  const durationSeconds = pcm.length / (sampleRate * 2);
+  // Five-second legacy recordings can still be listened to and replaced.
+  if (durationSeconds < MIN_REFERENCE_SECONDS || durationSeconds > MAX_REFERENCE_SECONDS) throw invalid();
+  if (levelPeak < 0.001) throw new VoiceLibraryError('VOICE_RECORDING_SILENT', 'The saved sample is silent or too quiet. Record a new sample with the correct microphone.');
+  return { durationSeconds, sampleRate, levelPeak, bytes: bytes.length };
 }
 
 function encodeWav(samples: Float32Array[], sampleRate: number): { data: Uint8Array; peak: number; duration: number } {
@@ -149,7 +179,8 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
   const makeAudio = dependencies.createAudioElement ?? (url => new Audio(url));
   const objectUrl = dependencies.createObjectUrl ?? (blob => URL.createObjectURL(blob));
   const revokeUrl = dependencies.revokeObjectUrl ?? (url => URL.revokeObjectURL(url));
-  let playing: { audio: AudioElementLike; url: string } | null = null;
+  let playing: { stop(): void } | null = null;
+  let previewGeneration = 0;
   const requireDesktop = () => {
     if (!desktop()) throw new VoiceLibraryError('VOICE_LIBRARY_DESKTOP_REQUIRED', 'Voice recording and playback require the Quickque Mac desktop app.');
   };
@@ -159,25 +190,47 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
     try { const result = await invoke<T>(command, args); recordFlowDebug('voice_library_ready'); return result; }
     catch (error) { recordFlowDebug('voice_library_failed'); recordAudioFailure(error); throw error instanceof VoiceLibraryError ? error : nativeError(error); }
   };
-  const playWav = async (bytes: Uint8Array) => {
-    recordFlowDebug('voice_preview_begin');
-    void stopPreview();
-    const copy = new Uint8Array(bytes.byteLength);
-    copy.set(bytes);
-    const url = objectUrl(new Blob([copy.buffer], { type: 'audio/wav' }));
-    const audio = makeAudio(url) as AudioElementLike;
-    playing = { audio, url };
-    audio.onended = () => { recordFlowDebug('voice_preview_ready'); if (playing?.audio === audio) { revokeUrl(url); playing = null; } };
-    try { await audio.play(); }
-    catch (error) {
-      recordFlowDebug('voice_preview_failed');
-      if (playing?.audio === audio) { revokeUrl(url); playing = null; }
-      throw new VoiceLibraryError('VOICE_PREVIEW_FAILED', 'Could not play the voice sample. Check your audio output and retry.');
-    }
-  };
   const stopPreview = async () => {
-    if (!playing) return;
-    playing.audio.pause(); playing.audio.onended = null; revokeUrl(playing.url); playing = null;
+    previewGeneration++;
+    playing?.stop();
+  };
+  const playWav = async (bytes: Uint8Array) => {
+    inspectVoiceWav(bytes);
+    recordFlowDebug('voice_preview_begin');
+    playing?.stop();
+    const copy = new Uint8Array(bytes);
+    const url = objectUrl(new Blob([copy.buffer], { type: 'audio/wav' }));
+    let audio: AudioElementLike;
+    try { audio = makeAudio(url) as AudioElementLike; } catch (error) { revokeUrl(url); throw error; }
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: VoiceLibraryError) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(deadline);
+        audio.onended = null; audio.onerror = null; audio.pause(); revokeUrl(url);
+        if (playing === active) playing = null;
+        if (error) { recordFlowDebug('voice_preview_failed'); reject(error); } else resolve();
+      };
+      const failure = () => finish(new VoiceLibraryError('VOICE_PREVIEW_FAILED', 'Could not play the sample. Check your audio output, then retry.'));
+      const active = { stop: () => { recordFlowDebug('voice_preview_stopped'); finish(); } };
+      // A reference is at most ten seconds; a stalled load/play must terminate visibly.
+      const deadline = setTimeout(failure, 20000);
+      playing = active;
+      audio.onended = () => { recordFlowDebug('voice_preview_ready'); finish(); };
+      audio.onerror = failure;
+      try { void Promise.resolve(audio.play()).then(() => { if (!settled) recordFlowDebug('voice_preview_playing'); }, failure); }
+      catch { failure(); }
+    });
+  };
+  const readSample = async (voiceId: string) => {
+    recordFlowDebug('voice_verify_begin');
+    try {
+      const bytes = Uint8Array.from(await call<number[]>('voice_library_read_recording', { voiceId: nativeId(voiceId) }));
+      const info = inspectVoiceWav(bytes);
+      recordFlowDebug('voice_verify_ready', undefined, bytes.length);
+      return { bytes, info };
+    } catch (error) { recordFlowDebug('voice_verify_failed'); recordAudioFailure(error); throw error; }
   };
   return {
     list: async () => (await call<VoiceMetadata[]>('voice_library_list')).map(normaliseVoice),
@@ -252,10 +305,14 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
       return normaliseVoice(await call<VoiceMetadata>('voice_library_rerecord', { voiceId: nativeId(voiceId), consentConfirmed: true, recording: Array.from(recording.wavData) }));
     },
     delete: (voiceId: string) => call<void>('voice_library_delete', { voiceId: nativeId(voiceId) }),
-    previewRecording: (recording: VoiceRecording) => playWav(recording.wavData),
+    verify: async (voiceId: string) => (await readSample(voiceId)).info,
+    previewRecording: (recording: VoiceRecording) => { previewGeneration++; return playWav(recording.wavData); },
     preview: async (voice: { voiceId: string; revision?: number }) => {
-      const bytes = await call<number[]>('voice_library_read_recording', { voiceId: nativeId(voice.voiceId) });
-      await playWav(Uint8Array.from(bytes));
+      const generation = ++previewGeneration;
+      playing?.stop();
+      const { bytes } = await readSample(voice.voiceId);
+      if (generation !== previewGeneration) return;
+      await playWav(bytes);
     },
     stopPreview,
   };

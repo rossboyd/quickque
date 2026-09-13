@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Mic, RotateCcw, Square, Volume2, X } from 'lucide-react';
 import {
   MAX_REFERENCE_SECONDS,
-  MIN_REFERENCE_SECONDS,
   VOICE_RECORDING_PROMPT,
   type VoiceLibrary,
   type VoiceRecording,
@@ -18,7 +17,7 @@ export function VoiceRecorder({
   onCancel,
 }: {
   library: VoiceLibrary;
-  onReviewed?: (recording: VoiceRecording) => void;
+  onReviewed?: (recording: VoiceRecording | null) => void;
   onConsentChange?: (confirmed: boolean) => void;
   onCancel?: () => void;
 }) {
@@ -30,10 +29,12 @@ export function VoiceRecorder({
   const [consent, setConsent] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionRef = useRef<Awaited<ReturnType<VoiceLibrary['startRecording']>> | null>(null);
   const startedAt = useRef(0);
+  const mounted = useRef(true);
 
   const clearTimers = () => {
     if (timer.current) clearInterval(timer.current);
@@ -42,17 +43,23 @@ export function VoiceRecorder({
     stopTimer.current = null;
   };
 
-  useEffect(() => () => {
-    clearTimers();
-    if (sessionRef.current) void sessionRef.current.cancel().catch(() => {});
-    void library.stopPreview().catch(() => {});
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      clearTimers();
+      if (sessionRef.current) void sessionRef.current.cancel().catch(() => {});
+      void library.stopPreview().catch(() => {});
+    };
   }, [library]);
 
   const begin = async () => {
     setBusy(true);
     setMessage(null);
+    onReviewed?.(null);
     try {
       const next = await library.startRecording();
+      if (!mounted.current) { await next.cancel(); return; }
       setSession(next);
       sessionRef.current = next;
       setSeconds(0);
@@ -72,7 +79,8 @@ export function VoiceRecorder({
   };
 
   const finish = async (activeSession = session) => {
-    if (!activeSession) return;
+    if (!activeSession || sessionRef.current !== activeSession) return;
+    sessionRef.current = null;
     clearTimers();
     setBusy(true);
     setMessage(null);
@@ -93,8 +101,10 @@ export function VoiceRecorder({
   };
 
   const retry = async () => {
+    await library.stopPreview();
     if (sessionRef.current) await sessionRef.current.cancel().catch(() => {});
     setRecording(null);
+    onReviewed?.(null);
     setSession(null);
     sessionRef.current = null;
     setConsent(false);
@@ -118,7 +128,7 @@ export function VoiceRecorder({
       <div>
         <h3 className="font-semibold">Record a voice reference</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Read this naturally for {MIN_REFERENCE_SECONDS}–{MAX_REFERENCE_SECONDS} seconds.
+          Read this naturally for 6–{MAX_REFERENCE_SECONDS} seconds.
           Keep the room quiet and speak at your usual distance.
         </p>
       </div>
@@ -161,13 +171,14 @@ export function VoiceRecorder({
             {recording.levelPeak !== undefined && <p className="mt-1 text-xs text-muted-foreground">Input level captured successfully.</p>}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" data-testid="button-preview-voice-recording" onClick={() => { void library.previewRecording(recording).catch(error => setMessage(String(error))); }} disabled={busy} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
-              <Volume2 className="h-4 w-4" /> Listen
+            <button type="button" data-testid="button-preview-voice-recording" onClick={() => { setMessage(null); setPreviewing(true); void library.previewRecording(recording).catch(error => setMessage(String(error))).finally(() => setPreviewing(false)); }} disabled={busy || previewing} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+              <Volume2 className="h-4 w-4" /> {previewing ? 'Playing sample…' : 'Listen'}
             </button>
             <button type="button" data-testid="button-retry-voice-recording" onClick={() => void retry()} disabled={busy} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
               <RotateCcw className="h-4 w-4" /> Record again
             </button>
           </div>
+          {previewing && <button type="button" onClick={() => void library.stopPreview()} className="text-xs text-primary">Stop sample</button>}
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" data-testid="input-voice-consent" checked={consent} onChange={event => { setConsent(event.target.checked); onConsentChange?.(event.target.checked); }} className="mt-0.5" />
             <span>I have permission to use this recording, and understand it stays on this Mac for my Quickque voices.</span>

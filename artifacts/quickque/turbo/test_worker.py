@@ -75,7 +75,7 @@ class WorkerTests(unittest.TestCase):
             output.setnchannels(1)
             output.setsampwidth(2)
             output.setframerate(16000)
-            output.writeframes(b'\0\0' * (16000 * 5))
+            output.writeframes(b'\0\0' * (16000 * 6))
         metadata = {
             'id': voice_id,
             'revision': 3,
@@ -192,7 +192,7 @@ class RendererTests(unittest.TestCase):
                     audio = MagicMock()
                     audio.numel.return_value = 2400
                     audio.detach().cpu().flatten().clamp().numpy().__mul__().astype().tobytes.return_value = b'\0\0' * 2400
-                    model = SimpleNamespace(sr=24000, tokenizer=lambda *a, **kw: {'input_ids': [1]}, generate=MagicMock(return_value=audio))
+                    model = SimpleNamespace(conds=object(), prepare_conditionals=MagicMock(), sr=24000, tokenizer=lambda *a, **kw: {'input_ids': [1]}, generate=MagicMock(return_value=audio))
                     torch = SimpleNamespace(backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True)), inference_mode=contextlib.nullcontext, isfinite=lambda _: SimpleNamespace(all=lambda: True))
                     turbo = SimpleNamespace(ChatterboxTurboTTS=SimpleNamespace(from_local=lambda *a, **kw: model), punc_norm=lambda text: text)
                     with patch.dict('sys.modules', {'torch': torch, 'chatterbox': SimpleNamespace(), 'chatterbox.tts_turbo': turbo}), patch.object(worker, 'quiet_runtime', contextlib.nullcontext), patch.object(worker, 'verify', return_value=True), patch.object(worker, 'local_voice_reference', return_value=reference), patch.object(socket, 'create_connection'), patch.object(socket.socket, 'connect'), patch.object(socket.socket, 'connect_ex'), patch.dict(worker.os.environ), contextlib.redirect_stdout(io.StringIO()) as output:
@@ -200,9 +200,36 @@ class RendererTests(unittest.TestCase):
                     self.assertEqual(rendered, [entry])
                     calls = model.generate.call_args_list
                     self.assertEqual([call.args[0] for call in calls], list(worker.chunks(text)))
-                    self.assertTrue(all(call.kwargs == ({'audio_prompt_path': str(reference)} if cloned else {}) for call in calls))
+                    self.assertTrue(all(call.kwargs == {} for call in calls))
+                    self.assertEqual(model.prepare_conditionals.call_count, 1 if cloned else 0)
+                    if cloned:
+                        model.prepare_conditionals.assert_called_once_with(str(reference), exaggeration=0.0)
                     self.assertAlmostEqual(worker.wav_duration(root / (worker.entry_key(entry) + '.wav')), len(calls) * .1)
-                    self.assertEqual([json.loads(line)['stage'] for line in output.getvalue().splitlines()], ['model_load', 'generation'])
+                    self.assertEqual([json.loads(line)['stage'] for line in output.getvalue().splitlines()], ['model_load', 'voice_prepare', 'generation'] if cloned else ['model_load', 'generation'])
+
+    def test_consecutive_passages_reuse_voice_and_default_does_not_inherit_clone(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+        import socket
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reference = root / 'reference.wav'
+            default = object()
+            clone = object()
+            used = []
+            audio = MagicMock()
+            audio.numel.return_value = 2400
+            audio.detach().cpu().flatten().clamp().numpy().__mul__().astype().tobytes.return_value = b'\0\0' * 2400
+            model = SimpleNamespace(conds=default, sr=24000, tokenizer=lambda *a, **kw: {'input_ids': [1]})
+            model.prepare_conditionals = MagicMock(side_effect=lambda *a, **kw: setattr(model, 'conds', clone))
+            model.generate = lambda *a, **kw: (used.append(model.conds), audio)[1]
+            torch = SimpleNamespace(backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True)), inference_mode=contextlib.nullcontext, isfinite=lambda _: SimpleNamespace(all=lambda: True))
+            turbo = SimpleNamespace(ChatterboxTurboTTS=SimpleNamespace(from_local=lambda *a, **kw: model), punc_norm=lambda text: text)
+            entries = [{'id': str(i), 'text': f'Passage {i}.', 'voiceId': worker.LOCAL_VOICE_PREFIX + 'a' * 32 if cloned else worker.VOICE_ID, 'rate': 1} for i, cloned in enumerate([True, True, False, True])]
+            with patch.dict('sys.modules', {'torch': torch, 'chatterbox': SimpleNamespace(), 'chatterbox.tts_turbo': turbo}), patch.object(worker, 'quiet_runtime', contextlib.nullcontext), patch.object(worker, 'verify', return_value=True), patch.object(worker, 'local_voice_reference', side_effect=lambda entry, _: None if entry['voiceId'] == worker.VOICE_ID else reference), patch.object(socket, 'create_connection'), patch.object(socket.socket, 'connect'), patch.object(socket.socket, 'connect_ex'), patch.dict(worker.os.environ), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(list(worker.render_batch(root, entries, root)), entries)
+            self.assertEqual(used, [clone, clone, default, clone])
+            self.assertEqual(model.prepare_conditionals.call_count, 2)
 
     def test_runtime_failures_keep_stage_and_category_without_private_content(self):
         with self.assertRaises(worker.SpeechFailure) as raised:

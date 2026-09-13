@@ -250,7 +250,13 @@ export default function Reader() {
   // tokenisation and Flow lifecycle.
   const actor = script?.actor;
   const isPerformance = script ? getScriptPurpose(script) === 'performance' : false;
-  const sceneEnabled = isPerformance && actor?.enabled === true;
+  const [freeManual, setFreeManual] = useState(false);
+  useEffect(() => {
+    const continueFree = () => { setFreeManual(true); setReadMode('manual'); };
+    window.addEventListener('quickque:continue-free', continueFree);
+    return () => window.removeEventListener('quickque:continue-free', continueFree);
+  }, []);
+  const sceneEnabled = isPerformance && actor?.enabled === true && !freeManual;
   const characters = actor?.characters ?? [];
   const characterIds = useMemo(() => new Set(characters.map(character => character.id)), [characters]);
   const sceneTurns = useMemo(() => (script?.sections ?? []).map(section => ({
@@ -1801,7 +1807,7 @@ export default function Reader() {
       {readMode === 'flow' && !sceneEnabled && !showWizard && (
         <FlowStatusPanel 
           flow={{ ...flow, start: () => dispatchCommand({ action: 'playPause' }) }}
-          onCancelMode={() => dispatchCommand({ action: 'setReadMode', mode: 'manual' })}
+          onCancelMode={() => { setFreeManual(true); dispatchCommand({ action: 'setReadMode', mode: 'manual' }); }}
           onOpenWizard={() => setShowWizard(true)}
         />
       )}

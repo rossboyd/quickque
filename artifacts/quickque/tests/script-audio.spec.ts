@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 test.use({ baseURL: process.env.QUICKQUE_URL ?? 'http://127.0.0.1:4173', launchOptions: { executablePath: process.env.CHROMIUM_PATH ?? (existsSync('/repl/tools/bin/chromium') ? '/repl/tools/bin/chromium' : undefined) } });
 
 test('presentation audio is optional and locked without paid Mac access', async ({ page }) => {
@@ -15,7 +15,7 @@ test('presentation audio is optional and locked without paid Mac access', async 
   await expect(page.getByRole('button', { name: 'Generate audio', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Listen to script', exact: true })).toBeDisabled();
   await expect(page.getByText(/Optional: generate a spoken version/)).toBeVisible();
-  await expect(page.getByText(/Saved AI audio is available in the Quickque Mac app/)).toBeVisible();
+  await expect(page.getByText(/AI audio is available in the Quickque Mac app/)).toBeVisible();
 });
 
 test('prepared audio reads once, plays from buffers and never synthesizes on a cache miss', async ({ page }) => {
@@ -135,18 +135,24 @@ test('Debug licence toggle persists and can return to Unlicensed', async ({ page
     localStorage.setItem('quickque_profile', JSON.stringify({ name: 'Test', onboardingComplete: true }));
   });
   await page.reload();
-  await page.getByRole('button', { name: 'Settings & backups', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Help & diagnostics' }).click();
+  await page.getByText('Developer options', { exact: true }).click();
   const toggle = page.getByRole('switch', { name: 'Licensed mode' });
   await expect(toggle).not.toBeChecked();
   await toggle.check();
   await expect(page.getByText('Licence mode: Licensed', { exact: true })).toBeVisible();
   await page.reload();
-  await page.getByRole('button', { name: 'Settings & backups', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Help & diagnostics' }).click();
+  await page.getByText('Developer options', { exact: true }).click();
   await expect(toggle).toBeChecked();
   await toggle.uncheck();
   await expect(page.getByText('Licence mode: Unlicensed', { exact: true })).toBeVisible();
   await page.reload();
-  await page.getByRole('button', { name: 'Settings & backups', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Help & diagnostics' }).click();
+  await page.getByText('Developer options', { exact: true }).click();
   await expect(toggle).not.toBeChecked();
 });
 
@@ -156,12 +162,13 @@ test('generation traces worker stages and failures, filters other jobs, and remo
     const { generateAudio } = await import('/src/lib/script-audio.ts');
     const { clearFlowDebug, getFlowDebugSnapshot } = await import('/src/lib/flow/diagnostics.ts');
     let callback: (event: unknown) => void = () => {};
+    let nextHandler: typeof callback = () => {};
     let removed = 0;
     (window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
     (window as any).__TAURI_INTERNALS__ = {
-      transformCallback: (handler: typeof callback) => { callback = handler; return 1; },
-      invoke: async (command: string) => {
-        if (command === 'plugin:event|listen') return 1;
+      transformCallback: (handler: typeof callback) => { nextHandler = handler; return 1; },
+      invoke: async (command: string, args: { event?: string }) => {
+        if (command === 'plugin:event|listen') { if (args.event === 'script-audio-diagnostic') callback = nextHandler; return 1; }
         if (command === 'plugin:event|unlisten') { removed++; return; }
         if (command === 'script_audio_generate') {
           callback({ payload: { scriptId: 'other', revision: 'r', stage: 'generation' } });
@@ -185,6 +192,91 @@ test('generation traces worker stages and failures, filters other jobs, and remo
   });
   expect(result).toEqual({
     codes: ['audio_generate_begin', 'audio_model_load', 'audio_generation', 'audio_generate_failed', 'error:SCENE_SPEECH_TURBO_GENERATION'],
-    removed: 1, failed: true,
+    removed: 2, failed: true,
   });
+});
+
+
+test('desktop security policy permits local WAV blob playback', async ({ page }) => {
+  const config = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+  await page.route('**/audio-policy-test', route => route.fulfill({
+    contentType: 'text/html', headers: { 'Content-Security-Policy': config.app.security.csp }, body: '<html><body>Audio policy test</body></html>',
+  }));
+  await page.goto('/audio-policy-test');
+  const result = await page.evaluate(async () => {
+    const data = new Uint8Array(44 + 3200);
+    const view = new DataView(data.buffer);
+    const tag = (offset: number, text: string) => [...text].forEach((v, i) => view.setUint8(offset + i, v.charCodeAt(0)));
+    tag(0, 'RIFF'); view.setUint32(4, data.length - 8, true); tag(8, 'WAVE'); tag(12, 'fmt ');
+    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, 16000, true); view.setUint32(28, 32000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+    tag(36, 'data'); view.setUint32(40, 3200, true);
+    const url = URL.createObjectURL(new Blob([data], { type: 'audio/wav' }));
+    const audio = new Audio(url); audio.muted = true;
+    try { await audio.play(); return 'playing'; } catch (error) { return String(error); }
+    finally { audio.pause(); URL.revokeObjectURL(url); }
+  });
+  expect(result).toBe('playing');
+});
+
+test('audio panel shows truthful progress and retains it when reopened without status polling', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { default: React } = await import('/node_modules/.vite/deps/react.js');
+    const { default: { createRoot } } = await import('/node_modules/.vite/deps/react-dom_client.js');
+    const { ScriptAudioPanel } = await import('/src/components/script-audio-panel.tsx');
+    const { StoreProvider } = await import('/src/lib/store.tsx');
+    const callbacks = new Map<number, (event: unknown) => void>();
+    const handlers = new Map<string, number>();
+    let sequence = 0;
+    let checks = 0;
+    (window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
+    (window as any).__TAURI_INTERNALS__ = {
+      transformCallback: (handler: (event: unknown) => void) => { callbacks.set(++sequence, handler); return sequence; },
+      invoke: async (command: string, args: any) => {
+        if (command === 'plugin:event|listen') { handlers.set(args.event, args.handler); return args.handler; }
+        if (command === 'plugin:event|unlisten') return;
+        if (command === 'get_local_library') return { directory: null, scriptsJson: null };
+        if (command === 'script_audio_entitlement') return { paid: true };
+        if (command === 'voice_library_list') return [];
+        if (command === 'script_audio_status') { checks++; return { status: 'missing', entries: [] }; }
+        if (command === 'script_audio_generate') {
+          (window as any).audioRequest = args.request;
+          callbacks.get(handlers.get('script-audio-diagnostic')!)?.({ payload: { ...args.request, stage: 'model_load' } });
+          return new Promise(resolve => { (window as any).finishAudio = () => resolve({ status: 'ready', entries: [] }); });
+        }
+        throw new Error(command);
+      },
+    };
+    (window as any).advanceAudio = () => {
+      const request = (window as any).audioRequest;
+      callbacks.get(handlers.get('script-audio-diagnostic')!)?.({ payload: { ...request, stage: 'generation' } });
+      callbacks.get(handlers.get('script-audio-progress')!)?.({ payload: { ...request, completed: 0, total: request.entries.length } });
+    };
+    (window as any).statusChecks = () => checks;
+    const host = document.createElement('div'); document.body.replaceChildren(host);
+    const script = { id: 'progress-test', title: 'Talk', purpose: 'presentation', createdAt: 1, updatedAt: 1, sections: [{ id: 'one', title: 'Opening', content: 'Hello everyone.' }] };
+    const root = createRoot(host);
+    let mount = 0;
+    const render = () => root.render(React.createElement(StoreProvider, null, React.createElement(ScriptAudioPanel, { script, key: ++mount })));
+    (window as any).remountAudio = render;
+    render();
+  });
+  await page.getByText('AI rehearsal audio', { exact: false }).click();
+  await page.getByRole('button', { name: 'Generate audio', exact: true }).click();
+  await expect(page.getByText('Loading Chatterbox model…')).toBeVisible();
+  await expect(page.getByRole('progressbar', { name: 'Audio generation progress' })).not.toHaveAttribute('value');
+  const checks = await page.evaluate(() => (window as any).statusChecks());
+  await page.evaluate(() => (window as any).advanceAudio());
+  await expect(page.getByRole('progressbar', { name: 'Audio generation progress' })).toHaveAttribute('value', '0');
+  await expect(page.getByText(/0 of 1 passages saved/)).toBeVisible();
+  expect(await page.evaluate(() => (window as any).statusChecks())).toBe(checks);
+  await page.evaluate(() => (window as any).remountAudio());
+  await page.getByText('AI rehearsal audio', { exact: false }).click();
+  await expect(page.getByText(/0 of 1 passages saved/)).toBeVisible();
+  expect(await page.evaluate(() => (window as any).statusChecks())).toBe(checks);
+  await page.getByText('Audio debug trace', { exact: true }).click();
+  await expect(page.getByText(/audio_model_load —/)).toBeVisible();
+  await page.evaluate(() => (window as any).finishAudio());
+  await expect(page.getByRole('progressbar', { name: 'Audio generation progress' })).toHaveCount(0);
 });

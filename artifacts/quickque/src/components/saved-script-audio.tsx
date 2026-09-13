@@ -1,4 +1,4 @@
-import { useDebugLicence } from '@/lib/debug-licence';
+import { useLicence } from '@/lib/licence';
 import { useEffect, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { isDesktop } from '@/lib/desktop';
@@ -10,7 +10,7 @@ import type { Script } from '@/lib/types';
 /** Observes committed library state, never the editor's uncommitted Markdown draft. */
 export function SavedScriptAudio() {
   const { scripts } = useStore();
-  const licence = useDebugLicence();
+  const licence = useLicence();
   const latest = useRef(scripts);
   latest.current = scripts;
   const seen = useRef(new Map<string, string>());
@@ -18,7 +18,7 @@ export function SavedScriptAudio() {
   const working = useRef(false);
   useEffect(() => { seen.current.clear(); }, [licence.licensed]);
   useEffect(() => {
-    if (!isDesktop() || !licence.loaded || !licence.licensed) return;
+    if (!isDesktop() || !licence.loaded) return;
     const timer = setTimeout(() => {
       for (const script of latest.current) {
         if (getScriptPurpose(script) !== 'performance') continue;
@@ -37,7 +37,8 @@ export function SavedScriptAudio() {
             const script = latest.current.find(item => item.id === id);
             if (!script || getScriptPurpose(script) !== 'performance') continue;
             try {
-              if (!(await audioEntitlement()).paid) continue;
+              const access = await audioEntitlement();
+              if (!(access.available ?? access.paid)) continue;
               const request = await audioRequest(script);
               if (request.entries.length && (await audioStatus(request)).status !== 'ready') await generateAudio(request);
             } catch {

@@ -64,3 +64,6 @@ Thumbs.db
 /artifacts/quickque/turbo/dist/
 /artifacts/quickque/turbo/*.spec
 /artifacts/quickque/turbo/__pycache__/
+
+# Standalone licence verifier build output
+/lib/licence-core/target/

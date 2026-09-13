@@ -17,11 +17,18 @@ export {
 // Only fixed lifecycle labels and numeric metadata may enter this in-memory
 // buffer. Never pass messages, payloads, script text, paths, or stderr here.
 const labels: Record<string, string> = {
+  audio_passages_complete: 'Audio passages saved',
+  voice_verify_begin: 'Reading and checking saved voice WAV',
+  voice_verify_ready: 'Saved voice WAV verified (bytes)',
+  voice_verify_failed: 'Saved voice verification failed',
+  voice_preview_playing: 'Voice reference audio playback started',
+  voice_preview_stopped: 'Voice reference playback stopped',
   audio_generate_begin: 'Script audio generation requested',
   audio_generate_ready: 'Script audio generation completed',
   audio_generate_failed: 'Script audio generation failed',
   audio_listener_failed: 'Audio diagnostic listener could not be registered',
   audio_model_load: 'Chatterbox loading model',
+  audio_voice_prepare: 'Chatterbox preparing voice reference',
   audio_generation: 'Chatterbox generating passage',
   audio_cancel_begin: 'Audio cancellation requested',
   audio_cancel_ready: 'Audio cancellation confirmed',
@@ -105,11 +112,15 @@ for (const code of [
 ]) labels[`error:${code}`] = `Native error code: ${code}`;
 
 for (const code of [
+  'SCENE_SPEECH_TURBO_VOICE_PREPARE', 'VOICE_RECORDING_SILENT',
   'SCENE_SPEECH_TURBO_MODEL_LOAD', 'SCENE_SPEECH_TURBO_GENERATION',
   'SCENE_SPEECH_TURBO_FAILED', 'SCENE_SPEECH_TURBO_UNAVAILABLE',
   'SCENE_SPEECH_TURBO_RUNTIME', 'SCENE_SPEECH_TURBO_UNSUPPORTED',
   'SCENE_SPEECH_TURBO_OFFLINE', 'SCENE_SPEECH_TURBO_AUDIO',
+  'SCENE_SPEECH_VOICE_REFERENCE_SHORT',
   'SCENE_SPEECH_VOICE_UNAVAILABLE', 'SCENE_SPEECH_VOICE_INTEGRITY',
+  'VOICE_RECORDING_INTEGRITY', 'VOICE_RECORDING_MISSING', 'VOICE_RECORDING_INVALID',
+  'VOICE_RECORDING_DURATION', 'VOICE_STORAGE_UNAVAILABLE', 'VOICE_PREVIEW_FAILED',
   'SCRIPT_AUDIO_CANCELLED', 'SCRIPT_AUDIO_BUSY', 'SCRIPT_AUDIO_PAID_REQUIRED',
 ]) labels[`error:${code}`] = `Audio error code: ${code}`;
 

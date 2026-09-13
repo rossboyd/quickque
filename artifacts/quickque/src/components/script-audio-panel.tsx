@@ -1,6 +1,7 @@
-import { useDebugLicence } from '@/lib/debug-licence';
+import { useLicence } from '@/lib/licence';
 import { useEffect, useRef, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
+import { FlowDebugPanel } from './flow-debug-panel';
+import type { AudioJob } from '@/lib/script-audio';
 import type { Script } from '@/lib/types';
 import { getScriptPurpose } from '@/lib/script-purpose';
 import { audioRequest, scriptAudioEntries, DEFAULT_AUDIO_VOICE } from '@/lib/script-audio-model';
@@ -11,12 +12,19 @@ import { useStore } from '@/lib/store';
 
 export function ScriptAudioPanel({ script }: { script: Script }) {
   const { updateScript } = useStore();
-  const licence = useDebugLicence();
+  const licence = useLicence();
   const [paid, setPaid] = useState(false);
   const [message, setMessage] = useState('Checking saved audio…');
   const [ready, setReady] = useState(false);
   const [operation, setOperation] = useState<'generate' | 'listen' | 'export' | 'delete' | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [job, setJob] = useState<AudioJob | null>(null);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!generating && operation !== 'generate') return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [generating, operation]);
   const busy = operation !== null || generating;
   const operationId = useRef(0);
   const revisionRef = useRef('');
@@ -38,6 +46,7 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
     let live = true;
     setReady(false);
     setGenerating(false);
+    setJob(null);
     setOperation(null);
     operationId.current++;
     setPlaying(false);
@@ -47,12 +56,16 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
       try {
         const access = await audioEntitlement();
         if (!live || id !== refreshId) return;
-        setPaid(access.paid);
-        if (!access.paid) { setMessage(access.reason || 'Enable Licensed mode in Settings → Debug to try saved AI audio.'); return; }
+        setPaid(access.available ?? access.paid);
+        if (!(access.available ?? access.paid)) { setMessage(access.reason || 'Audio generation is available in the Quickque Mac app.'); return; }
         const request = await audioRequest(script);
         if (!live || id !== refreshId) return;
         revisionRef.current = request.revision;
         if (!request.entries.length) { setMessage(performance ? 'Assign a Chatterbox voice to an AI Partner to prepare their lines.' : 'Add script text to generate audio.'); return; }
+        const activeJob = audioJobs.get(script.id);
+        if (activeJob?.revision === request.revision && activeJob.running) {
+          setJob({ ...activeJob }); setGenerating(true); return;
+        }
         const status = await audioStatus(request);
         if (!live || id !== refreshId) return;
         setReady(status.status === 'ready');
@@ -65,17 +78,17 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
     };
     void refresh();
     window.addEventListener(AUDIO_CHANGED, refresh);
-    window.addEventListener(AUDIO_JOB_CHANGED, refresh);
-    let unlisten: (() => void) | undefined;
-    if (isDesktop()) void listen<{scriptId: string; revision: string; completed: number; total: number}>('script-audio-progress', event => {
-      if (live && event.payload.scriptId === script.id && event.payload.revision === revisionRef.current) setMessage(`Generating audio: ${event.payload.completed} of ${event.payload.total} lines…`);
-    }).then(stop => { if (!live) stop(); else unlisten = stop; }).catch(() => {});
+    const updateJob = () => {
+      const next = audioJobs.get(script.id);
+      if (!live || next?.revision !== revisionRef.current) return;
+      setJob({ ...next }); setGenerating(next.running); setNow(Date.now());
+    };
+    window.addEventListener(AUDIO_JOB_CHANGED, updateJob);
     return () => {
       live = false;
       operationId.current++;
-      unlisten?.();
       window.removeEventListener(AUDIO_CHANGED, refresh);
-      window.removeEventListener(AUDIO_JOB_CHANGED, refresh);
+      window.removeEventListener(AUDIO_JOB_CHANGED, updateJob);
       aborter.current?.abort();
       void player.current?.dispose();
       player.current = null;
@@ -119,7 +132,7 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
   });
   const button = 'rounded-md border border-border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50';
   return <details className="rounded-lg border border-border px-4 py-3">
-    <summary className="cursor-pointer text-sm font-medium">AI rehearsal audio <span className="ml-2 text-xs text-muted-foreground">Paid feature</span></summary>
+    <summary className="cursor-pointer text-sm font-medium">AI rehearsal audio</summary>
     <div className="mt-3 space-y-3 text-sm">
       <p className="text-muted-foreground">{performance ? 'Chatterbox AI Partner lines are prepared after saved edits. In Person lines and notes are left silent.' : 'Optional: generate a spoken version of this script to learn it by listening.'}</p>
       {!performance && <div className="space-y-1">
@@ -137,8 +150,19 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
            {voices.map(voice => <option key={voice.id} value={voice.referenceId}>{voice.name} (revision {voice.revision})</option>)}
          </select> : <p className="text-xs text-muted-foreground" data-testid="status-narrator-desktop-only">Narrator voices require the Quickque Mac desktop app. Browser speech is not used.</p>}
       </div>}
-      <p className="text-xs text-muted-foreground">Included with £2.50/month or £25 lifetime. Audio is stored with this script’s ID on this Mac; JSON backups do not include audio.</p>
-      <p role="status" className="text-xs">{message}</p>
+      <p className="text-xs text-muted-foreground">Audio is stored with this script’s ID on this Mac; JSON backups do not include audio.</p>
+      {(generating || operation === 'generate') ? <div className="space-y-2" role="status" data-testid="audio-generation-progress">
+        <div className="flex justify-between gap-3 text-xs">
+          <span>{job?.stage === 'model_load' ? 'Loading Chatterbox model…' : job?.stage === 'voice_prepare' ? 'Preparing voice sample…' : job?.stage === 'generation' ? 'Generating speech…' : 'Preparing audio…'}</span>
+          <span>{Math.max(0, Math.floor((now - (job?.startedAt ?? now)) / 1000))}s elapsed</span>
+        </div>
+        <progress aria-label="Audio generation progress" className="h-2 w-full accent-primary" max={job?.total || 1} value={job?.stage === 'generation' ? job.completed : undefined} />
+        <p className="text-xs text-muted-foreground">{job?.completed ?? 0} of {job?.total ?? scriptAudioEntries(script).length} passages saved. Model loading and the first passage can take longer; progress advances when each passage is saved.</p>
+      </div> : <p role="status" className="text-xs">{message}</p>}
+      <details className="rounded border border-border p-2">
+        <summary className="cursor-pointer text-xs">Audio debug trace</summary>
+        <div className="mt-2"><FlowDebugPanel /></div>
+      </details>
       <div className="flex flex-wrap gap-2">
         <button type="button" className={button} disabled={!paid || busy || !scriptAudioEntries(script).length} onClick={generate}>Generate audio</button>
         <button type="button" className={button} disabled={!paid || !ready || busy} onClick={play}>Listen to script</button>

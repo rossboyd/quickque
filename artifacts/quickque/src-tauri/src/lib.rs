@@ -15,6 +15,7 @@ mod remote;
 mod turbo;
 mod script_audio;
 mod debug_licence;
+mod licence;
 use remote::{RemoteInfo, RemoteService, RemoteSnapshot, RemoteStatus};
 
 mod local_library;
@@ -988,8 +989,10 @@ fn monitor_voice_allowance(app: AppHandle, process: Arc<Mutex<ProcessState>>, ge
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(25));
         let expired = match process.lock() {
-            Ok(state) if state.generation == generation && state.child.as_ref().map(Child::id) == Some(child_id) =>
-                state.allowance.running() && state.allowance.expired(std::time::Instant::now()),
+            Ok(mut state) if state.generation == generation && state.child.as_ref().map(Child::id) == Some(child_id) => {
+                state.allowance.set_unlimited(licence::has_feature("voice_follow"));
+                state.allowance.running() && state.allowance.expired(std::time::Instant::now())
+            },
             _ => return,
         };
         if !expired { continue; }
@@ -1018,9 +1021,9 @@ fn debug_licence_set(app: AppHandle, state: tauri::State<'_, AppState>, licensed
     let _guard = state.flow.command_lock.lock().map_err(|_| "Voice Follow state unavailable.")?;
     let mut process = state.flow.process.lock().map_err(|_| "Voice allowance unavailable.")?;
     debug_licence::save(&app, licensed)?;
-    process.allowance.set_unlimited(licensed);
+    process.allowance.set_unlimited(licence::has_feature("voice_follow"));
     drop(process);
-    if !licensed { let _ = script_audio::cancel(&app.state::<script_audio::AudioState>()); }
+    if !script_audio::paid() { let _ = script_audio::cancel(&app.state::<script_audio::AudioState>()); }
     Ok(licensed)
 }
 
@@ -1048,7 +1051,7 @@ fn flow_command(
         let mut process = state.flow.process.lock().map_err(|_| "Voice allowance unavailable.")?;
         let session = command.session_id.as_deref().unwrap_or("legacy-reader");
         if session.is_empty() || session.len() > 200 { return Err("Invalid reader session.".into()); }
-        process.allowance.session(session, script_audio::paid(), std::time::Instant::now());
+        process.allowance.session(session, licence::has_feature("voice_follow"), std::time::Instant::now());
         if process.allowance.expired(std::time::Instant::now()) {
             let _ = app.emit("quickque:flow", status_event(command.generation, "limit-reached", Some("Your 30 seconds of free Voice Follow for this session are used. Continue in manual mode.")));
             return Ok(());
@@ -1302,8 +1305,12 @@ pub fn run() {
         .manage(script_audio::AudioState::default())
         .manage(local_library::LocalLibraryState::default())
         .manage(voices::VoiceLibraryState::default())
-        .setup(|app| { debug_licence::load(app.handle()); Ok(()) })
+        .setup(|app| { debug_licence::load(app.handle()); licence::load(); licence::start_background(app.handle().clone()); Ok(()) })
         .invoke_handler(tauri::generate_handler![
+            licence::licence_status,
+            licence::licence_activate,
+            licence::licence_refresh,
+            licence::licence_deactivate,
             debug_licence_get,
             debug_licence_set,
             flow_command,

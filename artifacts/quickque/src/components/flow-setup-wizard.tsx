@@ -1,3 +1,4 @@
+import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { useState, useEffect } from 'react';
 import { FlowState } from '@/hooks/use-local-flow';
 import { openMicrophoneSettings } from '@/lib/desktop';
@@ -54,8 +55,9 @@ export function FlowSetupWizard({ flow, onComplete, onCancel }: FlowSetupWizardP
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-300" role="dialog" aria-label="Voice Follow setup" onKeyDown={event => event.stopPropagation()}>
-      <div className="bg-card w-full max-w-xl max-h-[calc(100dvh-2rem)] rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col">
+    <Dialog open onOpenChange={open => { if (!open) onCancel(); }}>
+      <DialogContent aria-describedby={undefined} className="max-w-xl p-0 gap-0 bg-card overflow-hidden flex flex-col [&>button]:hidden" onKeyDown={event => event.stopPropagation()}>
+        <DialogTitle className="sr-only">Voice Follow setup</DialogTitle>
         <div className="flex items-center justify-between p-4 border-b border-border/50 bg-muted/30">
           <h2 className="font-semibold text-sm text-foreground uppercase tracking-wider">Voice Follow Setup</h2>
           <button
@@ -293,7 +295,7 @@ export function FlowSetupWizard({ flow, onComplete, onCancel }: FlowSetupWizardP
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

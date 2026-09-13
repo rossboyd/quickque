@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Mic, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import { isDesktop } from '@/lib/desktop';
 import {
@@ -20,6 +20,9 @@ export function VoiceLibraryPanel({
 }) {
   const library = useMemo(() => createVoiceLibrary(), []);
   const [voices, setVoices] = useState<ClonedVoice[]>([]);
+  const [previewing, setPreviewing] = useState<string | null>(null);
+  const previewToken = useRef(0);
+  useEffect(() => () => { previewToken.current++; void library.stopPreview(); }, [library]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -55,8 +58,9 @@ export function VoiceLibraryPanel({
     }
     const error = validateVoiceName(name);
     if (error) { setMessage(error); return; }
-    if (validateRecording(reviewing)) {
-      setMessage('The reference recording is not within the allowed length.');
+    const recordingError = validateRecording(reviewing);
+    if (recordingError) {
+      setMessage(recordingError);
       return;
     }
     setSaving(true);
@@ -78,6 +82,19 @@ export function VoiceLibraryPanel({
     } finally {
       setSaving(false);
     }
+  };
+
+  const preview = async (voice: ClonedVoice) => {
+    const token = ++previewToken.current;
+    setPreviewing(voice.id); setMessage('Reading and playing saved sample…');
+    try { await library.preview({ voiceId: voice.id }); if (token === previewToken.current) setMessage('Sample playback finished.'); }
+    catch (error) { if (token === previewToken.current) setMessage(String(error)); }
+    finally { if (token === previewToken.current) setPreviewing(null); }
+  };
+  const verify = async (voice: ClonedVoice) => {
+    setMessage('Checking saved recording…');
+    try { const info = await library.verify(voice.id); setMessage(`Saved sample verified: ${info.durationSeconds.toFixed(1)}s, ${info.sampleRate / 1000} kHz, ${Math.round(info.bytes / 1024)} KB. WAV and checksum checks passed.`); }
+    catch (error) { setMessage(String(error)); }
   };
 
   const rename = async (voice: ClonedVoice) => {
@@ -113,7 +130,7 @@ export function VoiceLibraryPanel({
           <VoiceRecorder
             library={library}
             onReviewed={result => {
-              setReviewed(result.complete ? result : null);
+              setReviewed(result?.complete ? result : null);
             }}
             onCancel={() => {
               setReviewed(null);
@@ -145,9 +162,11 @@ export function VoiceLibraryPanel({
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{voice.name}</p>
               <p className="text-xs text-muted-foreground">{voice.durationSeconds.toFixed(1)}s · revision {voice.revision}{voice.available ? '' : ' · recording unavailable'}</p>
+              <button type="button" className="mt-1 text-xs text-primary" onClick={() => void verify(voice)}>Verify saved sample</button>
+              {previewing === voice.id && <button type="button" className="ml-3 text-xs text-primary" onClick={() => { previewToken.current++; void library.stopPreview(); setPreviewing(null); setMessage('Playback stopped.'); }}>Stop sample</button>}
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <button type="button" data-testid={`button-preview-cloned-voice-${voice.id}`} onClick={() => void library.preview({ voiceId: voice.id, revision: voice.revision }).catch(error => setMessage(String(error)))} className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Preview ${voice.name}`}><Play className="h-4 w-4" /></button>
+              <button type="button" data-testid={`button-preview-cloned-voice-${voice.id}`} onClick={() => void preview(voice)} disabled={previewing === voice.id} className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Preview ${voice.name}`}><Play className="h-4 w-4" /></button>
               <button type="button" data-testid={`button-rerecord-cloned-voice-${voice.id}`} onClick={() => { setName(voice.name); setRerecordingVoiceId(voice.id); setReviewed(null); setConsent(false); setRecording(true); }} className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Re-record ${voice.name}`}><Mic className="h-4 w-4" /></button>
               <button type="button" data-testid={`button-rename-cloned-voice-${voice.id}`} onClick={() => void rename(voice)} className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Rename ${voice.name}`}><Pencil className="h-4 w-4" /></button>
               <button type="button" data-testid={`button-delete-cloned-voice-${voice.id}`} onClick={() => void remove(voice)} className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete ${voice.name}`}><Trash2 className="h-4 w-4" /></button>

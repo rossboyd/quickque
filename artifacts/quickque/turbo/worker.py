@@ -157,7 +157,9 @@ def local_voice_reference(request, voices_dir):
         if sha256(reference) != details.get('recordingSha256'):
             raise ValueError()
         duration = wav_duration(reference)
-        if duration is None or not 5 <= duration <= 10:
+        if duration is not None and duration <= 5:
+            raise SpeechFailure('SCENE_SPEECH_VOICE_REFERENCE_SHORT', 'This voice sample is too short for Chatterbox Turbo. Record a new sample lasting 6–10 seconds.')
+        if duration is None or duration > 10:
             raise ValueError()
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         raise SpeechFailure('SCENE_SPEECH_VOICE_INTEGRITY', 'The selected cloned voice is damaged or incomplete. Re-record it.')
@@ -219,6 +221,9 @@ def speak(directory, request, voices_dir=None):
         if not torch.backends.mps.is_available():
             raise SpeechFailure('SCENE_SPEECH_TURBO_UNSUPPORTED', 'Chatterbox needs an Apple Silicon Mac with MPS available.')
         model = ChatterboxTurboTTS.from_local(directory, device='mps')
+    with runtime_stage('voice_prepare'), quiet_runtime(), torch.inference_mode():
+        if reference is not None:
+            model.prepare_conditionals(str(reference), exaggeration=0.0)
     with runtime_stage('generation'), quiet_runtime():
         # Reject oversized token sequences before upstream's truncation=True.
         for line in lines:
@@ -228,8 +233,7 @@ def speak(directory, request, voices_dir=None):
         try:
             with torch.inference_mode():
                 for line in lines:
-                    kwargs = {'audio_prompt_path': str(reference)} if reference is not None else {}
-                    audio = model.generate(line, **kwargs)  # Official Perth watermark stays enabled.
+                    audio = model.generate(line)  # Official Perth watermark stays enabled.
                     if not 0 < audio.numel() <= model.sr * 30 or audio.numel() * audio.element_size() > 8 * 1024 * 1024:
                         raise SpeechFailure('SCENE_SPEECH_TURBO_AUDIO', 'Chatterbox generated an oversized passage. Shorten this turn and retry.')
                     if not bool(torch.isfinite(audio).all()):
@@ -242,7 +246,8 @@ def speak(directory, request, voices_dir=None):
 
 
 
-CACHE_VERSION = 'chatterbox-cache-v1:' + LOCK['revision']
+# Invalidate audio generated before default/clone conditioning was isolated.
+CACHE_VERSION = 'chatterbox-cache-v2:' + LOCK['revision']
 
 
 def validate_batch(request, voices_dir=None):
@@ -321,11 +326,22 @@ def render_batch(directory, entries, folder, voices_dir=None):
         if not torch.backends.mps.is_available():
             raise SpeechFailure('SCENE_SPEECH_TURBO_UNSUPPORTED', 'Chatterbox needs an Apple Silicon Mac with MPS available.')
         model = ChatterboxTurboTTS.from_local(directory, device='mps')
+        default_conditionals = model.conds
+    active_reference = None
     for entry in entries:
         target = folder / (entry_key(entry) + '.wav')
         if wav_duration(target) is not None:
             yield entry  # Repeated identical dialogue shares the first generated WAV.
             continue
+        lines = validate_request(entry, voices_dir)
+        reference = local_voice_reference(entry, voices_dir)
+        if reference != active_reference:
+            with runtime_stage('voice_prepare', report=True), quiet_runtime(), torch.inference_mode():
+                if reference is None:
+                    model.conds = default_conditionals
+                else:
+                    model.prepare_conditionals(str(reference), exaggeration=0.0)
+            active_reference = reference
         temporary = target.with_suffix('.wav.partial')
         try:
             with runtime_stage('generation', report=True), quiet_runtime(), torch.inference_mode(), wave.open(str(temporary), 'wb') as output:
@@ -333,13 +349,10 @@ def render_batch(directory, entries, folder, voices_dir=None):
                 output.setsampwidth(2)
                 output.setframerate(model.sr)
                 total = 0
-                lines = validate_request(entry, voices_dir)
-                reference = local_voice_reference(entry, voices_dir)
                 for line in lines:
                     if len(model.tokenizer(punc_norm(line), truncation=False)['input_ids']) > 128:
                         raise SpeechFailure('SCENE_SPEECH_TEXT_TOO_LONG', 'Shorten this passage before generating audio.')
-                    kwargs = {'audio_prompt_path': str(reference)} if reference is not None else {}
-                    audio = model.generate(line, **kwargs)  # Keep the official Perth watermark.
+                    audio = model.generate(line)  # Keep the official Perth watermark.
                     if not 0 < audio.numel() <= model.sr * 30 or not bool(torch.isfinite(audio).all()):
                         raise SpeechFailure('SCENE_SPEECH_TURBO_AUDIO', 'Could not generate clean audio. Retry this passage.')
                     pcm = (audio.detach().cpu().flatten().clamp(-1, 1).numpy() * 32767).astype('<i2').tobytes()

@@ -21,18 +21,18 @@ pub struct Job {
 }
 
 pub(crate) fn paid() -> bool {
-    crate::debug_licence::licensed()
+    crate::licence::has_feature("saved_audio")
 }
 fn require_paid() -> Result<(), String> {
     if paid() {
         Ok(())
     } else {
-        Err("SCRIPT_AUDIO_PAID_REQUIRED: Saved AI audio requires a paid licence. Enable Licensed mode in Settings → Debug to try these features.".into())
+        Err("SCRIPT_AUDIO_PAID_REQUIRED: Audio export requires Quickque Pro.".into())
     }
 }
 #[tauri::command]
 pub fn script_audio_entitlement() -> Value {
-    json!({"paid":paid(), "reason": if paid() { "Debug Licensed mode" } else { "Saved AI audio requires a paid licence. Enable Licensed mode in Settings → Debug to try these features." }})
+    json!({"available":true,"paid":paid(), "reason":"Audio generation and voice trials are available on this Mac."})
 }
 fn identifier(value: &str) -> Result<(), String> {
     if value.is_empty()
@@ -153,7 +153,6 @@ pub async fn script_audio_generate(
     state: tauri::State<'_, AudioState>,
     request: Value,
 ) -> Result<Value, String> {
-    require_paid()?;
     validate(&request)?;
     let shared = Arc::clone(&state.0);
     {
@@ -334,7 +333,6 @@ pub async fn script_audio_read(
     revision: String,
     entry_id: String,
 ) -> Result<Vec<u8>, String> {
-    require_paid()?;
     tauri::async_runtime::spawn_blocking(move || {
         let value = manifest(&app, &script_id, &revision)?;
         let entry = value["entries"]
