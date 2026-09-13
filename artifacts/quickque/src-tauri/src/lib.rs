@@ -21,6 +21,7 @@ mod local_library;
 mod flow_protocol;
 mod voice_allowance;
 mod scene_speech_state;
+mod voices;
 use scene_speech_state::{
     terminate_scene_speech_child, SceneSpeechProcess, SceneSpeechState,
 };
@@ -301,9 +302,8 @@ fn helper_path() -> Result<std::path::PathBuf, String> {
 }
 
 fn stop_scene_speech_child(child: &Arc<Mutex<Child>>) -> Result<(), String> {
-    // The helper owns AVSpeechSynthesizer. Killing the isolated helper is the
-    // reliable cancellation boundary; no Flow/ASR process or microphone is
-    // involved, and the OS tears down the helper's synthesizer with it.
+    // Killing the isolated Turbo worker is the reliable cancellation boundary;
+    // no Flow/ASR process or microphone is involved.
     let mut child = child
         .lock()
         .map_err(|_| "SCENE_SPEECH_STOP_FAILED: Scene speech process state is unavailable.".to_string())?;
@@ -319,11 +319,11 @@ fn stop_scene_speech_child(child: &Arc<Mutex<Child>>) -> Result<(), String> {
     }
     child
         .kill()
-        .map_err(|_| "SCENE_SPEECH_STOP_FAILED: Could not stop local system speech.".to_string())?;
+        .map_err(|_| "SCENE_SPEECH_STOP_FAILED: Could not stop Chatterbox.".to_string())?;
     child
         .wait()
         .map(|_| ())
-        .map_err(|_| "SCENE_SPEECH_STOP_FAILED: Local system speech did not exit.".to_string())
+        .map_err(|_| "SCENE_SPEECH_STOP_FAILED: Chatterbox did not exit.".to_string())
 }
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -366,19 +366,10 @@ struct SceneSpeechRequest<'a> {
     text: &'a str,
     voice_id: &'a str,
     rate: f32,
-}
-
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-fn scene_speech_helper_path() -> Result<std::path::PathBuf, String> {
-    if let Some(path) = std::env::var_os("QUICKQUE_SPEECH_HELPER") {
-        return Ok(path.into());
-    }
-    let executable = std::env::current_exe()
-        .map_err(|error| format!("SCENE_SPEECH_HELPER_UNAVAILABLE: Could not locate Quickque: {error}"))?;
-    Ok(executable
-        .parent()
-        .ok_or_else(|| "SCENE_SPEECH_HELPER_UNAVAILABLE: Quickque executable has no parent directory.".to_string())?
-        .join("quickque-speech"))
+    #[serde(skip_serializing_if = "Option::is_none")]
+    voice_reference: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    voice_revision: Option<u64>,
 }
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -406,33 +397,8 @@ fn scene_speech_failure_message(output: &[u8]) -> String {
         })
         .map(|failure| format!("{}: {}", failure.error, failure.message))
         .unwrap_or_else(|| {
-            "SCENE_SPEECH_HELPER_FAILED: The local system speech service failed.".to_string()
+            "SCENE_SPEECH_TURBO_FAILED: Chatterbox did not complete the speech request.".to_string()
         })
-}
-
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-fn scene_speech_list_local_voices_native() -> Result<SceneSpeechVoiceList, String> {
-    let output = Command::new(scene_speech_helper_path()?)
-        .arg("--list")
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .stdout(Stdio::piped())
-        .output()
-        .map_err(|error| format!("SCENE_SPEECH_HELPER_UNAVAILABLE: Could not start local system speech: {error}"))?;
-    if !output.status.success() {
-        return Err(scene_speech_failure_message(&output.stdout));
-    }
-    let voices = serde_json::from_slice::<SceneSpeechVoiceList>(&output.stdout)
-        .map_err(|_| "SCENE_SPEECH_HELPER_PROTOCOL: The local speech service returned an invalid voice list.".to_string())?;
-    if voices.voices.iter().any(|voice| {
-        voice.engine != "system"
-            || voice.id.is_empty()
-            || voice.name.is_empty()
-            || voice.language.is_empty()
-    }) {
-        return Err("SCENE_SPEECH_HELPER_PROTOCOL: The local speech service returned an invalid voice.".to_string());
-    }
-    Ok(voices)
 }
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -441,6 +407,8 @@ fn scene_speech_speak_native(
     mut command: Command,
     text: String,
     voice_id: String,
+    voice_reference: Option<String>,
+    voice_revision: Option<u64>,
     rate: f32,
     request_id: u64,
 ) -> Result<(), String> {
@@ -451,10 +419,10 @@ fn scene_speech_speak_native(
         return Err("SCENE_SPEECH_TEXT_TOO_LONG: This dialogue turn is too long for one speech request.".to_string());
     }
     if voice_id.trim().is_empty() {
-        return Err("SCENE_SPEECH_VOICE_REQUIRED: Choose an installed system voice before starting playback.".to_string());
+        return Err("SCENE_SPEECH_VOICE_REQUIRED: Choose a Chatterbox voice before starting playback.".to_string());
     }
     if !rate.is_finite() || !(0.5..=2.0).contains(&rate) {
-        return Err("SCENE_SPEECH_RATE_INVALID: The requested system speech rate is unavailable.".to_string());
+        return Err("SCENE_SPEECH_RATE_INVALID: The requested Chatterbox speech rate is unavailable.".to_string());
     }
 
     // A stop may arrive while this worker is spawning, sending stdin, or
@@ -505,21 +473,23 @@ fn scene_speech_speak_native(
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|error| format!("SCENE_SPEECH_HELPER_UNAVAILABLE: Could not start local system speech: {error}"))?;
+        .map_err(|error| format!("SCENE_SPEECH_TURBO_UNAVAILABLE: Could not start Chatterbox: {error}"))?;
     let request = SceneSpeechRequest {
         text: &text,
         voice_id: &voice_id,
         rate,
+        voice_reference: voice_reference.as_deref(),
+        voice_revision,
     };
     let write_result = process
         .stdin
         .as_mut()
-        .ok_or_else(|| "SCENE_SPEECH_HELPER_PROTOCOL: Local system speech stdin was unavailable.".to_string())
+        .ok_or_else(|| "SCENE_SPEECH_TURBO_PROTOCOL: Chatterbox stdin was unavailable.".to_string())
         .and_then(|stdin| {
             serde_json::to_writer(&mut *stdin, &request)
-                .map_err(|_| "SCENE_SPEECH_HELPER_PROTOCOL: Could not encode local system speech.".to_string())?;
+                .map_err(|_| "SCENE_SPEECH_TURBO_PROTOCOL: Could not encode the Chatterbox request.".to_string())?;
             stdin.flush().map_err(|_| {
-                "SCENE_SPEECH_HELPER_PROTOCOL: Could not send local system speech.".to_string()
+                "SCENE_SPEECH_TURBO_PROTOCOL: Could not send the Chatterbox request.".to_string()
             })
         });
     // Close stdin after the one request. The helper never receives dialogue as
@@ -533,7 +503,7 @@ fn scene_speech_speak_native(
     let stdout = process
         .stdout
         .take()
-        .ok_or_else(|| "SCENE_SPEECH_HELPER_PROTOCOL: Local system speech stdout was unavailable.".to_string())?;
+        .ok_or_else(|| "SCENE_SPEECH_TURBO_PROTOCOL: Chatterbox output was unavailable.".to_string())?;
     let child = Arc::new(Mutex::new(process));
     let active = {
         let mut state_process = state
@@ -554,7 +524,7 @@ fn scene_speech_speak_native(
         }
         return Err("SCENE_SPEECH_CANCELLED: Scene speech was cancelled before playback started.".to_string());
     }
-    // Do not hold the spawn barrier while waiting for AVSpeechSynthesizer.
+    // Do not hold the spawn barrier while waiting for Chatterbox.
     // `scene_speech_stop` can now take the barrier, kill this registered
     // child, and wait for process teardown.
     drop(spawn_guard);
@@ -584,7 +554,7 @@ fn scene_speech_speak_native(
         .lock()
         .map_err(|_| "SCENE_SPEECH_STATE_UNAVAILABLE: Scene speech process is unavailable.".to_string())?
         .wait()
-        .map_err(|_| "SCENE_SPEECH_HELPER_FAILED: The local system speech process could not finish.".to_string())?;
+        .map_err(|_| "SCENE_SPEECH_TURBO_FAILED: Chatterbox could not finish.".to_string())?;
     let current = {
         let mut state_process = state
             .process
@@ -1114,20 +1084,29 @@ async fn scene_speech_list_local_voices(app: AppHandle) -> Result<SceneSpeechVoi
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
         tauri::async_runtime::spawn_blocking(move || {
-            let system = scene_speech_list_local_voices_native();
-            if turbo::status(&app).ok().and_then(|s| s.get("status").and_then(serde_json::Value::as_str).map(str::to_owned)).as_deref() == Some("ready") {
-                let mut voices = system.unwrap_or(SceneSpeechVoiceList { voices: vec![] });
-                voices.voices.push(SceneSpeechHelperVoice { id: turbo::VOICE_ID.into(), name: "Chatterbox Default".into(), language: "en".into(), engine: "turbo".into() });
-                Ok(voices)
-            } else { system }
+            let mut result = vec![SceneSpeechHelperVoice {
+                id: turbo::VOICE_ID.into(),
+                name: "Chatterbox Default".into(),
+                language: "en".into(),
+                engine: "turbo".into(),
+            }];
+            for voice in voices::list(&app)? {
+                result.push(SceneSpeechHelperVoice {
+                    id: format!("{}{}", voices::LOCAL_VOICE_PREFIX, voice.id),
+                    name: voice.name,
+                    language: "en".into(),
+                    engine: "turbo".into(),
+                });
+            }
+            Ok(SceneSpeechVoiceList { voices: result })
         })
-            .await
-            .map_err(|_| "SCENE_SPEECH_HELPER_FAILED: The local speech service did not complete.".to_string())?
+        .await
+        .map_err(|_| "SCENE_SPEECH_TURBO_FAILED: Chatterbox voice listing did not complete.".to_string())?
     }
 
     #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
     {
-        Err("SCENE_SPEECH_UNSUPPORTED: Local system speech requires macOS on Apple Silicon.".to_string())
+        Err("SCENE_SPEECH_TURBO_UNSUPPORTED: Chatterbox voice playback requires an Apple Silicon Mac.".to_string())
     }
 }
 
@@ -1143,16 +1122,24 @@ async fn scene_speech_speak(
 ) -> Result<(), String> {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
-        let command = match engine.as_deref().unwrap_or("system") {
-            "system" => Command::new(scene_speech_helper_path()?),
-            "turbo" => {
-                if voice_id != turbo::VOICE_ID || rate != 1.0 {
-                    return Err("SCENE_SPEECH_VOICE_UNAVAILABLE: Choose Chatterbox Default at its natural speaking rate.".into());
-                }
-                turbo::command(&app)?
-            },
-            _ => return Err("SCENE_SPEECH_VOICE_UNAVAILABLE: Unknown speech engine.".into()),
+        if matches!(engine.as_deref(), Some("system")) {
+            return Err("SCENE_SPEECH_TURBO_ONLY: Quickque no longer supports macOS system voices.".into());
+        }
+        if !matches!(engine.as_deref(), None | Some("turbo")) {
+            return Err("SCENE_SPEECH_VOICE_UNAVAILABLE: Unknown Chatterbox voice engine.".into());
+        }
+        if rate != 1.0 {
+            return Err("SCENE_SPEECH_RATE_INVALID: Chatterbox uses its natural speaking rate (1×).".into());
+        }
+        let (voice_reference, voice_revision) = if voice_id.starts_with(voices::LOCAL_VOICE_PREFIX) {
+            let (metadata, path) = voices::resolve_reference(&app, &voice_id)?;
+            (Some(path.to_string_lossy().into_owned()), Some(metadata.revision))
+        } else if voice_id == turbo::VOICE_ID {
+            (None, None)
+        } else {
+            return Err("SCENE_SPEECH_VOICE_UNAVAILABLE: Choose Chatterbox Turbo or an approved local cloned voice.".into());
         };
+        let command = turbo::command(&app)?;
         let process = Arc::clone(&state.scene_speech.process);
         let spawn_lock = Arc::clone(&state.scene_speech.spawn_lock);
         tauri::async_runtime::spawn_blocking(move || {
@@ -1164,6 +1151,8 @@ async fn scene_speech_speak(
                 command,
                 text,
                 voice_id,
+                voice_reference,
+                voice_revision,
                 rate,
                 request_id,
             )
@@ -1175,7 +1164,7 @@ async fn scene_speech_speak(
     #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
     {
         let _ = (app, engine, state, text, voice_id, rate, request_id);
-        Err("SCENE_SPEECH_UNSUPPORTED: Local system speech requires macOS on Apple Silicon.".to_string())
+        Err("SCENE_SPEECH_TURBO_UNSUPPORTED: Chatterbox voice playback requires an Apple Silicon Mac.".to_string())
     }
 }
 
@@ -1211,29 +1200,6 @@ fn open_microphone_settings() -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     {
         Err("Microphone settings are available only on macOS.".to_string())
-    }
-}
-
-#[tauri::command]
-fn open_system_voice_settings() -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        // macOS pane URLs change between releases. Open the app reliably and
-        // show the Read & Speak navigation steps in Quickque.
-        let status = Command::new("open")
-            .args(["-b", "com.apple.systempreferences"])
-            .status()
-            .map_err(|error| format!("Could not open System Settings: {error}"))?;
-        if status.success() {
-            Ok(())
-        } else {
-            Err("macOS could not open System Settings.".to_string())
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        Err("System voice settings are available only on macOS.".to_string())
     }
 }
 
@@ -1297,6 +1263,7 @@ pub fn run() {
         .manage(turbo::InstallState::default())
         .manage(script_audio::AudioState::default())
         .manage(local_library::LocalLibraryState::default())
+        .manage(voices::VoiceLibraryState::default())
         .setup(|app| { debug_licence::load(app.handle()); Ok(()) })
         .invoke_handler(tauri::generate_handler![
             debug_licence_get,
@@ -1312,12 +1279,21 @@ pub fn run() {
             turbo::turbo_status,
             turbo::turbo_install,
             turbo::turbo_cancel_install,
+            voices::voice_library_list,
+            voices::voice_library_create,
+            voices::voice_library_rename,
+            voices::voice_library_rerecord,
+            voices::voice_library_delete,
+            voices::voice_library_read_recording,
+            voices::voice_recording_begin,
+            voices::voice_recording_append,
+            voices::voice_recording_commit,
+            voices::voice_recording_cancel,
             scene_speech_next_request_id,
             scene_speech_list_local_voices,
             scene_speech_speak,
             scene_speech_stop,
             open_microphone_settings,
-            open_system_voice_settings,
             remote_start,
             remote_stop,
             remote_approve,

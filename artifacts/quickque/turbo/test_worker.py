@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+import wave
 import worker
 
 
@@ -63,6 +64,42 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(worker.verify(directory, full=True))
             (directory / 'extra.pt').write_bytes(b'extra')
             self.assertFalse(worker.verify(directory))
+
+    def test_local_voice_requires_approved_confined_reference_and_revision(self):
+        voices = self.root / 'voices'
+        voice_id = 'a' * 32
+        folder = voices / voice_id
+        folder.mkdir(parents=True)
+        recording = folder / 'reference.wav'
+        with wave.open(str(recording), 'wb') as output:
+            output.setnchannels(1)
+            output.setsampwidth(2)
+            output.setframerate(16000)
+            output.writeframes(b'\0\0' * (16000 * 5))
+        metadata = {
+            'id': voice_id,
+            'revision': 3,
+            'consentConfirmed': True,
+            'recordingSha256': worker.sha256(recording),
+        }
+        (folder / 'metadata.json').write_text(json.dumps(metadata))
+        request = {'text': 'Hello cloned voice.', 'voiceId': 'chatterbox-local:' + voice_id, 'voiceRevision': 3, 'rate': 1}
+        self.assertEqual(len(worker.validate_request(request, voices)), 1)
+        request['voiceRevision'] = 2
+        with self.assertRaises(worker.SpeechFailure):
+            worker.validate_request(request, voices)
+
+    def test_local_voice_symlink_and_missing_consent_are_rejected(self):
+        voices = self.root / 'voices'
+        voice_id = 'b' * 32
+        folder = voices / voice_id
+        folder.mkdir(parents=True)
+        outside = self.root / 'outside.wav'
+        outside.write_bytes(b'not audio')
+        (folder / 'reference.wav').symlink_to(outside)
+        request = {'text': 'Hello cloned voice.', 'voiceId': 'chatterbox-local:' + voice_id, 'voiceRevision': 1, 'rate': 1}
+        with self.assertRaises(worker.SpeechFailure):
+            worker.validate_request(request, voices)
             (directory / 'extra.pt').unlink()
             target.unlink()
             outside = self.root / 'outside'

@@ -55,7 +55,7 @@ export class PreparedScriptAudio {
     const context = this.context = new AudioContext();
     let totalBytes = 0;
     for (const entry of this.request.entries) {
-      if (this.buffers.has(audioEntryIdentity(entry.text, entry.voiceId, entry.rate))) continue;
+      if (this.buffers.has(audioEntryIdentity(entry.text, entry.voiceId, entry.rate, entry.voiceRevision))) continue;
       if (this.disposed) throw new Error('Audio preparation cancelled.');
       const bytes = await invoke<number[]>('script_audio_read', { scriptId: this.request.scriptId, revision: this.request.revision, entryId: entry.id });
       if (this.disposed) throw new Error('Audio preparation cancelled.');
@@ -63,14 +63,14 @@ export class PreparedScriptAudio {
       if (this.disposed) throw new Error('Audio preparation cancelled.');
       totalBytes += buffer.length * buffer.numberOfChannels * 4;
       if (totalBytes > 256 * 1024 * 1024) throw new Error('This script has too much audio to preload. Split it into shorter scripts.');
-      this.buffers.set(audioEntryIdentity(entry.text, entry.voiceId, entry.rate), buffer);
+      this.buffers.set(audioEntryIdentity(entry.text, entry.voiceId, entry.rate, entry.voiceRevision), buffer);
     }
   }
   async speak(text: string, voice: SceneVoice, signal: AbortSignal): Promise<void> {
     if (signal.aborted || this.disposed) throw new Error('Audio playback cancelled.');
     await this.prepare();
     if (signal.aborted || this.disposed) throw new Error('Audio playback cancelled.');
-    const buffer = this.buffers.get(audioEntryIdentity(text, voice.voiceId, voice.rate));
+    const buffer = this.buffers.get(audioEntryIdentity(text, voice.voiceId, voice.rate, voice.voiceRevision));
     if (!buffer || !this.context) throw new Error('Matching saved AI audio is unavailable. Generate audio in Edit.');
     await this.context.resume();
     if (signal.aborted || this.disposed) throw new Error('Audio playback cancelled.');

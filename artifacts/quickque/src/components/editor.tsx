@@ -1,5 +1,5 @@
 import { ScriptAudioPanel } from './script-audio-panel';
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { calculateWordCount, estimateTime, formatTime, generateId } from '@/lib/utils';
 import { Play, Plus, Trash, ChevronUp, ChevronDown, ChevronLeft, Users, PanelLeft, SplitSquareVertical } from 'lucide-react';
 import { Script, ScriptSection, Settings, DEFAULT_SETTINGS } from '@/lib/types';
@@ -8,7 +8,7 @@ import { getFontFamilyCss, getTextColorCss } from '@/lib/appearance';
 import { getCharacterColor } from '@/lib/actor-colors';
 import { MarkdownEditor } from './markdown-editor';
 import { getScriptPurpose, getSceneSetupIssues, getPerformanceSummary, type SceneSetupIssue } from '@/lib/script-purpose';
-import { listLocalVoices } from '@/lib/scene-speech';
+import { createVoiceLibrary } from '@/lib/voice-library';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ActorAuthoringPanel, ScriptActor } from './actor-authoring';
 
@@ -45,6 +45,7 @@ export function Editor({
   const [showMarkdown, setShowMarkdown] = useState(false);
   const [checkingVoices, setCheckingVoices] = useState(false);
   const [preflightIssues, setPreflightIssues] = useState<SceneSetupIssue[] | null>(null);
+  const voiceLibrary = useMemo(() => createVoiceLibrary(), []);
   const currentScript = useRef<ActorScript | null>(script);
   currentScript.current = script;
   useEffect(() => {
@@ -60,9 +61,9 @@ export function Editor({
     if (!partnerTurns) { onPresent(); return; }
     setCheckingVoices(true);
     try {
-      const voices = await listLocalVoices();
+      const voices = await voiceLibrary.list();
       if (currentScript.current !== script) return;
-      const checked = getSceneSetupIssues(script, new Set(voices.map(v => v.id)));
+      const checked = getSceneSetupIssues(script, new Set(voices.map(v => v.referenceId)));
       if (checked.length) setPreflightIssues(checked);
       else onPresent();
     } catch {

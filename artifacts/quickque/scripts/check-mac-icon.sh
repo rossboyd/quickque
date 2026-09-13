@@ -32,7 +32,7 @@ case "$ICON" in
   *) ICON="$ICON.icns" ;;
 esac
 cmp "$ROOT/src-tauri/icons/icon.icns" "$APP/Contents/Resources/$ICON"
-for HELPER in quickque-flow quickque-speech quickque-audio-export; do
+for HELPER in quickque-flow quickque-audio-export; do
   [ -x "$APP/Contents/MacOS/$HELPER" ] || { echo "Missing bundled helper: $HELPER" >&2; exit 1; }
 done
 [ -x "$APP/Contents/Resources/turbo-runtime/quickque-turbo" ] || { echo 'Missing bundled Chatterbox runtime.' >&2; exit 1; }

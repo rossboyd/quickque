@@ -4,7 +4,7 @@ import { generateId } from './utils.ts';
 
 /** Transcribed only from the Matilda screenshot supplied by the user. */
 export function createMatildaSample(voices: LocalVoice[] = [], now = Date.now(), idFactory = generateId): Script {
-  const english = voices.filter(voice => voice.engine === 'system' && /^en(?:[-_]|$)/i.test(voice.language));
+  const english = voices.filter(voice => voice.engine === 'turbo' && /^en(?:[-_]|$)/i.test(voice.language));
   const cast = [
     { name: 'Matilda', accentColor: '#c084fc' },
     { name: 'Miss Honey', accentColor: '#f59e0b' },
@@ -13,7 +13,7 @@ export function createMatildaSample(voices: LocalVoice[] = [], now = Date.now(),
   ];
   const characters: ActorCharacter[] = cast.map((character, index) => ({
     ...character, id: idFactory(), age: '', gender: '', style: '',
-    voice: { engine: 'system', voiceId: index > 0 && english.length ? english[(index - 1) % english.length].id : '', rate: 1 },
+    voice: { engine: 'turbo', voiceId: index > 0 && english.length ? english[(index - 1) % english.length].id : '', rate: 1 },
   }));
   const turns = [
     { who: 'Nigel', content: 'Me, me, me, oooh, oooh, me, pick me miss, I can, mememememe—' },

@@ -30,9 +30,9 @@ test('Matilda sample preserves excerpt order, four coloured characters and separ
 
 test('sample uses only discovered English voices and reports setup issues when none are available', () => {
   const script = createMatildaSample([
-    { id: 'french', name: 'French', language: 'fr-FR', engine: 'system' },
-    { id: 'english-1', name: 'English 1', language: 'en-GB', engine: 'system' },
-    { id: 'english-2', name: 'English 2', language: 'en-US', engine: 'system' },
+    { id: 'french', name: 'French', language: 'fr-FR', engine: 'turbo' },
+    { id: 'english-1', name: 'English 1', language: 'en-GB', engine: 'turbo' },
+    { id: 'english-2', name: 'English 2', language: 'en-US', engine: 'turbo' },
   ]);
   assert.deepEqual(script.actor?.characters.map(character => character.voice.voiceId), ['', 'english-1', 'english-2', 'english-1']);
   assert.deepEqual(getSceneSetupIssues(script, new Set(['english-1', 'english-2'])), []);

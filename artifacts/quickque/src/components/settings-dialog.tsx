@@ -14,9 +14,11 @@ import { AppearanceControls } from '@/components/appearance-controls';
 import { PresentationControls } from '@/components/presentation-controls';
 import { setFlowDebugVisible, useFlowDebugVisibility } from '@/lib/flow-debug-visibility';
 import { ChatterboxSetup } from '@/components/chatterbox-setup';
+import { VoiceLibraryPanel } from '@/components/voice-library';
 
 export function SettingsDialog() {
   const {
+    scripts,
     settings,
     updateSettings,
     exportScripts,
@@ -32,6 +34,12 @@ export function SettingsDialog() {
     updatePresentationDefaults,
     resetPresentationDefaults,
   } = useStore();
+  const referencedVoiceIds = scripts.flatMap(script => [
+    ...(script.narratorVoice?.voiceId ? [script.narratorVoice.voiceId] : []),
+    ...(script.actor?.characters.flatMap(character =>
+      character.voice.voiceId ? [character.voice.voiceId] : [],
+    ) ?? []),
+  ]);
   
   const [open, setOpen] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
@@ -181,12 +189,13 @@ export function SettingsDialog() {
 
           <div className="space-y-4">
             <div>
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Local Voice</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Chatterbox Turbo voices</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Prepare Chatterbox Turbo before assigning it to Scene Partner characters.
+                Prepare Chatterbox Turbo before assigning local cloned voices to Scene Partner characters.
               </p>
             </div>
             <ChatterboxSetup />
+            <VoiceLibraryPanel referencedVoiceIds={referencedVoiceIds} />
           </div>
 
           <hr className="border-border" />

@@ -22,6 +22,7 @@ export const MAX_SECTION_NOTES_LENGTH = 500_000;
 // Browser/macOS system speech exposes the useful, portable 0.5–2 range.
 export const MIN_ACTOR_VOICE_RATE = 0.5;
 export const MAX_ACTOR_VOICE_RATE = 2;
+export const MISSING_CLONED_VOICE_PREFIX = 'local-voice-missing:';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -32,6 +33,34 @@ function cloneVoiceData(voice: ActorVoice): ActorVoice {
     engine: voice.engine,
     voiceId: voice.voiceId,
     rate: voice.rate,
+    ...(voice.voiceRevision === undefined ? {} : { voiceRevision: voice.voiceRevision }),
+  };
+}
+
+/**
+ * System voice IDs from pre-cloned-voice releases cannot be replayed on
+ * another Mac. Keep their identity visible as a missing local reference
+ * instead of silently selecting Turbo Default or another installed voice.
+ */
+export function migrateLegacyVoice(voice: ActorVoice): ActorVoice {
+  if (voice.engine !== 'system') return cloneVoiceData(voice);
+  const legacyId = voice.voiceId.trim() || 'unknown';
+  return {
+    engine: 'turbo',
+    voiceId: `${MISSING_CLONED_VOICE_PREFIX}${legacyId}`,
+    rate: voice.rate,
+    voiceRevision: 1,
+  };
+}
+
+export function migrateActorVoices(actor: ActorMode): ActorMode {
+  return {
+    enabled: actor.enabled,
+    characters: actor.characters.map(character => ({
+      ...character,
+      voice: migrateLegacyVoice(character.voice),
+    })),
+    myRoleIds: [...actor.myRoleIds],
   };
 }
 
@@ -53,7 +82,11 @@ export function isValidActorVoice(value: unknown): value is ActorVoice {
     typeof value.rate === 'number' &&
     Number.isFinite(value.rate) &&
     value.rate >= MIN_ACTOR_VOICE_RATE &&
-    value.rate <= MAX_ACTOR_VOICE_RATE
+    value.rate <= MAX_ACTOR_VOICE_RATE &&
+    (value.voiceRevision === undefined ||
+      (typeof value.voiceRevision === 'number' &&
+        Number.isSafeInteger(value.voiceRevision) &&
+        value.voiceRevision > 0))
   );
 }
 
@@ -238,6 +271,11 @@ export function cloneScriptData(script: Script): Script {
     cloned.actor = isValidActor(script.actor)
       ? cloneActor(script.actor)
       : script.actor;
+  }
+  if (script.narratorVoice !== undefined) {
+    cloned.narratorVoice = script.narratorVoice
+      ? cloneVoiceData(script.narratorVoice)
+      : null;
   }
   return cloned;
 }

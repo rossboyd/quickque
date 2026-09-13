@@ -26,9 +26,10 @@ export type SceneState = {
 };
 
 export type SceneVoice = {
-  engine: 'system' | 'turbo';
+  engine: 'turbo';
   voiceId: string;
   rate: number;
+  voiceRevision?: number;
 };
 
 export interface SceneSpeaker {

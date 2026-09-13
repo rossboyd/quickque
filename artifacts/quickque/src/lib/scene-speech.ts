@@ -3,17 +3,18 @@ import { invoke } from '@tauri-apps/api/core';
 import { isDesktop } from './desktop.ts';
 
 export type LocalVoice = {
-  /** The platform-provided identifier. It is never a display-name surrogate. */
+  /** A stable Chatterbox Turbo/default or local cloned reference. */
   id: string;
   name: string;
   language: string;
-  engine: 'system' | 'turbo';
+  engine: 'turbo';
 };
 
 export type SceneSpeechVoice = {
-  engine: 'system' | 'turbo';
+  engine: 'turbo';
   voiceId: string;
   rate: number;
+  voiceRevision?: number;
 };
 
 export interface SceneSpeech {
@@ -22,34 +23,9 @@ export interface SceneSpeech {
   stop(): Promise<void>;
 }
 
-type BrowserVoice = {
-  voiceURI: string;
-  name: string;
-  lang: string;
-  localService: boolean;
-};
-
-type BrowserUtterance = {
-  text: string;
-  voice: BrowserVoice | null;
-  rate: number;
-  onend: (() => void) | null;
-  onerror: ((event: { error?: string }) => void) | null;
-};
-
-type BrowserSpeechSynthesis = {
-  getVoices(): BrowserVoice[];
-  speak(utterance: BrowserUtterance): void;
-  cancel(): void;
-  addEventListener?: (type: 'voiceschanged', listener: () => void) => void;
-  removeEventListener?: (type: 'voiceschanged', listener: () => void) => void;
-};
-
 export interface SceneSpeechDependencies {
   isDesktop?: () => boolean;
   invoke?: <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
-  browserSpeechSynthesis?: BrowserSpeechSynthesis | undefined;
-  createBrowserUtterance?: (text: string) => BrowserUtterance;
   setTimeout?: typeof globalThis.setTimeout;
   clearTimeout?: typeof globalThis.clearTimeout;
 }
@@ -76,11 +52,12 @@ export function voiceFailureMessage(error: unknown): string {
   const advice: Record<string, string> = {
     SCENE_SPEECH_HELPER_UNAVAILABLE: 'Quickque could not launch its speech helper. Reinstall the Mac app from a complete build; refreshing voices cannot repair a missing helper.',
     SCENE_SPEECH_HELPER_PROTOCOL: 'The speech helper returned an invalid response. Reinstall the Mac app from a complete build.',
-    SCENE_SPEECH_VOICE_REQUIRED: 'Choose an installed voice for this character, then preview it.',
-    SCENE_SPEECH_VOICE_UNAVAILABLE: 'This character’s saved voice is unavailable. Refresh the list and choose an installed voice. If necessary, install one in System Settings → Accessibility → Read & Speak.',
-    SCENE_SPEECH_TIMEOUT: 'The selected voice did not finish speaking. Try another installed voice. If all voices fail, restart Quickque.',
+    SCENE_SPEECH_VOICE_REQUIRED: 'Choose a local Chatterbox voice for this character, then preview it.',
+    SCENE_SPEECH_VOICE_UNAVAILABLE: 'This character’s saved local voice is unavailable. Open Settings → Chatterbox Turbo voices and choose or record another voice.',
+    SCENE_SPEECH_DESKTOP_REQUIRED: 'Chatterbox voice playback requires the Quickque Mac desktop app. Browser speech is not used.',
+    SCENE_SPEECH_TIMEOUT: 'The selected Chatterbox voice did not finish speaking. Try again or choose another local voice.',
     SCENE_SPEECH_STOP_FAILED: 'Quickque could not confirm speech stopped. Restart Quickque before trying again.',
-    SCENE_SPEECH_TURBO_UNAVAILABLE: 'Download Chatterbox in Settings or Scene Partner setup, then preview Chatterbox Default.',
+    SCENE_SPEECH_TURBO_UNAVAILABLE: 'Download Chatterbox in Settings or Scene Partner setup, then choose a local voice.',
   };
   return advice[failure.code]
     ? `${advice[failure.code]} (${failure.code})`
@@ -94,13 +71,6 @@ function cancellationError(): SceneSpeechError {
   );
 }
 
-function unavailableError(voiceId: string): SceneSpeechError {
-  return new SceneSpeechError(
-    'SCENE_SPEECH_VOICE_UNAVAILABLE',
-    `The saved system voice "${voiceId}" is not installed or is unavailable.`,
-  );
-}
-
 function normaliseNativeError(error: unknown): SceneSpeechError {
   const message = error instanceof Error ? error.message : String(error);
   const code = /^([A-Z_]+):/.exec(message)?.[1] ?? 'SCENE_SPEECH_NATIVE_ERROR';
@@ -108,10 +78,16 @@ function normaliseNativeError(error: unknown): SceneSpeechError {
 }
 
 function validateRequest(text: string, voice: SceneSpeechVoice): void {
-  if (voice.engine === 'turbo' && (voice.voiceId !== 'chatterbox-turbo:default-en' || voice.rate !== 1)) {
+  if (voice.engine !== 'turbo') {
     throw new SceneSpeechError(
       'SCENE_SPEECH_TURBO_UNAVAILABLE',
-      'Choose Chatterbox Default at its natural speaking rate.',
+      'Quickque uses Chatterbox Turbo voices only.',
+    );
+  }
+  if (voice.engine === 'turbo' && voice.rate !== 1) {
+    throw new SceneSpeechError(
+      'SCENE_SPEECH_TURBO_UNAVAILABLE',
+      'Choose a Chatterbox voice at its natural speaking rate.',
     );
   }
   if (!text.trim()) {
@@ -129,7 +105,7 @@ function validateRequest(text: string, voice: SceneSpeechVoice): void {
   if (!voice.voiceId.trim()) {
     throw new SceneSpeechError(
       'SCENE_SPEECH_VOICE_REQUIRED',
-      'Choose an installed system voice before starting playback.',
+      'Choose a local Chatterbox voice before starting playback.',
     );
   }
   if (!Number.isFinite(voice.rate) || voice.rate < MIN_RATE || voice.rate > MAX_RATE) {
@@ -138,35 +114,6 @@ function validateRequest(text: string, voice: SceneSpeechVoice): void {
       `Speech rate must be between ${MIN_RATE} and ${MAX_RATE}.`,
     );
   }
-}
-
-function localBrowserVoices(synthesis: BrowserSpeechSynthesis | undefined): LocalVoice[] {
-  if (!synthesis) return [];
-
-  const seen = new Set<string>();
-  const localVoices: LocalVoice[] = [];
-  for (const voice of synthesis.getVoices()) {
-    // A voice URI is the browser's identity for a voice. Do not manufacture an
-    // ID from a name/language pair: that would silently select a different
-    // voice when names are duplicated or a browser updates its voice list.
-    if (
-      !voice.localService ||
-      !voice.voiceURI ||
-      !voice.name ||
-      !voice.lang ||
-      seen.has(voice.voiceURI)
-    ) {
-      continue;
-    }
-    seen.add(voice.voiceURI);
-    localVoices.push({
-      id: voice.voiceURI,
-      name: voice.name,
-      language: voice.lang,
-      engine: 'system',
-    });
-  }
-  return localVoices;
 }
 
 function speechTimeoutFor(text: string): number {
@@ -197,8 +144,6 @@ class SceneSpeechAdapter implements SceneSpeech {
     command: string,
     args?: Record<string, unknown>,
   ) => Promise<T>;
-  private readonly browserSynthesis: BrowserSpeechSynthesis | undefined;
-  private readonly createUtterance: (text: string) => BrowserUtterance;
   private readonly scheduleTimeout: typeof globalThis.setTimeout;
   private readonly cancelTimeout: typeof globalThis.clearTimeout;
 
@@ -209,22 +154,6 @@ class SceneSpeechAdapter implements SceneSpeech {
   constructor(dependencies: SceneSpeechDependencies = {}) {
     this.desktop = dependencies.isDesktop ?? isDesktop;
     this.nativeInvoke = dependencies.invoke ?? invoke;
-    this.browserSynthesis =
-      dependencies.browserSpeechSynthesis ??
-      (typeof window === 'undefined'
-        ? undefined
-        : (window.speechSynthesis as BrowserSpeechSynthesis | undefined));
-    this.createUtterance =
-      dependencies.createBrowserUtterance ??
-      ((text) => {
-        if (typeof SpeechSynthesisUtterance === 'undefined') {
-          throw new SceneSpeechError(
-            'SCENE_SPEECH_BROWSER_UNAVAILABLE',
-            'This browser cannot create local speech utterances.',
-          );
-        }
-        return new SpeechSynthesisUtterance(text) as unknown as BrowserUtterance;
-      });
     // Window timers require their host receiver when called as class members.
     this.scheduleTimeout = dependencies.setTimeout ?? globalThis.setTimeout.bind(globalThis);
     this.cancelTimeout = dependencies.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
@@ -239,12 +168,12 @@ class SceneSpeechAdapter implements SceneSpeech {
         if (!Array.isArray(response?.voices)) {
           throw new SceneSpeechError(
             'SCENE_SPEECH_NATIVE_PROTOCOL',
-            'The native system-voice service returned an invalid voice list.',
+            'The native Chatterbox voice service returned an invalid voice list.',
           );
         }
         return response.voices.filter(
           (voice): voice is LocalVoice =>
-            (voice?.engine === 'system' || voice?.engine === 'turbo') &&
+            voice?.engine === 'turbo' &&
             typeof voice.id === 'string' &&
             typeof voice.name === 'string' &&
             typeof voice.language === 'string' &&
@@ -255,30 +184,9 @@ class SceneSpeechAdapter implements SceneSpeech {
         throw normaliseNativeError(error);
       }
     }
-    const synthesis = this.browserSynthesis;
-    const initial = localBrowserVoices(synthesis);
-    if (
-      initial.length > 0 ||
-      !synthesis?.addEventListener ||
-      !synthesis?.removeEventListener
-    ) {
-      return initial;
-    }
-
-    // Some browser engines populate voices asynchronously. Wait only for the
-    // platform notification (with a short finite escape hatch); this never
-    // enables a remote service or substitutes a default voice.
-    return new Promise(resolve => {
-      let timer: ReturnType<typeof globalThis.setTimeout> | null = null;
-      const finish = () => {
-        if (timer !== null) this.cancelTimeout(timer);
-        synthesis.removeEventListener!('voiceschanged', onVoicesChanged);
-        resolve(localBrowserVoices(synthesis));
-      };
-      const onVoicesChanged = () => finish();
-      timer = this.scheduleTimeout(() => finish(), 1_000);
-      synthesis.addEventListener!('voiceschanged', onVoicesChanged);
-    });
+    // Browser builds intentionally expose no speech voices. In particular,
+    // never fall back to speechSynthesis when the Mac helper is unavailable.
+    return [];
   }
 
   async speak(text: string, voice: SceneSpeechVoice, signal: AbortSignal): Promise<void> {
@@ -290,8 +198,8 @@ class SceneSpeechAdapter implements SceneSpeech {
       await this.cancelActive();
       if (signal.aborted) throw cancellationError();
       const desktop = this.desktop();
-      if (voice.engine === 'turbo' && !desktop) {
-        throw new SceneSpeechError('SCENE_SPEECH_TURBO_UNSUPPORTED', 'Chatterbox runs in the Quickque Mac app. Open this performance there.');
+      if (!desktop) {
+        throw new SceneSpeechError('SCENE_SPEECH_DESKTOP_REQUIRED', 'Chatterbox runs in the Quickque Mac app. Open this performance there.');
       }
       let requestId = 0;
       if (desktop) {
@@ -311,9 +219,7 @@ class SceneSpeechAdapter implements SceneSpeech {
         );
       }
       if (signal.aborted) throw cancellationError();
-      const next = desktop
-        ? this.startNative(text, voice, signal, requestId)
-        : this.startBrowser(text, voice, signal);
+      const next = this.startNative(text, voice, signal, requestId);
       this.active = next;
       return next;
     });
@@ -373,10 +279,10 @@ class SceneSpeechAdapter implements SceneSpeech {
       void cancel(
         new SceneSpeechError(
           'SCENE_SPEECH_TIMEOUT',
-          'System speech did not finish before its safety timeout.',
+      'Chatterbox speech did not finish before its safety timeout.',
         ),
       ).catch(() => {});
-    }, voice.engine === 'turbo' ? Math.max(180_000, speechTimeoutFor(text)) : speechTimeoutFor(text));
+    }, Math.max(180_000, speechTimeoutFor(text)));
 
     const abort = () => {
       void cancel().catch(() => {});
@@ -405,6 +311,7 @@ class SceneSpeechAdapter implements SceneSpeech {
       engine: voice.engine,
       voiceId: voice.voiceId,
       rate: voice.rate,
+      voiceRevision: voice.voiceRevision,
       requestId,
     }).then(
       () => finish(),
@@ -414,97 +321,6 @@ class SceneSpeechAdapter implements SceneSpeech {
     return { completion, cancel };
   }
 
-  private startBrowser(
-    text: string,
-    voice: SceneSpeechVoice,
-    signal: AbortSignal,
-  ): ActiveSpeech {
-    const synthesis = this.browserSynthesis;
-    const selectedVoice = synthesis
-      ? synthesis.getVoices().find(
-          candidate => candidate.localService && candidate.voiceURI === voice.voiceId,
-        )
-      : undefined;
-    if (!synthesis || !selectedVoice) {
-      throw unavailableError(voice.voiceId);
-    }
-
-    let settled = false;
-    let rejectCompletion: (error: unknown) => void = () => {};
-    let resolveCompletion: () => void = () => {};
-    const completion = new Promise<void>((resolve, reject) => {
-      resolveCompletion = resolve;
-      rejectCompletion = reject;
-    });
-    const utterance = this.createUtterance(text);
-    const settle = (error?: unknown) => {
-      if (settled) return;
-      settled = true;
-      if (error) rejectCompletion(error);
-      else resolveCompletion();
-    };
-    let cancellation: Promise<void> | null = null;
-    const timeout = this.scheduleTimeout(() => {
-      void cancel(
-        new SceneSpeechError(
-          'SCENE_SPEECH_TIMEOUT',
-          'Local browser speech did not finish before its safety timeout.',
-        ),
-      ).catch(() => {});
-    }, speechTimeoutFor(text));
-    const abort = () => cancel();
-    const finish = (error?: unknown) => {
-      this.cancelTimeout(timeout);
-      signal.removeEventListener('abort', abort);
-      settle(error);
-    };
-    const cancel = (reason = cancellationError()): Promise<void> => {
-      finish(reason);
-      if (!cancellation) {
-        try {
-          synthesis.cancel();
-          cancellation = Promise.resolve();
-        } catch (error) {
-          cancellation = Promise.reject(
-            new SceneSpeechError(
-              'SCENE_SPEECH_BROWSER_STOP_FAILED',
-              error instanceof Error
-                ? error.message
-                : 'Local browser speech could not stop.',
-            ),
-          );
-        }
-      }
-      return cancellation;
-    };
-
-    utterance.voice = selectedVoice;
-    utterance.rate = voice.rate;
-    utterance.onend = () => finish();
-    utterance.onerror = (event) => {
-      finish(
-        new SceneSpeechError(
-          'SCENE_SPEECH_BROWSER_ERROR',
-          event.error
-            ? `Local browser speech failed: ${event.error}.`
-            : 'Local browser speech failed.',
-        ),
-      );
-    };
-    signal.addEventListener('abort', abort, { once: true });
-    try {
-      synthesis.speak(utterance);
-    } catch (error) {
-      finish(
-        new SceneSpeechError(
-          'SCENE_SPEECH_BROWSER_ERROR',
-          error instanceof Error ? error.message : 'Local browser speech could not start.',
-        ),
-      );
-    }
-
-    return { completion, cancel };
-  }
 }
 
 export function createSceneSpeech(
@@ -513,10 +329,7 @@ export function createSceneSpeech(
   return new SceneSpeechAdapter(dependencies);
 }
 
-/**
- * Lists only system voices that can be used without a cloud fallback.
- * Browser callers receive only `localService === true` voices.
- */
+/** Lists only local Chatterbox voices available to the desktop helper. */
 export async function listLocalVoices(): Promise<LocalVoice[]> {
   return createSceneSpeech().listLocalVoices();
 }

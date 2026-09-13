@@ -6,16 +6,11 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .executable(name: "quickque-flow", targets: ["QuickqueFlow"]),
-        .executable(name: "quickque-speech", targets: ["QuickqueSpeech"]),
         .executable(name: "quickque-audio-export", targets: ["QuickqueAudioExport"]),
     ],
     targets: [
         .executableTarget(
             name: "QuickqueFlow",
-            dependencies: []
-        ),
-        .executableTarget(
-            name: "QuickqueSpeech",
             dependencies: []
         ),
         .target(

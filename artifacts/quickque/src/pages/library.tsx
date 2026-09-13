@@ -1,5 +1,5 @@
 import './workspace.css';
-import { listLocalVoices } from '@/lib/scene-speech';
+import { createVoiceLibrary } from '@/lib/voice-library';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocation } from 'wouter';
@@ -76,6 +76,7 @@ export default function Library() {
   const [location, setLocation] = useLocation();
   const isHome = location !== '/edit';
   const [showWizard, setShowWizard] = useState(false);
+  const voiceLibrary = useMemo(() => createVoiceLibrary(), []);
 
   useEffect(() => {
     if (isDesktop()) {
@@ -176,8 +177,10 @@ export default function Library() {
     if (creatingSample) return;
     setCreatingSample(true);
     try {
-      // Discover installed voices only; never download or start speech here.
-      const voices = await listLocalVoices().catch(() => []);
+      // Discover approved local cloned voices only; never start speech here.
+      const voices = (await voiceLibrary.list().catch(() => [])).map(voice => ({
+        id: voice.referenceId, name: voice.name, language: 'en', engine: 'turbo' as const,
+      }));
       const id = createScript('performance', { kind: 'matilda', voices });
       if (id) {
         setViewMode('library');
@@ -205,8 +208,8 @@ export default function Library() {
       let issues = getSceneSetupIssues(script);
       const needsVoices = script.actor?.enabled && script.sections.some(section => section.characterId && !script.actor!.myRoleIds.includes(section.characterId));
       if (!issues.length && getScriptPurpose(script) === 'performance' && needsVoices) {
-        const voices = await listLocalVoices();
-        issues = getSceneSetupIssues(script, new Set(voices.map(voice => voice.id)));
+        const voices = (await voiceLibrary.list()).map(voice => voice.referenceId);
+        issues = getSceneSetupIssues(script, new Set(voices));
       }
       if (generation !== playGeneration.current || latestScripts.current.find(item => item.id === script.id) !== script) return;
       if (issues.length) { setHomeIssues({ script, messages: issues.map(issue => issue.message) }); return; }

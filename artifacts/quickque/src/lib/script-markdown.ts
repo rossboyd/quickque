@@ -83,7 +83,7 @@ export function parseScriptMarkdown(source: string, script: Script, idFactory = 
         let character: ActorCharacter | undefined = matches[0];
         if (!character) {
           if (actor.characters.length >= MAX_ACTOR_CHARACTERS) throw new Error('Use at most 100 characters.');
-          character = { id: idFactory(), name, accentColor: nextCharacterColor(actor.characters), age: '', gender: '', style: '', voice: { engine: 'system', voiceId: '', rate: 1 } };
+          character = { id: idFactory(), name, accentColor: nextCharacterColor(actor.characters), age: '', gender: '', style: '', voice: { engine: 'turbo', voiceId: '', rate: 1 } };
           actor.characters.push(character); newCharacters.push(name);
         }
         const active = current as TurnDraft | null;

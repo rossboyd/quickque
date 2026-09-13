@@ -17,6 +17,8 @@ import wave
 LOCK = json.loads(Path(__file__).with_name('model-lock.json').read_text())
 TOTAL_BYTES = sum(item['bytes'] for item in LOCK['files'])
 VOICE_ID = LOCK['voice']['id']
+LOCAL_VOICE_PREFIX = 'chatterbox-local:'
+VOICE_ID_RE = re.compile(r'^[0-9a-f]{32}$')
 
 
 class SpeechFailure(Exception):
@@ -101,7 +103,7 @@ def chunks(text):
     size = 0
     for word in words:
         if len(word) > 160:
-            raise SpeechFailure('SCENE_SPEECH_TEXT_TOO_LONG', 'A word or cue is too long for Chatterbox. Add spacing or use a system voice.')
+            raise SpeechFailure('SCENE_SPEECH_TEXT_TOO_LONG', 'A word or cue is too long for Chatterbox. Add spacing or split the passage.')
         if chunk and (size + len(word) + 1 > 240 or len(chunk) >= 35):
             yield ' '.join(chunk)
             chunk, size = [], 0
@@ -111,13 +113,47 @@ def chunks(text):
         yield ' '.join(chunk)
 
 
-def validate_request(request):
+def local_voice_reference(request, voices_dir):
+    voice_id = request.get('voiceId')
+    if not isinstance(voice_id, str) or not voice_id.startswith(LOCAL_VOICE_PREFIX):
+        return None
+    identity = voice_id[len(LOCAL_VOICE_PREFIX):]
+    if voices_dir is None or not VOICE_ID_RE.fullmatch(identity):
+        raise SpeechFailure('SCENE_SPEECH_VOICE_UNAVAILABLE', 'The selected cloned voice is unavailable. Re-record it in Quickque.')
+    root = Path(voices_dir)
+    if root.is_symlink() or not root.is_dir():
+        raise SpeechFailure('SCENE_SPEECH_VOICE_UNAVAILABLE', 'The selected cloned voice is unavailable. Re-record it in Quickque.')
+    folder = root / identity
+    reference = folder / 'reference.wav'
+    metadata = folder / 'metadata.json'
+    if folder.is_symlink() or reference.is_symlink() or metadata.is_symlink() or not reference.is_file() or not metadata.is_file():
+        raise SpeechFailure('SCENE_SPEECH_VOICE_UNAVAILABLE', 'The selected cloned voice is unavailable. Re-record it in Quickque.')
+    try:
+        details = json.loads(metadata.read_text())
+        if details.get('id') != identity or details.get('consentConfirmed') is not True:
+            raise ValueError()
+        if request.get('voiceRevision') != details.get('revision'):
+            raise ValueError()
+        if sha256(reference) != details.get('recordingSha256'):
+            raise ValueError()
+        duration = wav_duration(reference)
+        if duration is None or not 5 <= duration <= 10:
+            raise ValueError()
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        raise SpeechFailure('SCENE_SPEECH_VOICE_INTEGRITY', 'The selected cloned voice is damaged or incomplete. Re-record it.')
+    return reference
+
+
+def validate_request(request, voices_dir=None):
     if not isinstance(request, dict) or not isinstance(request.get('text'), str) or not request['text'].strip():
         raise SpeechFailure('SCENE_SPEECH_TEXT_EMPTY', 'Add dialogue before starting Chatterbox.')
     if len(request['text'].encode('utf-8')) > 100_000:
         raise SpeechFailure('SCENE_SPEECH_TEXT_TOO_LONG', 'This turn is too long for Chatterbox.')
+    reference = None
     if request.get('voiceId') != VOICE_ID:
-        raise SpeechFailure('SCENE_SPEECH_VOICE_UNAVAILABLE', 'Choose Chatterbox Default for this character.')
+        reference = local_voice_reference(request, voices_dir)
+        if reference is None:
+            raise SpeechFailure('SCENE_SPEECH_VOICE_UNAVAILABLE', 'Choose Chatterbox Turbo or an approved local cloned voice.')
     if type(request.get('rate')) not in (int, float) or request['rate'] != 1:
         raise SpeechFailure('SCENE_SPEECH_RATE_INVALID', 'Chatterbox Default currently uses its natural speaking rate (1×).')
     # Validate the entire turn before producing partial speech.
@@ -147,8 +183,9 @@ def quiet_runtime():
                 os.close(original)
 
 
-def speak(directory, request):
-    lines = validate_request(request)
+def speak(directory, request, voices_dir=None):
+    lines = validate_request(request, voices_dir)
+    reference = local_voice_reference(request, voices_dir)
     if not verify(directory, full=True):
         raise SpeechFailure('SCENE_SPEECH_TURBO_UNAVAILABLE', 'Download Chatterbox in Scene Partner setup before previewing or rehearsing.')
     os.environ.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1', PYTORCH_ENABLE_MPS_FALLBACK='0')
@@ -166,11 +203,12 @@ def speak(directory, request):
         for line in lines:
             tokens = model.tokenizer(punc_norm(line), truncation=False)['input_ids']
             if len(tokens) > 128:
-                raise SpeechFailure('SCENE_SPEECH_TEXT_TOO_LONG', 'A passage is too complex for Chatterbox. Shorten this turn or choose a system voice.')
+                raise SpeechFailure('SCENE_SPEECH_TEXT_TOO_LONG', 'A passage is too complex for Chatterbox. Shorten this turn.')
         try:
             with torch.inference_mode():
                 for line in lines:
-                    audio = model.generate(line)  # Official Perth watermark stays enabled.
+                    kwargs = {'audio_prompt_path': str(reference)} if reference is not None else {}
+                    audio = model.generate(line, **kwargs)  # Official Perth watermark stays enabled.
                     if not 0 < audio.numel() <= model.sr * 30 or audio.numel() * audio.element_size() > 8 * 1024 * 1024:
                         raise SpeechFailure('SCENE_SPEECH_TURBO_AUDIO', 'Chatterbox generated an oversized passage. Shorten this turn and retry.')
                     if not bool(torch.isfinite(audio).all()):
@@ -186,7 +224,7 @@ def speak(directory, request):
 CACHE_VERSION = 'chatterbox-cache-v1:' + LOCK['revision']
 
 
-def validate_batch(request):
+def validate_batch(request, voices_dir=None):
     if not isinstance(request, dict) or not isinstance(request.get('entries'), list) or not 1 <= len(request['entries']) <= 2000:
         raise SpeechFailure('SCRIPT_AUDIO_INVALID', 'Choose between 1 and 2000 spoken passages.')
     if not isinstance(request.get('scriptId'), str) or not 1 <= len(request['scriptId']) <= 200:
@@ -197,7 +235,7 @@ def validate_batch(request):
     ids = set()
     total = 0
     for entry in request['entries']:
-        validate_request(entry)
+        validate_request(entry, voices_dir)
         if not isinstance(entry.get('id'), str) or not 1 <= len(entry['id']) <= 200 or entry['id'] in ids:
             raise SpeechFailure('SCRIPT_AUDIO_INVALID', 'Every passage needs a unique identifier.')
         ids.add(entry['id'])
@@ -208,7 +246,7 @@ def validate_batch(request):
 
 
 def entry_key(entry):
-    content = [CACHE_VERSION, entry['text'], entry['voiceId'], entry['rate']]
+    content = [CACHE_VERSION, entry['text'], entry['voiceId'], entry.get('voiceRevision'), entry['rate']]
     return hashlib.sha256(json.dumps(content, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -227,8 +265,8 @@ def wav_duration(path):
         return None
 
 
-def cache_status(root, request):
-    validate_batch(request)
+def cache_status(root, request, voices_dir=None):
+    validate_batch(request, voices_dir)
     folder = root / hashlib.sha256(request['scriptId'].encode()).hexdigest()
     entries = []
     for entry in request['entries']:
@@ -248,7 +286,7 @@ def atomic_json(path, value):
     temporary.replace(path)
 
 
-def render_batch(directory, entries, folder):
+def render_batch(directory, entries, folder, voices_dir=None):
     # Load the model once for every missing passage in this save, never during playback.
     if not verify(directory, full=True):
         raise SpeechFailure('SCENE_SPEECH_TURBO_UNAVAILABLE', 'Download Chatterbox before generating audio.')
@@ -274,10 +312,12 @@ def render_batch(directory, entries, folder):
                 output.setsampwidth(2)
                 output.setframerate(model.sr)
                 total = 0
-                for line in validate_request(entry):
+                lines, reference = validate_request(entry, voices_dir)
+                for line in lines:
                     if len(model.tokenizer(punc_norm(line), truncation=False)['input_ids']) > 128:
                         raise SpeechFailure('SCENE_SPEECH_TEXT_TOO_LONG', 'Shorten this passage before generating audio.')
-                    audio = model.generate(line)  # Keep the official Perth watermark.
+                    kwargs = {'audio_prompt_path': str(reference)} if reference is not None else {}
+                    audio = model.generate(line, **kwargs)  # Keep the official Perth watermark.
                     if not 0 < audio.numel() <= model.sr * 30 or not bool(torch.isfinite(audio).all()):
                         raise SpeechFailure('SCENE_SPEECH_TURBO_AUDIO', 'Could not generate clean audio. Retry this passage.')
                     pcm = (audio.detach().cpu().flatten().clamp(-1, 1).numpy() * 32767).astype('<i2').tobytes()
@@ -295,18 +335,22 @@ def render_batch(directory, entries, folder):
             temporary.unlink(missing_ok=True)
 
 
-def generate_batch(directory, root, request, renderer=render_batch):
-    status = cache_status(root, request)
+def generate_batch(directory, root, request, renderer=render_batch, voices_dir=None):
+    status = cache_status(root, request, voices_dir)
     folder = root / hashlib.sha256(request['scriptId'].encode()).hexdigest()
     if root.is_symlink() or folder.is_symlink():
         raise SpeechFailure('SCRIPT_AUDIO_INVALID', 'Invalid script audio folder.')
     folder.mkdir(parents=True, exist_ok=True)
     missing = [entry for entry in request['entries'] if wav_duration(folder / (entry_key(entry) + '.wav')) is None]
     completed = len(request['entries']) - len(missing)
-    for _ in renderer(directory, missing, folder) if missing else []:
+    if renderer is render_batch:
+        rendered = renderer(directory, missing, folder, voices_dir=voices_dir) if missing else []
+    else:
+        rendered = renderer(directory, missing, folder) if missing else []
+    for _ in rendered:
         completed += 1
         emit({'status': 'generating', 'scriptId': request['scriptId'], 'revision': request['revision'], 'completed': completed, 'total': len(request['entries'])})
-    status = cache_status(root, request)
+    status = cache_status(root, request, voices_dir)
     if status['missing']:
         raise SpeechFailure('SCRIPT_AUDIO_INCOMPLETE', 'Some passages are missing. Generate audio again.')
     # Only a complete revision becomes playable; interruption retains previous revision.
@@ -321,6 +365,7 @@ def main():
         mode.add_argument('--' + name, action='store_true')
     parser.add_argument('--model-dir', type=Path, required=True)
     parser.add_argument('--cache-dir', type=Path)
+    parser.add_argument('--voices-dir', type=Path)
     args = parser.parse_args()
     if args.status:
         emit({'status': 'ready' if verify(args.model_dir) else 'not-installed', 'totalBytes': TOTAL_BYTES, 'voice': LOCK['voice']})
@@ -342,11 +387,11 @@ def main():
             raise SpeechFailure('SCENE_SPEECH_TEXT_TOO_LONG', 'This speech request is too large.')
         request = json.loads(raw)
         if args.generate_batch:
-            generate_batch(args.model_dir, args.cache_dir, request)
+            generate_batch(args.model_dir, args.cache_dir, request, voices_dir=args.voices_dir)
         elif args.cache_status:
-            emit(cache_status(args.cache_dir, request))
+            emit(cache_status(args.cache_dir, request, args.voices_dir))
         else:
-            speak(args.model_dir, request)
+            speak(args.model_dir, request, args.voices_dir)
 
 
 if __name__ == '__main__':

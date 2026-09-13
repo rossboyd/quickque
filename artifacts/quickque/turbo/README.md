@@ -8,15 +8,33 @@ Saved script audio and MP4 export are Quickque paid features; the model itself r
 
 ## User flow
 
-Scene Partner setup → expand an AI Partner character → Voice Engine →
-**Chatterbox Turbo (Free · Local)** → **Download Chatterbox · 2.99 GB**.
-When installed, preview **Chatterbox Default**. Paid users generate saved audio
+Scene Partner setup → expand an AI Partner character → **Chatterbox Turbo
+(Free · Local)** → **Download Chatterbox · 2.99 GB**. When installed, preview
+**Chatterbox Default** or a voice recorded in Quickque. Paid users generate saved audio
 before rehearsing; the performance editor schedules generation after saved edits.
 Presentations offer an optional **Generate audio** action.
-Each character keeps its assignment and colour. This version offers one
-English voice shared by all Chatterbox characters, at its natural rate (1×).
-Existing system-voice assignments are preserved until the user changes them.
-The browser can edit/save the assignment; synthesis runs in the Mac app.
+Each character keeps its assignment and colour. Turbo uses its natural rate (1×).
+The browser can edit/save the assignment; synthesis and voice recording run in
+the Mac app. Existing system-voice assignments are not synthesized or migrated
+to another engine; they must be reassigned to Turbo or a local recording.
+
+## Local cloned voices
+
+The desktop app can record one clean, mono 16-bit PCM sample between 5 and 10
+seconds. Recording is a separate lifecycle from Flow capture: the user must
+grant microphone access, review/retry the sample, and confirm permission to use
+the voice before it is committed. A complete recording and its metadata are
+atomically committed beneath `cloned-voices-v1/<voice-id>` in the app-private
+data directory. Metadata includes a revision and SHA-256 digest; every preview
+or generation verifies both before passing the recording to Turbo.
+
+Voice references are stable `chatterbox-local:<voice-id>` identities. Audio and
+conditioning data never enter script JSON or backups. Renaming increments
+metadata revision; re-recording increments revision and invalidates generated
+audio keys; deleting a voice does not silently reassign characters or
+narrators, which instead report a missing local reference until reassigned.
+The worker accepts only IDs confined beneath the app-provided voices directory,
+and requires consent, revision, duration, format, and digest validation.
 
 The download is explicit and cancellable. Model files and default conditioning
 are pinned by SHA-256 and size in `model-lock.json`. No extra decoder or arbitrary
@@ -67,8 +85,8 @@ splitting without dropping words, download cancellation and partial-file safety.
 Scene adapter tests verify native engine routing and browser rejection; library
 and browser tests cover setup validation and persistence of the assignment.
 
-The existing native child-process stop barrier covers Turbo as well as system
-speech: stop kills/reaps the worker before microphone following can resume.
+The existing native child-process stop barrier covers Turbo playback: stop
+kills/reaps the worker before microphone following can resume.
 The worker is onedir (no extraction subprocess). Saved audio generation verifies
 and loads the model once per batch, generates missing passages and atomically
 commits a complete revision. Keys include model/cache version, text, voice and

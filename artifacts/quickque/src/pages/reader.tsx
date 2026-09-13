@@ -263,7 +263,9 @@ export default function Reader() {
   const sceneMyRoleIds = actor?.myRoleIds ?? [];
   const voiceForCharacter = useCallback((characterId: string): SceneVoice | null => {
     const saved = characters.find(character => character.id === characterId)?.voice;
-    return saved?.voiceId ? saved : null;
+    return saved?.voiceId && saved.engine === 'turbo'
+      ? { engine: 'turbo', voiceId: saved.voiceId, rate: saved.rate, voiceRevision: saved.voiceRevision }
+      : null;
   }, [characters]);
   const sceneVoiceSignature = useMemo(
     () => JSON.stringify(characters.map(character => [

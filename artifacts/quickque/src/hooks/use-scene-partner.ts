@@ -3,7 +3,6 @@ import type { Script } from '@/lib/types';
 import { audioRequest } from '@/lib/script-audio-model';
 import { PreparedScriptAudio } from '@/lib/script-audio';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createSceneSpeech } from '@/lib/scene-speech';
 import {
   SceneLifecycle,
   type ScenePhase,
@@ -65,7 +64,6 @@ export function useScenePartner(args: UseScenePartnerArgs): ScenePartner {
 
   useEffect(() => {
     actionGeneration.current++;
-    const systemSpeech = createSceneSpeech();
     let cached: PreparedScriptAudio | null = null;
     let disposed = false;
     const hasTurbo = args.enabled && args.turns.some(turn => turn.characterId && !args.myRoleIds.includes(turn.characterId) && voiceRef.current(turn.characterId)?.engine === 'turbo');
@@ -79,12 +77,12 @@ export function useScenePartner(args: UseScenePartnerArgs): ScenePartner {
     void preparation.catch(() => {});
     const speech: SceneSpeaker = {
       speak: async (text, voice, signal) => {
-        if (voice.engine !== 'turbo') return systemSpeech.speak(text, voice, signal);
+        if (voice.engine !== 'turbo') throw new Error('Chatterbox Turbo is the only Quickque speech engine.');
         await preparation;
         if (!cached) throw new Error('Generate saved AI audio in Edit before rehearsing.');
         return cached.speak(text, voice, signal);
       },
-      stop: async () => { await cached?.stop(); await systemSpeech.stop(); },
+      stop: async () => { await cached?.stop(); },
     };
     if (!args.enabled) {
       lifecycleRef.current = null;

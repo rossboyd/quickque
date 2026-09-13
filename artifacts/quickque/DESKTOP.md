@@ -92,22 +92,18 @@ does not include the Replit development plugins. The app bundle loads packaged
 assets only; the desktop CSP does not permit arbitrary network or remote font
 loading.
 
-## Scene-partner system speech
+## Scene-partner Chatterbox speech
 
-Scene-partner playback uses a separate `quickque-speech` Swift sidecar backed by
-`AVSpeechSynthesizer`; it does not call `/usr/bin/say`, start Flow, request
-microphone access, require Apple SpeechAnalyzer assets, create generated-audio
-files, or use a network service. The sidecar lists the exact identifiers of
-installed macOS voices and receives an exact selected identifier for each turn.
-An unavailable saved voice fails visibly rather than selecting a name, locale,
-or default-voice substitute. The browser preview similarly offers only voices
-whose `localService` is true; no local browser voice means manual/silent preview.
-Turbo deliberately reports unavailable until its separate validation and
-packaging work is complete.
+Scene-partner playback uses the bundled Chatterbox Turbo worker. It does not
+call `/usr/bin/say`, use `AVSpeechSynthesizer`, start Flow, or substitute a
+browser/system voice. On Apple Silicon the worker accepts the pinned default
+conditioning or an approved local recording from the app-private cloned-voice
+library. Missing Turbo setup, missing recordings, and integrity failures are
+reported visibly so a character must be reassigned or repaired.
 
-The Rust bridge runs one isolated synthesizer helper per active turn. Starting a
-new turn, pausing/leaving the reader through `stop`, an abort signal, and app
-exit all terminate the active helper before another turn can start. The helper
+The Rust bridge runs one isolated Turbo worker per active turn. Starting a new
+turn, pausing/leaving the reader through `stop`, an abort signal, and app exit
+all terminate the active worker before another turn can start. The worker
 has a generous per-turn safety deadline, and stale helper completion cannot
 complete a later turn. The helper receives dialogue through stdin, returns only
 a fixed completion/error shape through stdout, and does not log dialogue.

@@ -34,13 +34,10 @@ cd "$ROOT/native"
 xcrun --sdk macosx swift test
 xcrun --sdk macosx swift test -c release
 xcrun --sdk macosx swift build -c release --arch arm64 --product quickque-flow
-xcrun --sdk macosx swift build -c release --arch arm64 --product quickque-speech
 xcrun --sdk macosx swift build -c release --arch arm64 --product quickque-audio-export
 
 mkdir -p "$ROOT/src-tauri/binaries"
 cp ".build/arm64-apple-macosx/release/quickque-flow" \
   "$ROOT/src-tauri/binaries/quickque-flow-aarch64-apple-darwin"
-cp ".build/arm64-apple-macosx/release/quickque-speech" \
-  "$ROOT/src-tauri/binaries/quickque-speech-aarch64-apple-darwin"
 cp ".build/arm64-apple-macosx/release/quickque-audio-export" \
   "$ROOT/src-tauri/binaries/quickque-audio-export-aarch64-apple-darwin"

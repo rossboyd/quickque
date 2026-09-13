@@ -41,6 +41,7 @@ pub fn command(app: &AppHandle) -> Result<Command, String> {
             .map_err(|_| "Could not locate Quickque data.")?
             .join("chatterbox-turbo-v1"),
     );
+    command.arg("--voices-dir").arg(crate::voices::root(app)?);
     command
         .stdin(Stdio::null())
         .stderr(Stdio::null())

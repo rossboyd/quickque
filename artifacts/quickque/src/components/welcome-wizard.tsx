@@ -7,6 +7,7 @@ import { useLocalFlow } from '@/hooks/use-local-flow';
 import { tokenize } from '@/lib/flow/tokenize';
 import { BrandMark } from '@/components/brand-mark';
 import { ChatterboxSetup } from '@/components/chatterbox-setup';
+import { VoiceLibraryPanel } from '@/components/voice-library';
 import {
   Play,
   FolderOpen, Mic, BookOpen, Keyboard, X, Volume2,
@@ -17,6 +18,12 @@ export function WelcomeWizard() {
   const store = useStore();
   const profile = store.profile || { name: '', onboardingComplete: false };
   const { updateProfile, libraryDirectory, chooseLibraryDirectory, scripts, createScript, setActiveScriptId } = store;
+  const referencedVoiceIds = scripts.flatMap(script => [
+    ...(script.narratorVoice?.voiceId ? [script.narratorVoice.voiceId] : []),
+    ...(script.actor?.characters.flatMap(character =>
+      character.voice.voiceId ? [character.voice.voiceId] : [],
+    ) ?? []),
+  ]);
 
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState(0);
@@ -260,6 +267,12 @@ export function WelcomeWizard() {
                     </p>
                   </div>
                   <ChatterboxSetup />
+                   {isDesktop() && (
+                     <div className="border-t border-border pt-4">
+                       <p className="mb-3 text-sm font-medium">Create your own narrator or Scene Partner voice</p>
+                       <VoiceLibraryPanel referencedVoiceIds={referencedVoiceIds} />
+                     </div>
+                   )}
                   <button
                     type="button"
                     onClick={() => setStep(4)}

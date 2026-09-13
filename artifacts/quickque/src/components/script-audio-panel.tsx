@@ -6,8 +6,11 @@ import { getScriptPurpose } from '@/lib/script-purpose';
 import { audioRequest, scriptAudioEntries, DEFAULT_AUDIO_VOICE } from '@/lib/script-audio-model';
 import { AUDIO_CHANGED, AUDIO_JOB_CHANGED, audioJobs, audioEntitlement, audioStatus, generateAudio, cancelAudioGeneration, deleteAudio, exportAudio, PreparedScriptAudio } from '@/lib/script-audio';
 import { isDesktop } from '@/lib/desktop';
+import { createVoiceLibrary, type ClonedVoice } from '@/lib/voice-library';
+import { useStore } from '@/lib/store';
 
 export function ScriptAudioPanel({ script }: { script: Script }) {
+  const { updateScript } = useStore();
   const licence = useDebugLicence();
   const [paid, setPaid] = useState(false);
   const [message, setMessage] = useState('Checking saved audio…');
@@ -18,12 +21,18 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
   const operationId = useRef(0);
   const revisionRef = useRef('');
   const [playing, setPlaying] = useState(false);
+  const [voices, setVoices] = useState<ClonedVoice[]>([]);
+  const voiceLibrary = useRef(createVoiceLibrary());
   const player = useRef<PreparedScriptAudio | null>(null);
   const aborter = useRef<AbortController | null>(null);
   const version = JSON.stringify([script.id, scriptAudioEntries(script), licence.licensed]);
   const current = useRef(version);
   current.current = version;
   const performance = getScriptPurpose(script) === 'performance';
+  useEffect(() => {
+    if (!isDesktop()) return;
+    void voiceLibrary.current.list().then(setVoices).catch(() => setVoices([]));
+  }, [script.id]);
 
   useEffect(() => {
     let live = true;
@@ -101,7 +110,7 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
       await prepared.prepare();
       if (!valid()) return;
       setMessage('Playing saved audio…');
-      for (const entry of request.entries) await prepared.speak(entry.text, { engine: 'turbo', voiceId: entry.voiceId || DEFAULT_AUDIO_VOICE, rate: entry.rate }, controller.signal);
+       for (const entry of request.entries) await prepared.speak(entry.text, { engine: 'turbo', voiceId: entry.voiceId || DEFAULT_AUDIO_VOICE, rate: entry.rate, voiceRevision: entry.voiceRevision }, controller.signal);
       if (valid()) setMessage('Finished listening.');
     } finally {
       await prepared.dispose();
@@ -112,7 +121,22 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
   return <details className="rounded-lg border border-border px-4 py-3">
     <summary className="cursor-pointer text-sm font-medium">AI rehearsal audio <span className="ml-2 text-xs text-muted-foreground">Paid feature</span></summary>
     <div className="mt-3 space-y-3 text-sm">
-      <p className="text-muted-foreground">{performance ? 'Chatterbox AI Partner lines are prepared after saved edits. In Person lines and notes are left silent.' : 'Optional: generate a spoken version of this script to learn it by listening. Uses Chatterbox Default, not a clone of your voice.'}</p>
+      <p className="text-muted-foreground">{performance ? 'Chatterbox AI Partner lines are prepared after saved edits. In Person lines and notes are left silent.' : 'Optional: generate a spoken version of this script to learn it by listening.'}</p>
+      {!performance && <div className="space-y-1">
+         <label htmlFor={`narrator-voice-${script.id}`} className="text-xs font-medium">Narrator voice</label>
+         {isDesktop() ? <select id={`narrator-voice-${script.id}`} data-testid="select-narrator-voice" value={script.narratorVoice?.voiceId ?? ''} onChange={event => {
+           const voice = voices.find(item => item.referenceId === event.target.value);
+           updateScript(script.id, {
+             narratorVoice: voice
+               ? { engine: 'turbo', voiceId: voice.referenceId, rate: 1, voiceRevision: voice.revision }
+               : null,
+           });
+         }} className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs">
+           <option value="">Chatterbox Default</option>
+           {script.narratorVoice?.voiceId && !voices.some(voice => voice.referenceId === script.narratorVoice?.voiceId) && <option value={script.narratorVoice.voiceId}>Saved voice unavailable — choose another</option>}
+           {voices.map(voice => <option key={voice.id} value={voice.referenceId}>{voice.name} (revision {voice.revision})</option>)}
+         </select> : <p className="text-xs text-muted-foreground" data-testid="status-narrator-desktop-only">Narrator voices require the Quickque Mac desktop app. Browser speech is not used.</p>}
+      </div>}
       <p className="text-xs text-muted-foreground">Included with £2.50/month or £25 lifetime. Audio is stored with this script’s ID on this Mac; JSON backups do not include audio.</p>
       <p role="status" className="text-xs">{message}</p>
       <div className="flex flex-wrap gap-2">

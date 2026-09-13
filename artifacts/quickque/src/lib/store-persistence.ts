@@ -15,9 +15,11 @@ import {
   cloneActor,
   cloneScriptData,
   isValidActor,
+  isValidActorVoice,
   MAX_ACTOR_ID_LENGTH,
   MAX_SECTION_NOTES_LENGTH,
   normalizeActorSectionReferences,
+  migrateActorVoices,
 } from './actor-model.ts';
 
 export const QUICKQUE_SCRIPTS_KEY = 'quickque_scripts';
@@ -130,6 +132,9 @@ function isValidScriptFields(value: unknown): value is Omit<Script, 'presentatio
   if (!isValidId(value.id)) return false;
   if (!isBoundedString(value.title, MAX_TITLE_LENGTH)) return false;
   if (value.actor !== undefined && !isValidActor(value.actor)) return false;
+  if (value.narratorVoice !== undefined &&
+    value.narratorVoice !== null &&
+    !isValidActorVoice(value.narratorVoice)) return false;
   if (!isValidTimestamp(value.createdAt) || !isValidTimestamp(value.updatedAt)) {
     return false;
   }
@@ -180,7 +185,7 @@ function normalizeScriptPresentation(
   return {
     ...cloned,
     sections: normalizeActorSectionReferences(value.actor, cloned.sections),
-    ...(value.actor ? { actor: cloneActor(value.actor) } : {}),
+    ...(value.actor ? { actor: migrateActorVoices(cloneActor(value.actor)) } : {}),
     presentation: normalizePresentation(value.presentation, fallback),
   };
 }

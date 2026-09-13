@@ -9,9 +9,16 @@ export type ScriptSection = {
 };
 
 export type ActorVoice = {
+  /**
+   * `system` is retained only so old libraries can be read and migrated. New
+   * authoring never creates this value; missing system voices are explicit
+   * rather than silently replaced with a different voice.
+   */
   engine: 'system' | 'turbo';
   voiceId: string;
   rate: number;
+  /** Revision of the local cloned reference used by Turbo. */
+  voiceRevision?: number;
 };
 
 export type ActorCharacter = {
@@ -52,6 +59,11 @@ export type Script = {
   presentation?: PresentationPreferences;
   /** Optional actor/self-tape scene-partner configuration. */
   actor?: ActorMode;
+  /**
+   * Optional local narrator assignment. This contains only stable metadata;
+   * recording bytes and conditioning data live in app-private desktop storage.
+   */
+  narratorVoice?: ActorVoice | null;
 };
 
 export type Settings = {
