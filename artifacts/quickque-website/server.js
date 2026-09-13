@@ -255,11 +255,6 @@ export async function createServer(
   });
   app.get(`${baseRoute}/api/license` || '/api/license', (req, res) => sendBody(res, siteData.license, 200, 'text/plain; charset=utf-8'));
 
-  const webhookRoute = `${baseRoute}/api/stripe/webhook` || '/api/stripe/webhook';
-  app.post(webhookRoute, (_req, res) =>
-    sendJson(res, { error: 'Payment webhooks are disabled while dummy checkout is active.' }, 410)
-  );
-
   app.use(express.json({ limit: '16kb' }));
   const commerceStatusRoute = `${baseRoute}/api/commerce/status` || '/api/commerce/status';
   const commerceCheckoutRoute = `${baseRoute}/api/commerce/checkout` || '/api/commerce/checkout';

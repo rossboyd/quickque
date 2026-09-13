@@ -5,7 +5,6 @@
 - [pnpm build approvals](pnpm-build-approvals.md) — use the narrow allowBuilds map across pnpm 10.26+ and 11; legacy approval settings were removed in 11.
 - [Native library compatibility](native-library-compatibility.md) — reconcile chosen-folder scripts with browser metadata; recovery must block queued autosaves.
 - [React SSR router compatibility](react-ssr-router.md) — Wouter's memory-location hook can fail React 19 SSR despite passing typechecks; verify actual HTML responses.
-- [Stripe bootstrap compatibility](stripe-bootstrap-compatibility.md) — credential aliases, awaited catalogue sync, and managed webhook secret selection differ from generic templates.
 - [Reader reflow anchoring](reader-reflow-anchoring.md) — capture the reading word before requesting font changes; parent layout cleanup can already see the new DOM.
 - [Native test exit status](native-test-exit-status.md) — a passing XCTest summary can precede command-entry-point failure; check the entire Swift invocation.
 - [Local cloned voice ownership](local-cloned-voice-ownership.md) — Quickque voices are user-created, device-local assets; onboarding uses a rehearsal-style reference recording.

@@ -49,7 +49,7 @@ Follow; turning it off stops paid audio and restores the session's used allowanc
 The saved native setting controls the app; browser preview keeps a separate local
 simulation and still cannot generate Mac audio. This is not licence verification
 and creates no purchase. The old environment-variable override is replaced.
-Stripe remains selected for later, with dummy checkout only for now.
+No payment provider is configured; checkout remains dummy.
 
 ## Verification
 

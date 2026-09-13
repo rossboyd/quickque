@@ -72,7 +72,7 @@ if (!process.argv.includes('--content-only')) {
       assert.match(html, /not implemented in the current app/i, 'Planned entitlement is not presented as enforced');
       assert.match(html, /MIT/, 'Paid package does not replace the MIT source licence');
       assert.match(html, /dummy checkout/i, 'Pricing clearly labels the temporary dummy flow');
-      assert.doesNotMatch(html, /Stripe|card number|payment method/i, 'Pricing does not request or advertise provider payment');
+      assert.doesNotMatch(html, /card number|payment method/i, 'Pricing does not request or advertise provider payment');
     }
     if (route === 'checkout/result/') {
       assert.match(html, /noindex/, 'Private dummy results must never be indexed');

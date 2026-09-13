@@ -29,11 +29,8 @@ optional packaged distribution, not for permission to use the MIT-licensed
 source.
 
 There is no verified release or completed native Mac validation yet, so live
-purchases remain gated. A sandbox preview checkout creates neither a license
-entitlement nor a download. If checkout is enabled, it sends billing and
-payment data to [Stripe](https://stripe.com/privacy); the website backend
-processes payment references and guest-checkout verification, not Quickque
-scripts or audio. See the
+purchases remain gated. The dummy preview checkout creates neither a licence,
+entitlement nor a download and no payment provider is configured. See the
 [commerce runbook](artifacts/quickque-website/docs/COMMERCE.md) for the
 current checkout boundary.
 

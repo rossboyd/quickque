@@ -1,8 +1,8 @@
 # Release work
 
-Stripe is selected, but checkout must remain dummy until the owner changes that
-instruction. Do not activate provider calls, issue licences or advertise payment
-as available. Settings → Debug → Licensed mode now simulates paid access in
+No payment provider is configured and checkout must remain dummy until the owner
+changes that instruction. Do not activate provider calls, issue licences or
+advertise payment as available. Settings → Debug → Licensed mode simulates paid access in
 all test builds, including the packaged Mac app; it defaults to Unlicensed.
 
 ## Free Voice Follow allowance

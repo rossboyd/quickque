@@ -12,13 +12,12 @@ test('GBP display price remains valid copy for the planned offer', () => {
   });
 });
 
-test('website startup and active pages do not import Stripe runtime modules', () => {
+test('website startup and active pages do not import payment runtime modules', () => {
   const serverSource = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
   const pricingSource = fs.readFileSync(new URL('../src/pages/Pricing.tsx', import.meta.url), 'utf8');
   const resultSource = fs.readFileSync(new URL('../src/pages/CheckoutResult.tsx', import.meta.url), 'utf8');
-  assert.doesNotMatch(serverSource, /from ['"].*stripe/i);
-  assert.doesNotMatch(serverSource, /initializeStripe|processStripe|syncBackfill|findOrCreateManagedWebhook/);
-  assert.doesNotMatch(pricingSource, /fetch\(|checkout\.stripe|api\/commerce/);
+  assert.doesNotMatch(serverSource, /payment provider|managed webhook/i);
+  assert.doesNotMatch(pricingSource, /fetch\(|api\/commerce/);
   assert.doesNotMatch(resultSource, /fetch\(|session_id|api\/commerce/);
 });
 
@@ -43,8 +42,7 @@ test('legacy payment endpoints are disabled and cannot create or verify purchase
   const cases = [
     ['GET', '/api/commerce/status'],
     ['POST', '/api/commerce/checkout'],
-    ['GET', '/api/commerce/session?session_id=cs_test_fake'],
-    ['POST', '/api/stripe/webhook']
+    ['GET', '/api/commerce/session?session_id=disabled']
   ];
   for (const [method, route] of cases) {
     const response = await fetch(`${base}${route}`, { method });

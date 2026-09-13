@@ -53,10 +53,9 @@ collects no billing/contact/payment information, and creates no subscription,
 order, receipt, licence, entitlement or download. No payment provider is called.
 There is no verified prebuilt Mac release currently offered by this website.
 
-Startup must not initialize the retained Stripe runtime, run migrations,
-register webhooks, sync a catalogue, or fetch provider credentials. Legacy
-commerce and webhook endpoints return HTTP 410. Existing inactive one-time
-Stripe code must not be treated as an implementation of the new monthly plan.
+The workspace contains no payment-provider runtime or connection requirement.
+Disabled legacy commerce endpoints return HTTP 410 and cannot create or verify
+purchases.
 
 ## Remaining implementation before sales
 
@@ -82,5 +81,5 @@ audio is generated only by explicit request. Matching revisions are required for
 rehearsal and export. Exported MP4s remain user files after subscription expiry.
 See the app's `docs/SCRIPT_AUDIO.md` for implementation and Mac verification.
 
-Stripe is the selected future payment provider. The owner explicitly requested
-that checkout remain dummy for now; do not activate Stripe or issue paid licences.
+No future payment provider is selected. Checkout remains dummy until the owner
+chooses and deliberately configures a provider; do not issue paid licences.

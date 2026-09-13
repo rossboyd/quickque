@@ -12,8 +12,7 @@ const base = new URL(
 for (const [method, route] of [
   ['GET', 'commerce/status'],
   ['POST', 'commerce/checkout'],
-  ['GET', 'commerce/session?session_id=cs_test_disabled'],
-  ['POST', 'stripe/webhook']
+  ['GET', 'commerce/session?session_id=disabled']
 ]) {
   const response = await fetch(new URL(route, base), { method });
   assert.equal(response.status, 410, `${method} ${route} must stay disabled`);
