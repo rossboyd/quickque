@@ -56,7 +56,7 @@ struct ActiveRecording {
     buffer: Vec<u8>,
 }
 
-fn name(value: &str) -> Result<(), String> {
+fn validate_name(value: &str) -> Result<(), String> {
     let trimmed = value.trim();
     if trimmed.is_empty()
         || trimmed.len() > MAX_NAME_BYTES
@@ -245,7 +245,7 @@ fn write_voice(
     consent: bool,
     bytes: &[u8],
 ) -> Result<VoiceMetadata, String> {
-    name(display_name)?;
+    validate_name(display_name)?;
     if !consent {
         return Err(
             "VOICE_CONSENT_REQUIRED: Confirm you have permission to use this voice.".into(),
@@ -365,7 +365,7 @@ pub fn voice_library_rename(
     voice_id: String,
     name: String,
 ) -> Result<VoiceMetadata, String> {
-    name(&name)?;
+    validate_name(&name)?;
     let folder = folder(&app, &voice_id)?;
     let mut voice = metadata(&folder.join("metadata.json"))?;
     voice.name = name.trim().to_owned();
@@ -446,7 +446,7 @@ pub fn voice_recording_begin(
     name: String,
     consent_confirmed: bool,
 ) -> Result<Value, String> {
-    name(&name)?;
+    validate_name(&name)?;
     if !consent_confirmed {
         return Err(
             "VOICE_CONSENT_REQUIRED: Confirm you have permission to use this voice.".into(),

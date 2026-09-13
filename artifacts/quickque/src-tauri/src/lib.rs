@@ -359,12 +359,14 @@ struct SceneSpeechHelperCompletion {
     status: String,
 }
 
+#[derive(Debug, Deserialize)]
 struct SceneSpeechHelperProgress {
     #[serde(rename = "type")]
     kind: String,
     char_start: usize,
     char_end: usize,
 }
+#[derive(Debug, Serialize)]
 struct SceneSpeechRequest<'a> {
     text: &'a str,
     voice_id: &'a str,
@@ -2116,6 +2118,7 @@ struct StderrSnapshot {
     truncated: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
 struct SceneSpeechProgressEvent {
     request_id: u64,
     char_start: usize,
