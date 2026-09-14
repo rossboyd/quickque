@@ -83,3 +83,18 @@ test('AI trial stops at the remaining audible time and presents real upgrade cho
   await upgrade.getByRole('button', { name: 'Continue with Free' }).click();
   await expect(upgrade).toHaveCount(0);
 });
+
+test('sidebar upgrade opens the existing licence choices', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem('quickque_profile', JSON.stringify({ name: 'Sam', onboardingComplete: true }));
+    localStorage.setItem('quickque-flow-setup-done', 'true');
+  });
+  await page.reload();
+  await page.getByRole('button', { name: /Quickque Free.*Unlock every feature.*Upgrade/ }).click();
+  const upgrade = page.getByRole('dialog', { name: 'Keep going with Quickque Pro' });
+  await expect(upgrade).toBeVisible();
+  await expect(upgrade.getByRole('button', { name: /Monthly/ })).toBeVisible();
+  await expect(upgrade.getByRole('button', { name: /Lifetime/ })).toBeVisible();
+});

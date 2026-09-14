@@ -44,6 +44,8 @@ import { useLocalFlow } from '@/hooks/use-local-flow';
 import { FlowSetupWizard } from '@/components/flow-setup-wizard';
 import { isDesktop } from '@/lib/desktop';
 import { ScriptPurposeIcon } from '@/components/script-purpose-icon';
+import { useLicence } from '@/lib/licence';
+import { UPGRADE_EVENT } from '@/components/upgrade-dialog';
 
 const SORT_LABELS: Record<SortMode, string> = {
   newest: 'Newest First',
@@ -55,6 +57,7 @@ const SORT_LABELS: Record<SortMode, string> = {
 
 export default function Library() {
   const store = useStore();
+  const { licensed, loaded: licenceLoaded } = useLicence();
   const { 
     scripts, activeScriptId, setActiveScriptId,
     settings,
@@ -562,7 +565,25 @@ export default function Library() {
           )}
         </div>
 
-        <div className="p-4 border-t border-sidebar-border mt-auto">
+        <div className="mt-auto space-y-3 border-t border-sidebar-border p-4">
+          {licenceLoaded && (licensed ? (
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-medium text-muted-foreground">Quickque</span>
+              <span aria-label="Quickque Pro licence active" className="rounded-full bg-primary/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">Pro</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event(UPGRADE_EVENT))}
+              className="flex w-full items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-left transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <span>
+                <span className="block text-sm font-medium">Quickque Free</span>
+                <span className="block text-xs text-muted-foreground">Unlock every feature</span>
+              </span>
+              <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground">Upgrade</span>
+            </button>
+          ))}
           <SettingsDialog />
         </div>
       </div>
