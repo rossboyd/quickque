@@ -18,7 +18,7 @@ import {
   Trash2, Copy, FileText, 
   Trash, AlertTriangle, MonitorPlay,
   FileUp, ArrowUpDown, Edit2, Code, ArrowUp, ArrowDown, ChevronDown,
-  RotateCcw, X, Play, Home,
+  RotateCcw, X, Play, Home, PanelLeftClose,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -43,6 +43,7 @@ import { tokenize } from '@/lib/flow/tokenize';
 import { useLocalFlow } from '@/hooks/use-local-flow';
 import { FlowSetupWizard } from '@/components/flow-setup-wizard';
 import { isDesktop } from '@/lib/desktop';
+import { ScriptPurposeIcon } from '@/components/script-purpose-icon';
 
 const SORT_LABELS: Record<SortMode, string> = {
   newest: 'Newest First',
@@ -67,7 +68,7 @@ export default function Library() {
   } = store;
   
   const [search, setSearch] = useState('');
-  const [libraryVisible, setLibraryVisible] = useState(true);
+  const [libraryVisible, setLibraryVisible] = useState(() => localStorage.getItem('quickque-library-visible') !== 'false');
   const [showCreate, setShowCreate] = useState(false);
   const [creatingSample, setCreatingSample] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -111,6 +112,9 @@ export default function Library() {
   latestScripts.current = scripts;
   useEffect(() => () => { playGeneration.current += 1; }, []);
   useEffect(() => { setViewMode(location === '/trash' ? 'trash' : 'library'); }, [location]);
+  useEffect(() => {
+    localStorage.setItem('quickque-library-visible', String(libraryVisible));
+  }, [libraryVisible]);
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -359,7 +363,15 @@ export default function Library() {
               <BrandMark className="w-6 h-5" />
               Quickque
             </h1>
-
+             {!isHome && <button
+               type="button"
+               onClick={() => setLibraryVisible(false)}
+               aria-label="Collapse library"
+               title="Collapse library"
+               className="hidden h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
+             >
+               <PanelLeftClose className="h-4 w-4" />
+             </button>}
           </div>
           {!isHome && <div className="flex flex-col gap-1.5">
             <button
@@ -532,8 +544,11 @@ export default function Library() {
                           {script.title || 'Untitled Script'}
                         </button>
                       )}
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {viewMode === 'trash' ? `Deleted ${itemInTrash ? new Date(itemInTrash.deletedAt).toLocaleDateString() : ''}` : `${isPerformance ? 'Performance' : 'Presentation'} · ${isPerformance ? `${script.sections.length} turns` : formatTime(timeSec)}`}
+                      <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        {viewMode === 'trash' ? <>Deleted {itemInTrash ? new Date(itemInTrash.deletedAt).toLocaleDateString() : ''}</> : <>
+                          <ScriptPurposeIcon purpose={isPerformance ? 'performance' : 'presentation'} className="h-3.5 w-3.5" />
+                          <span>{isPerformance ? 'Performance' : 'Presentation'} · {isPerformance ? `${script.sections.length} turns` : formatTime(timeSec)}</span>
+                        </>}
                       </p>
                     </div>
                   </div>
@@ -646,7 +661,10 @@ export default function Library() {
                       {editingId === script.id ? <input autoFocus aria-label="Rename script" maxLength={200} defaultValue={script.title} className="min-w-0 flex-1 rounded border border-border bg-transparent px-2 py-1" onBlur={event => { const title = event.target.value.trim(); if (title) updateScript(script.id, { title }); setEditingId(null); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') setEditingId(null); }} /> : <h2 className="min-w-0 pt-1 font-semibold"><button type="button" className="line-clamp-2 text-left hover:text-primary focus-visible:outline-primary" onClick={() => viewMode === 'library' && handleOpenScript(script.id)}>{script.title || 'Untitled Script'}</button></h2>}
                       {scriptMenu(script, idx)}
                     </div>
-                    <p className="text-xs text-muted-foreground">{performance ? 'Performance' : 'Presentation'} · {words} words · {formatTime(estimateTime(words))}</p>
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <ScriptPurposeIcon purpose={performance ? 'performance' : 'presentation'} />
+                      <span>{performance ? 'Performance' : 'Presentation'} · {words} words · {formatTime(estimateTime(words))}</span>
+                    </p>
                     <p className="text-xs text-muted-foreground">Updated {new Date(script.updatedAt).toLocaleDateString()}</p>
                   </div>
                   {viewMode === 'library' && <div className="grid grid-cols-2 gap-2 px-4 pb-4">

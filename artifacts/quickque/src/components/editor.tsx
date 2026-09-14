@@ -1,4 +1,5 @@
 import { ScriptAudioPanel } from './script-audio-panel';
+import { ScriptPurposeIcon } from './script-purpose-icon';
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { calculateWordCount, estimateTime, formatTime, generateId } from '@/lib/utils';
 import { Play, Plus, Trash, ChevronUp, ChevronDown, ChevronLeft, Users, PanelLeft, SplitSquareVertical } from 'lucide-react';
@@ -189,7 +190,7 @@ export function Editor({
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
-              <button type="button" onClick={onToggleLibrary} aria-label={libraryVisible ? 'Hide library' : 'Show library'} aria-expanded={libraryVisible} className="hidden md:inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"><PanelLeft className="h-4 w-4" /></button>
+              <button type="button" onClick={onToggleLibrary} title={libraryVisible ? 'Collapse library' : 'Show library'} aria-label={libraryVisible ? 'Collapse library' : 'Show library'} aria-expanded={libraryVisible} className="hidden md:inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"><PanelLeft className="h-4 w-4" /></button>
               <button type="button" aria-label="Back to workspace" onClick={onCloseMobile} className="hidden sm:inline text-sm text-muted-foreground hover:text-foreground">Workspace <span className="mx-2 opacity-40">/</span></button>
               <span className="truncate text-sm font-medium">{script.title || 'Untitled script'}</span>
             </div>
@@ -232,6 +233,8 @@ export function Editor({
                   aria-label="Script Title"
                 />
                  <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-1 md:mt-2 text-xs md:text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                  <ScriptPurposeIcon purpose={getScriptPurpose(script)} />
                   <select aria-label="Script type" value={getScriptPurpose(script)} onChange={event => {
                     const purpose = event.target.value as 'presentation' | 'performance';
                     onChange({ purpose, ...(purpose === 'performance' && !script.actor ? { actor: { enabled: true, characters: [], myRoleIds: [] } } : {}) });
@@ -240,6 +243,7 @@ export function Editor({
                     <option value="presentation">Presentation</option>
                     <option value="performance">Performance</option>
                   </select>
+                  </span>
                   <span>{totalWords} words</span>
                   <span className="hidden sm:inline">Estimated time: {formatTime(timeSec)}</span>
                   <span className="sm:hidden">~{formatTime(timeSec)}</span>

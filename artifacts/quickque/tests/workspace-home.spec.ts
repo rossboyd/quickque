@@ -28,6 +28,13 @@ for (const width of [390, 1440]) {
     await card.getByRole('button', { name: 'Edit All hands', exact: true }).click();
     await expect(page).toHaveURL(/\/edit$/);
     await expect(page.getByRole('textbox', { name: 'Script Title', exact: true })).toHaveValue('All hands');
+    if (width >= 768) {
+      await page.getByRole('button', { name: 'Collapse library', exact: true }).first().click();
+      await expect(page.getByRole('button', { name: 'Show library', exact: true })).toBeVisible();
+      await page.reload();
+      await expect(page.getByRole('button', { name: 'Show library', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Show library', exact: true }).click();
+    }
     await page.reload();
     await expect(page.getByRole('textbox', { name: 'Script Title', exact: true })).toHaveValue('All hands');
     await page.getByRole('button', { name: width < 768 ? 'Back to library' : 'Back to workspace', exact: true }).click();
