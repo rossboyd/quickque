@@ -10,6 +10,26 @@ import { isDesktop } from '@/lib/desktop';
 import { createVoiceLibrary, type ClonedVoice } from '@/lib/voice-library';
 import { useStore } from '@/lib/store';
 
+function remainingTime(job: AudioJob | null, now: number) {
+  if (!job || job.stage !== 'generation' || job.completed <= 0 || job.completed >= job.total) return null;
+  const samples = job.progressSamples ?? [];
+  const first = samples[0];
+  const last = samples.at(-1);
+  const startedAt = job.progressStartedAt;
+  if (!startedAt || !last) return null;
+  const completedDelta = first && last.completedWork > first.completedWork ? last.completedWork - first.completedWork : last.completedWork;
+  const elapsedMs = first && last.completedWork > first.completedWork ? last.at - first.at : last.at - startedAt;
+  if (completedDelta <= 0 || elapsedMs <= 0) return null;
+  const estimate = Math.ceil(((job.totalWork - job.completedWork) * elapsedMs) / completedDelta / 1000);
+  return Math.max(1, estimate - Math.max(0, Math.floor((now - last.at) / 1000)));
+}
+
+function friendlyTime(seconds: number) {
+  if (seconds < 60) return `About ${seconds} second${seconds === 1 ? '' : 's'} left`;
+  const minutes = Math.ceil(seconds / 60);
+  return `About ${minutes} minute${minutes === 1 ? '' : 's'} left`;
+}
+
 export function ScriptAudioPanel({ script }: { script: Script }) {
   const { updateScript } = useStore();
   const licence = useLicence();
@@ -130,13 +150,24 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
       if (valid()) setPlaying(false);
     }
   });
-  const button = 'rounded-md border border-border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50';
-  return <details className="rounded-lg border border-border px-4 py-3">
-    <summary className="cursor-pointer text-sm font-medium">AI rehearsal audio</summary>
-    <div className="mt-3 space-y-3 text-sm">
-      <p className="text-muted-foreground">{performance ? 'Chatterbox AI Partner lines are prepared after saved edits. In Person lines and notes are left silent.' : 'Optional: generate a spoken version of this script to learn it by listening.'}</p>
+  const estimate = remainingTime(job, now);
+  const total = job?.total ?? scriptAudioEntries(script).length;
+  const totalWork = job?.totalWork ?? total;
+  const completedWork = job?.completedWork ?? 0;
+  const progress = totalWork ? Math.round((completedWork / totalWork) * 100) : 0;
+  const button = 'rounded-xl border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40';
+  return <details className="group rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+      <span>
+        <span className="block text-base font-semibold">Rehearsal audio</span>
+        <span className="mt-0.5 block text-sm font-normal text-muted-foreground">Listen to your script and learn it anywhere.</span>
+      </span>
+      <span aria-hidden="true" className="text-xl text-muted-foreground transition-transform group-open:rotate-45">+</span>
+    </summary>
+    <div className="mt-5 space-y-4 text-sm">
+      {performance && <p className="text-muted-foreground">Quickque will speak your AI Partner’s lines. Your lines and notes stay silent.</p>}
       {!performance && <div className="space-y-1">
-         <label htmlFor={`narrator-voice-${script.id}`} className="text-xs font-medium">Narrator voice</label>
+         <label htmlFor={`narrator-voice-${script.id}`} className="text-sm font-medium">Choose a voice</label>
          {isDesktop() ? <select id={`narrator-voice-${script.id}`} data-testid="select-narrator-voice" value={script.narratorVoice?.voiceId ?? ''} onChange={event => {
            const voice = voices.find(item => item.referenceId === event.target.value);
            updateScript(script.id, {
@@ -144,33 +175,40 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
                ? { engine: 'turbo', voiceId: voice.referenceId, rate: 1, voiceRevision: voice.revision }
                : null,
            });
-         }} className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs">
-           <option value="">Chatterbox Default</option>
+          }} className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm">
+            <option value="">Quickque voice</option>
            {script.narratorVoice?.voiceId && !voices.some(voice => voice.referenceId === script.narratorVoice?.voiceId) && <option value={script.narratorVoice.voiceId}>Saved voice unavailable — choose another</option>}
            {voices.map(voice => <option key={voice.id} value={voice.referenceId}>{voice.name} (revision {voice.revision})</option>)}
          </select> : <p className="text-xs text-muted-foreground" data-testid="status-narrator-desktop-only">Narrator voices require the Quickque Mac desktop app. Browser speech is not used.</p>}
       </div>}
-      <p className="text-xs text-muted-foreground">Audio is stored with this script’s ID on this Mac; JSON backups do not include audio.</p>
-      {(generating || operation === 'generate') ? <div className="space-y-2" role="status" data-testid="audio-generation-progress">
-        <div className="flex justify-between gap-3 text-xs">
-          <span>{job?.stage === 'model_load' ? 'Loading Chatterbox model…' : job?.stage === 'voice_prepare' ? 'Preparing voice sample…' : job?.stage === 'generation' ? 'Generating speech…' : 'Preparing audio…'}</span>
-          <span>{Math.max(0, Math.floor((now - (job?.startedAt ?? now)) / 1000))}s elapsed</span>
+       {(generating || operation === 'generate') ? <div className="space-y-3 rounded-2xl bg-muted/60 p-4" role="status" data-testid="audio-generation-progress">
+         <div className="flex items-start justify-between gap-3">
+           <span>
+             <span className="block font-medium">{job?.stage === 'model_load' ? 'Getting ready…' : job?.stage === 'voice_prepare' ? 'Preparing the voice…' : job?.stage === 'generation' ? 'Creating your rehearsal audio…' : 'Getting ready…'}</span>
+             <span className="mt-1 block text-xs text-muted-foreground">{job?.stage === 'generation' ? (estimate ? friendlyTime(estimate) : 'Working out the time remaining…') : 'The first time may take a little longer.'}</span>
+           </span>
+           {job?.stage === 'generation' && <span className="shrink-0 text-sm font-medium">{progress}%</span>}
         </div>
-        <progress aria-label="Audio generation progress" className="h-2 w-full accent-primary" max={job?.total || 1} value={job?.stage === 'generation' ? job.completed : undefined} />
-        <p className="text-xs text-muted-foreground">{job?.completed ?? 0} of {job?.total ?? scriptAudioEntries(script).length} passages saved. Model loading and the first passage can take longer; progress advances when each passage is saved.</p>
-      </div> : <p role="status" className="text-xs">{message}</p>}
-      <details className="rounded border border-border p-2">
-        <summary className="cursor-pointer text-xs">Audio debug trace</summary>
-        <div className="mt-2"><FlowDebugPanel /></div>
-      </details>
+         <progress aria-label="Audio generation progress" className="h-2 w-full overflow-hidden rounded-full accent-primary" max={totalWork || 1} value={job?.stage === 'generation' ? completedWork : undefined} />
+         <button type="button" className="text-xs text-muted-foreground underline-offset-4 hover:underline" onClick={() => { void cancelAudioGeneration().catch(error => setMessage(String(error))); }}>Stop</button>
+       </div> : <p role="status" className="rounded-xl bg-muted/50 px-4 py-3 text-sm text-muted-foreground">{message}</p>}
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={button} disabled={!paid || busy || !scriptAudioEntries(script).length} onClick={generate}>Generate audio</button>
-        <button type="button" className={button} disabled={!paid || !ready || busy} onClick={play}>Listen to script</button>
+         <button type="button" className={`${button} border-primary bg-primary text-primary-foreground hover:bg-primary/90`} disabled={!paid || busy || !scriptAudioEntries(script).length} onClick={generate}>{ready ? 'Create new audio' : 'Create rehearsal audio'}</button>
+         <button type="button" className={button} disabled={!paid || !ready || busy} onClick={play}>Listen</button>
         <button type="button" className={button} disabled={!paid || !ready || busy} onClick={() => run('export', async valid => { const request = await audioRequest(script); if (!valid()) return; const path = await exportAudio(request); if (path && valid()) setMessage('MP4 exported.'); })}>Export MP4</button>
         {playing && <button type="button" className={button} onClick={() => { aborter.current?.abort(); }}>Stop listening</button>}
-        {(operation === 'generate' || generating) && <button type="button" className={button} onClick={() => { void cancelAudioGeneration().catch(error => setMessage(String(error))); }}>Cancel generation</button>}
-        {isDesktop() && <button type="button" className={button} disabled={busy} onClick={() => run('delete', () => deleteAudio(script.id))}>Remove saved audio</button>}
       </div>
+       <details className="rounded-xl border border-border px-3 py-2.5">
+         <summary className="cursor-pointer text-xs text-muted-foreground">More options</summary>
+         <div className="mt-3 space-y-3">
+           <p className="text-xs text-muted-foreground">Audio stays on this Mac and is not included in script backups.</p>
+           {isDesktop() && <button type="button" className={button} disabled={busy} onClick={() => run('delete', () => deleteAudio(script.id))}>Remove saved audio</button>}
+           <details>
+             <summary className="cursor-pointer text-xs text-muted-foreground">Troubleshooting details</summary>
+             <div className="mt-2"><FlowDebugPanel /></div>
+           </details>
+         </div>
+       </details>
     </div>
   </details>;
 }

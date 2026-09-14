@@ -13,7 +13,19 @@ import { recordAnonymousAnalytics } from './anonymous-analytics';
 export type AudioStatus = { status: 'ready' | 'missing'; revision: string; entries: { id: string; key: string; durationSeconds: number }[]; missing?: number };
 export const AUDIO_CHANGED = 'quickque:script-audio-changed';
 export const AUDIO_JOB_CHANGED = 'quickque:script-audio-job-changed';
-export type AudioJob = { revision: string; running: boolean; error?: string; startedAt: number; stage: 'starting' | 'model_load' | 'voice_prepare' | 'generation' | 'ready' | 'failed'; completed: number; total: number };
+export type AudioJob = {
+  revision: string;
+  running: boolean;
+  error?: string;
+  startedAt: number;
+  stage: 'starting' | 'model_load' | 'voice_prepare' | 'generation' | 'ready' | 'failed';
+  completed: number;
+  total: number;
+  completedWork: number;
+  totalWork: number;
+  progressStartedAt?: number;
+  progressSamples?: { completedWork: number; at: number }[];
+};
 export const audioJobs = new Map<string, AudioJob>();
 
 export async function audioEntitlement(): Promise<{ paid: boolean; available?: boolean; reason?: string }> {
@@ -25,7 +37,18 @@ export async function generateAudio(request: AudioRequest): Promise<AudioStatus>
   if (audioJobs.get(request.scriptId)?.running) throw new Error('SCRIPT_AUDIO_BUSY: Audio generation is already running.');
   recordFlowDebug('audio_generate_begin');
   const listeners: UnlistenFn[] = [];
-  const job: AudioJob = { revision: request.revision, running: true, startedAt: Date.now(), stage: 'starting', completed: 0, total: request.entries.length };
+  const wordCount = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+  const totalWork = request.entries.reduce((sum, entry) => sum + wordCount(entry.text), 0);
+  const job: AudioJob = {
+    revision: request.revision,
+    running: true,
+    startedAt: Date.now(),
+    stage: 'starting',
+    completed: 0,
+    total: request.entries.length,
+    completedWork: 0,
+    totalWork,
+  };
   const publish = () => window.dispatchEvent(new Event(AUDIO_JOB_CHANGED));
   audioJobs.set(request.scriptId, job);
   window.dispatchEvent(new Event(AUDIO_JOB_CHANGED));
@@ -35,6 +58,7 @@ export async function generateAudio(request: AudioRequest): Promise<AudioStatus>
         if (payload.scriptId !== request.scriptId || payload.revision !== request.revision) return;
         if (payload.stage === 'model_load' || payload.stage === 'voice_prepare' || payload.stage === 'generation') {
           job.stage = payload.stage;
+           if (payload.stage === 'generation') job.progressStartedAt ??= Date.now();
           recordFlowDebug(`audio_${payload.stage}`);
           publish();
         }
@@ -42,7 +66,14 @@ export async function generateAudio(request: AudioRequest): Promise<AudioStatus>
       listeners.push(await listen<{ scriptId: string; revision: string; completed: number; total: number }>('script-audio-progress', ({ payload }) => {
         if (payload.scriptId !== request.scriptId || payload.revision !== request.revision ||
             !Number.isSafeInteger(payload.completed) || payload.completed < 0 || payload.completed > job.total || payload.total !== job.total) return;
+        const previous = job.completed;
         job.completed = Math.max(job.completed, payload.completed);
+        if (job.completed > previous) {
+          const at = Date.now();
+          job.progressStartedAt ??= at;
+          job.completedWork = request.entries.slice(0, job.completed).reduce((sum, entry) => sum + wordCount(entry.text), 0);
+          job.progressSamples = [...(job.progressSamples ?? []), { completedWork: job.completedWork, at }].slice(-5);
+        }
         recordFlowDebug('audio_passages_complete', undefined, job.completed);
         publish();
       }));
@@ -50,7 +81,7 @@ export async function generateAudio(request: AudioRequest): Promise<AudioStatus>
     const result = await invoke<AudioStatus>('script_audio_generate', { request });
     recordFlowDebug('audio_generate_ready');
     recordAnonymousAnalytics({ event: 'voice_used', voiceMode: 'chatterbox' });
-    Object.assign(job, { running: false, stage: 'ready', completed: job.total });
+    Object.assign(job, { running: false, stage: 'ready', completed: job.total, completedWork: job.totalWork });
     return result;
   } catch (error) {
     recordFlowDebug('audio_generate_failed');
