@@ -22,6 +22,7 @@ export function CreateLicenceDialog() {
   const [open, setOpen] = useState(false);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [confirmedCopied, setConfirmedCopied] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -53,6 +54,7 @@ export function CreateLicenceDialog() {
       {
         onSuccess: (data) => {
           setCreatedKey(data.licenceKey);
+          setConfirmedCopied(false);
           queryClient.invalidateQueries({ queryKey: getGetAdminLicencesQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetAdminSummaryQueryKey() });
           toast({ title: "Licence created successfully" });
@@ -85,9 +87,12 @@ export function CreateLicenceDialog() {
   };
 
   const forceClose = () => {
+    if (!confirmedCopied) return;
     setOpen(false);
     setTimeout(() => {
       setCreatedKey(null);
+      setCopied(false);
+      setConfirmedCopied(false);
       form.reset();
     }, 300);
   };
@@ -137,13 +142,24 @@ export function CreateLicenceDialog() {
                 </button>
               </div>
 
+              <label className="flex cursor-pointer items-start gap-3 border border-border p-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={confirmedCopied}
+                  onChange={(event) => setConfirmedCopied(event.target.checked)}
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>I confirm I have copied and safely stored this licence key.</span>
+              </label>
+
               <div className="flex justify-end pt-4 border-t border-border">
                 <button
                   type="button"
                   onClick={forceClose}
-                  className="bg-foreground text-background h-10 px-4 text-sm font-medium hover:bg-foreground/90 transition-colors"
+                  disabled={!confirmedCopied}
+                  className="bg-foreground text-background h-10 px-4 text-sm font-medium hover:bg-foreground/90 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  I have copied the key
+                  Close and continue
                 </button>
               </div>
             </div>

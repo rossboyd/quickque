@@ -20,6 +20,7 @@ export default function LicenceDetail() {
   const reissueKey = useReissueAdminLicenceKey();
   const [replacementKey, setReplacementKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [confirmedCopied, setConfirmedCopied] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -68,6 +69,7 @@ export default function LicenceDetail() {
         onSuccess: (result) => {
           setReplacementKey(result.licenceKey);
           setCopied(false);
+          setConfirmedCopied(false);
           queryClient.invalidateQueries({ queryKey: getGetAdminLicenceQueryKey(id) });
         },
         onError: () => toast({ title: "Failed to reissue licence key", variant: "destructive" }),
@@ -164,11 +166,26 @@ export default function LicenceDetail() {
                 {copied ? <Check className="mx-auto h-4 w-4" /> : <Copy className="mx-auto h-4 w-4" />}
               </button>
             </div>
+            <label className="mt-4 flex cursor-pointer items-start gap-3 border border-border p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={confirmedCopied}
+                onChange={(event) => setConfirmedCopied(event.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>I confirm I have copied and safely stored this replacement key.</span>
+            </label>
             <button
-              onClick={() => setReplacementKey(null)}
-              className="mt-6 h-10 w-full bg-foreground px-4 text-sm font-medium text-background"
+              onClick={() => {
+                if (!confirmedCopied) return;
+                setReplacementKey(null);
+                setCopied(false);
+                setConfirmedCopied(false);
+              }}
+              disabled={!confirmedCopied}
+              className="mt-6 h-10 w-full bg-foreground px-4 text-sm font-medium text-background disabled:cursor-not-allowed disabled:opacity-40"
             >
-              I have copied the key
+              Close and continue
             </button>
           </div>
         </div>
