@@ -128,7 +128,7 @@ export function VoiceRecorder({
       <div>
         <h3 className="font-semibold">Record a voice reference</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Read this naturally for 6–{MAX_REFERENCE_SECONDS} seconds.
+          You have {MAX_REFERENCE_SECONDS} seconds. Perform the script with the emotion and expression you want your AI voice to use.
           Keep the room quiet and speak at your usual distance.
         </p>
       </div>

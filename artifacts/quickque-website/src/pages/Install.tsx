@@ -16,14 +16,19 @@ export function InstallPage({ context }: { context?: any }) {
   return (
     <div className="max-w-3xl mx-auto w-full px-4 py-16">
       <Meta title="Install Quickque" description="Download the Apple Silicon test DMG or build Quickque from source." context={context} />
-      <div className="mb-12 border-b border-[var(--border)] pb-8">
-        <h1 className="text-4xl font-semibold mb-4">{article.title}</h1>
-        <p className="text-xl text-[var(--text-muted)]">{article.description}</p>
+      <div className="mb-10 border-b border-[var(--border)] pb-8">
+        <h1 className="text-4xl font-semibold mb-4">Install Quickque</h1>
+        <p className="text-xl text-[var(--text-muted)]">Get the desktop app for your Mac.</p>
       </div>
 
-      <MarkdownView content={article.body || ''} basePath={config?.basePath} />
+      <div className="mb-16">
+        <DownloadGate />
+      </div>
 
-      <DownloadGate />
+      <div className="prose mb-12 border-t border-[var(--border)] pt-12">
+        <h2 className="!mt-0 mb-6">{article.title}</h2>
+        <MarkdownView content={article.body || ''} basePath={config?.basePath} />
+      </div>
 
       {editLink && (
         <div className="mt-16 pt-8 border-t border-[var(--border)]">

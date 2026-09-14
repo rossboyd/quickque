@@ -32,6 +32,7 @@ function Router() {
         <Route path="/" component={Library} />
         <Route path="/edit" component={Library} />
         <Route path="/trash" component={Library} />
+        <Route path="/voices" component={Library} />
         <Route path="/read/:id">{params => <Reader key={params.id} />}</Route>
         <Route component={NotFound} />
       </Switch>

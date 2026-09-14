@@ -67,3 +67,16 @@ test('home search, sorting, trash and direct rehearsal setup work', async ({ pag
   await expect(page.getByRole('heading', { name: 'Trash', exact: true })).toBeVisible();
   await expect(page.getByRole('article', { name: 'All hands', exact: true })).toBeVisible();
 });
+
+test('Your Voices is a first-class workspace destination', async ({ page }) => {
+  await seed(page);
+  const navigation = page.getByRole('navigation', { name: 'Workspace navigation' });
+  await expect(navigation.getByRole('button', { name: 'Your Voices', exact: true })).toBeVisible();
+  await navigation.getByRole('button', { name: 'Your Voices', exact: true }).click();
+  await expect(page).toHaveURL(/\/voices$/);
+  await expect(page.getByRole('heading', { name: 'Your Voices', exact: true })).toBeVisible();
+  await expect(page.getByText(/Create as many local voices as you like/i)).toBeVisible();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Voices & audio' }).click();
+  await expect(page.getByRole('button', { name: 'Open Your Voices', exact: true })).toBeVisible();
+});

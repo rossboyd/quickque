@@ -3,11 +3,13 @@ import test from 'node:test';
 import {
   MAX_REFERENCE_SECONDS,
   MIN_REFERENCE_SECONDS,
+  MAX_VOICE_PROFILE_LENGTH,
   VoiceLibraryError,
   createVoiceLibrary,
   validateRecording,
   inspectVoiceWav,
   validateVoiceName,
+  validateVoiceProfile,
 } from './voice-library.ts';
 import { migrateLegacyVoice, MISSING_CLONED_VOICE_PREFIX } from './actor-model.ts';
 
@@ -28,6 +30,73 @@ test('voice names are bounded and trimmed', () => {
   assert.equal(validateVoiceName('  My voice  '), null);
   assert.ok(validateVoiceName('   '));
   assert.ok(validateVoiceName('x'.repeat(81)));
+});
+
+test('voice profile values are bounded after trimming', () => {
+  assert.equal(validateVoiceProfile({ emotion: '  warm  ', gender: '', ageRange: 'adult' }), null);
+  assert.match(validateVoiceProfile({ emotion: 'x'.repeat(MAX_VOICE_PROFILE_LENGTH + 1) })!, /40 characters/);
+});
+
+test('legacy native metadata without profile fields remains readable', async () => {
+  const library = createVoiceLibrary({
+    isDesktop: () => true,
+    invoke: async () => [{
+      id: 'a'.repeat(32), name: 'Legacy', revision: 1, durationSeconds: 6,
+      sampleRate: 48_000, recordingSha256: 'hash', consentConfirmed: true,
+      createdAt: 1, updatedAt: 1,
+    }],
+  });
+  const [voice] = await library.list();
+  assert.equal(voice.name, 'Legacy');
+  assert.equal(voice.emotion, undefined);
+  assert.equal(voice.gender, undefined);
+  assert.equal(voice.ageRange, undefined);
+});
+
+test('voice profile updates use the native command and preserve the local id', async () => {
+  const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
+  const library = createVoiceLibrary({
+    isDesktop: () => true,
+    invoke: async (command, args) => {
+      calls.push({ command, args });
+      return {
+        id: 'a'.repeat(32), name: 'Me', revision: 4, durationSeconds: 6,
+        sampleRate: 48_000, recordingSha256: 'hash', consentConfirmed: true,
+        createdAt: 1, updatedAt: 2, emotion: 'warm', gender: 'neutral', ageRange: 'adult',
+      };
+    },
+  });
+  const voice = await library.updateProfile(`chatterbox-local:${'a'.repeat(32)}`, {
+    emotion: '  warm ',
+    gender: 'neutral',
+    ageRange: 'adult',
+  });
+  assert.equal(voice.referenceId, `chatterbox-local:${'a'.repeat(32)}`);
+  assert.deepEqual(calls, [{
+    command: 'voice_library_update_profile',
+    args: {
+      voiceId: 'a'.repeat(32),
+      emotion: '  warm ',
+      gender: 'neutral',
+      ageRange: 'adult',
+    },
+  }]);
+});
+
+test('voice profile validation prevents an invalid native update', async () => {
+  let invoked = false;
+  const library = createVoiceLibrary({
+    isDesktop: () => true,
+    invoke: async () => {
+      invoked = true;
+      return {};
+    },
+  });
+  await assert.rejects(
+    library.updateProfile('a'.repeat(32), { ageRange: 'x'.repeat(MAX_VOICE_PROFILE_LENGTH + 1) }),
+    (error: unknown) => error instanceof VoiceLibraryError && error.code === 'VOICE_PROFILE_INVALID',
+  );
+  assert.equal(invoked, false);
 });
 
 test('library captures mono PCM, tears down tracks, then calls native create with WAV bytes', async () => {

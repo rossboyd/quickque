@@ -1,5 +1,6 @@
 import { ChatterboxSetup } from './chatterbox-setup';
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Link } from 'wouter';
 import { Plus, Trash2, Users, User, Volume2, Square, RefreshCw, X, Play, Settings2, Sparkles, ChevronRight, ChevronDown, Palette, Check } from 'lucide-react';
 import { createSceneSpeech, voiceFailureMessage } from '@/lib/scene-speech';
 import { createVoiceLibrary, type ClonedVoice } from '@/lib/voice-library';
@@ -487,7 +488,8 @@ export function ActorAuthoringPanel({
                               <summary className="flex items-center gap-2.5 p-3.5 cursor-pointer text-xs font-semibold text-foreground outline-none select-none hover:bg-muted/30 transition-colors">
                                 <Settings2 className="w-4 h-4 text-primary" />
                                 Manage Voice Library
-                                <ChevronDown className="w-4 h-4 text-muted-foreground ml-auto transition-transform group-open/voice:rotate-180" />
+                                <Link href="/voices" data-testid="link-central-voice-library" onClick={handleClose} className="ml-auto text-primary hover:underline">Open Your Voices</Link>
+                                <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform group-open/voice:rotate-180" />
                               </summary>
                               <div className="px-3.5 pb-4 pt-2 border-t border-border/50 bg-background">
                                 <VoiceLibraryPanel

@@ -3,10 +3,11 @@ import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { isDesktop as defaultIsDesktop } from './desktop.ts';
 
 export const VOICE_RECORDING_PROMPT =
-  'Today I speak clearly and naturally. Quickque uses this short rehearsal to learn the sound of my voice.';
+  "Are we actually ready to begin? Because bright voices bring beautiful melodies, while deep ones carry warmth and exact emotion. I'll just pause here... and we can quickly start.";
 export const MIN_REFERENCE_SECONDS = 5;
 export const MAX_REFERENCE_SECONDS = 10;
 export const MAX_VOICE_NAME_LENGTH = 80;
+export const MAX_VOICE_PROFILE_LENGTH = 40;
 export const LOCAL_VOICE_PREFIX = 'chatterbox-local:';
 
 /** The exact metadata returned by Rust voices.rs (audio is never metadata). */
@@ -14,6 +15,9 @@ export type VoiceMetadata = {
   id: string;
   name: string;
   revision: number;
+  emotion?: string;
+  gender?: string;
+  ageRange?: string;
   durationSeconds: number;
   sampleRate: number;
   recordingSha256: string;
@@ -40,6 +44,12 @@ export type VoiceRecordingSession = {
   stop(): Promise<VoiceRecording>;
   cancel(): Promise<void>;
   currentLevel(): number;
+};
+
+export type VoiceProfile = {
+  emotion?: string;
+  gender?: string;
+  ageRange?: string;
 };
 
 type MediaStreamLike = {
@@ -111,6 +121,15 @@ export function validateVoiceName(name: string): string | null {
   const value = name.trim();
   if (!value) return 'Give this voice a name.';
   if (value.length > MAX_VOICE_NAME_LENGTH) return `Voice names must be ${MAX_VOICE_NAME_LENGTH} characters or fewer.`;
+  return null;
+}
+
+export function validateVoiceProfile(profile: VoiceProfile): string | null {
+  for (const value of [profile.emotion, profile.gender, profile.ageRange]) {
+    if (value !== undefined && Array.from(value.trim()).length > MAX_VOICE_PROFILE_LENGTH) {
+      return `Voice profile fields must be ${MAX_VOICE_PROFILE_LENGTH} characters or fewer.`;
+    }
+  }
   return null;
 }
 
@@ -300,6 +319,17 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
       return normaliseVoice(metadata);
     },
     rename: async (voiceId: string, name: string) => normaliseVoice(await call<VoiceMetadata>('voice_library_rename', { voiceId: nativeId(voiceId), name })),
+    updateProfile: async (voiceId: string, profile: VoiceProfile) => {
+      const error = validateVoiceProfile(profile);
+      if (error) throw new VoiceLibraryError('VOICE_PROFILE_INVALID', error);
+      const metadata = await call<VoiceMetadata>('voice_library_update_profile', {
+        voiceId: nativeId(voiceId),
+        emotion: profile.emotion,
+        gender: profile.gender,
+        ageRange: profile.ageRange,
+      });
+      return normaliseVoice(metadata);
+    },
     rerecord: async (voiceId: string, recording: VoiceRecording, consentConfirmed: true) => {
       const error = validateRecording(recording); if (error) throw new VoiceLibraryError('VOICE_RECORDING_INVALID', error);
       return normaliseVoice(await call<VoiceMetadata>('voice_library_rerecord', { voiceId: nativeId(voiceId), consentConfirmed: true, recording: Array.from(recording.wavData) }));

@@ -18,7 +18,7 @@ import {
   Trash2, Copy, FileText, 
   Trash, AlertTriangle, MonitorPlay,
   FileUp, ArrowUpDown, Edit2, Code, ArrowUp, ArrowDown, ChevronDown,
-  RotateCcw, X, Play, Home, PanelLeftClose,
+  RotateCcw, X, Play, Home, PanelLeftClose, Mic
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -46,6 +46,7 @@ import { isDesktop } from '@/lib/desktop';
 import { ScriptPurposeIcon } from '@/components/script-purpose-icon';
 import { useLicence } from '@/lib/licence';
 import { UPGRADE_EVENT } from '@/components/upgrade-dialog';
+import { VoiceLibraryPanel } from '@/components/voice-library';
 
 const SORT_LABELS: Record<SortMode, string> = {
   newest: 'Newest First',
@@ -54,6 +55,24 @@ const SORT_LABELS: Record<SortMode, string> = {
   za: 'Title Z-A',
   custom: 'Custom Order'
 };
+
+function VoiceLibraryPage() {
+  return (
+    <main className="flex-1 overflow-y-auto bg-card px-5 py-8 md:px-10 md:py-12" data-testid="page-your-voices">
+      <div className="mx-auto max-w-5xl space-y-8">
+        <header className="max-w-2xl">
+          <p className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-primary">Local voice studio</p>
+          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Your Voices</h1>
+          <p className="mt-3 text-base leading-relaxed text-muted-foreground">Build a collection that sounds like your rehearsal room. Create as many local voices as you like — every recording stays on this Mac.</p>
+        </header>
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
+          <strong className="text-foreground">A private collection for performance.</strong> Organize voices with optional emotion, gender and age-range notes. These are performance and organization cues to help you pick a voice, not biological claims.
+        </div>
+        <VoiceLibraryPanel />
+      </div>
+    </main>
+  );
+}
 
 export default function Library() {
   const store = useStore();
@@ -103,7 +122,9 @@ export default function Library() {
 
   const setupFlow = useLocalFlow({ tokens: setupTokens, enabled: showWizard });
 
-  const [viewMode, setViewMode] = useState<'library' | 'trash'>(location === '/trash' ? 'trash' : 'library');
+  const [viewMode, setViewMode] = useState<'library' | 'trash' | 'voices'>(
+    location === '/voices' ? 'voices' : location === '/trash' ? 'trash' : 'library'
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{type: 'trash' | 'restore' | 'permanent', ids: string[]} | null>(null);
   const isMobileEditorOpen = !isHome;
@@ -114,7 +135,7 @@ export default function Library() {
   const latestScripts = useRef(scripts);
   latestScripts.current = scripts;
   useEffect(() => () => { playGeneration.current += 1; }, []);
-  useEffect(() => { setViewMode(location === '/trash' ? 'trash' : 'library'); }, [location]);
+  useEffect(() => { setViewMode(location === '/voices' ? 'voices' : location === '/trash' ? 'trash' : 'library'); }, [location]);
   useEffect(() => {
     localStorage.setItem('quickque-library-visible', String(libraryVisible));
   }, [libraryVisible]);
@@ -270,7 +291,7 @@ export default function Library() {
     const isActive = script.id === activeScriptId;
     const isDraggable = sortMode === 'custom' && !search && viewMode === 'library';
     return (<ScriptMenu
-                      viewMode={viewMode}
+                      viewMode={viewMode === 'trash' ? 'trash' : 'library'}
                       isActive={isActive}
                       scriptTitle={script.title || 'Untitled Script'}
                       onRename={() => setEditingId(script.id)}
@@ -395,7 +416,7 @@ export default function Library() {
           </div>
 
           }
-          <nav aria-label="Script library" className="flex flex-col gap-1">
+          <nav aria-label="Workspace navigation" className="flex flex-col gap-1">
             <button
               className={cn(
                 "flex items-center justify-center gap-2 text-sm px-2 py-2 rounded-md transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -407,6 +428,17 @@ export default function Library() {
               <Home className="h-4 w-4" />
               Workspace
               <span className="text-xs opacity-60">{scripts.length}</span>
+            </button>
+            <button
+              className={cn(
+                "flex items-center justify-center gap-2 text-sm px-2 py-2 rounded-md transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                viewMode === 'voices' ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-current={viewMode === 'voices' ? 'page' : undefined}
+              onClick={() => { setViewMode('voices'); setSearch(''); setLocation('/voices'); }}
+            >
+              <Mic className="h-4 w-4" />
+              Your Voices
             </button>
             <button
               className={cn(
@@ -650,7 +682,11 @@ export default function Library() {
           </div>
         )}
 
-        {isHome ? <main className="workspace-home flex-1 overflow-y-auto bg-card px-5 py-6 md:px-10 md:py-9">
+        {isHome ? (
+          viewMode === 'voices' ? (
+            <VoiceLibraryPage />
+          ) : (
+          <main className="workspace-home flex-1 overflow-y-auto bg-card px-5 py-6 md:px-10 md:py-9">
           <div className="mx-auto max-w-6xl space-y-8">
             <header className="flex flex-wrap items-start justify-between gap-4">
               <div><p className="mb-1 text-xs text-muted-foreground">Quickque workspace</p><h1 className="text-2xl font-semibold tracking-tight">{viewMode === 'trash' ? 'Trash' : 'Your scripts'}</h1><p className="mt-2 text-sm text-muted-foreground">{viewMode === 'trash' ? 'Restore scripts or permanently remove them.' : 'Pick a script to edit, present or rehearse.'}</p></div>
@@ -660,8 +696,9 @@ export default function Library() {
               </div>
             </header>
             <div className="flex flex-wrap gap-3 md:hidden">
-              <button type="button" onClick={() => setLocation('/')} className="text-sm text-primary">Workspace</button>
-              <button type="button" onClick={() => setLocation('/trash')} className="text-sm text-muted-foreground">Trash ({trash.length})</button>
+              <button type="button" onClick={() => setLocation('/')} className={cn("text-sm", viewMode === 'library' ? "text-primary font-medium" : "text-muted-foreground")}>Workspace</button>
+              <button type="button" onClick={() => setLocation('/voices')} className={cn("text-sm", location === '/voices' ? "text-primary font-medium" : "text-muted-foreground")}>Your Voices</button>
+              <button type="button" onClick={() => setLocation('/trash')} className={cn("text-sm", viewMode === 'trash' ? "text-primary font-medium" : "text-muted-foreground")}>Trash ({trash.length})</button>
               <SettingsDialog />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -696,7 +733,9 @@ export default function Library() {
               })}
             </div>}
           </div>
-        </main> : activeScript ? (
+        </main>
+          )
+        ) : activeScript ? (
           <Editor 
             script={activeScript} 
             settings={settings}

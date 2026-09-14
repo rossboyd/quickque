@@ -8,24 +8,26 @@ type DeviceCheck = {
   macOS: number | null;
 };
 
-function inspectDevice(): DeviceCheck {
-  const userAgent = navigator.userAgent;
-  const platform = navigator.platform || '';
-  const userAgentData = (navigator as Navigator & {
-    userAgentData?: { platform?: string; architecture?: string };
-  }).userAgentData;
+export function inspectDevice(mockUserAgent?: string, mockPlatform?: string, mockUserAgentData?: any): DeviceCheck {
+  const userAgent = mockUserAgent ?? navigator.userAgent;
+  const platform = mockPlatform ?? (navigator.platform || '');
+  const userAgentData = mockUserAgentData ?? (typeof navigator !== 'undefined' ? (navigator as any).userAgentData : undefined);
+
   const isAppleMobile = /iPhone|iPad|iPod/i.test(userAgent);
   const isMac = !isAppleMobile && (/Macintosh|Mac OS X/i.test(userAgent) || /Mac/i.test(platform) || userAgentData?.platform === 'macOS');
-  const architectureValue = `${userAgentData?.architecture || ''} ${userAgent} ${platform}`.toLowerCase();
+
+  const architectureValue = `${userAgentData?.architecture || ''} ${userAgentData?.platform || ''}`.toLowerCase();
+
+  // Browsers on Apple Silicon frequently present as Intel Mac OS X in the userAgent for compatibility reasons.
+  // We can only trust explicit positive signals from the newer userAgentData API to mark as apple-silicon.
+  // We should NOT confidently mark as intel just because the UA string says "Mac OS X" without "arm" in it.
   const architecture = /arm64|aarch64|apple silicon/i.test(architectureValue)
     ? 'apple-silicon'
     : /x86_64|win64|intel/i.test(architectureValue)
       ? 'intel'
       : 'unknown';
+
   const versionMatch = userAgent.match(/Mac OS X[ /](\d+)[_.](\d+)(?:[_.](\d+))?/i);
-  // Safari and several Chromium builds intentionally retain the legacy
-  // "10_15_7" compatibility token on current macOS versions. Treat only
-  // modern-looking values as a real OS-version signal.
   const parsedMacOS = versionMatch ? Number(`${versionMatch[1]}.${versionMatch[2]}`) : null;
   const macOS = parsedMacOS !== null && parsedMacOS >= 20 ? parsedMacOS : null;
 
@@ -44,6 +46,35 @@ export function DownloadGate({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     setDevice(inspectDevice());
   }, []);
+
+  if (release?.status !== 'available') {
+    return (
+      <section id="download" className={`download-card ${compact ? 'download-card-compact' : ''}`} aria-labelledby="download-title">
+        <div className="download-card-copy">
+          <span className="eyebrow dark-eyebrow"><Monitor size={14} /> APPLE SILICON RELEASE</span>
+          <h2 id="download-title">Download Quickque for Mac.</h2>
+          <p>{typeof release?.reason === 'string' && release.reason ? release.reason : 'The current release is unavailable.'} Try the live demo in your browser, or build from source if you want to test the native app.</p>
+        </div>
+        <div className="download-card-action">
+          <p className="download-status download-status-warning"><AlertTriangle size={16} /> Download temporarily unavailable</p>
+          <div className="flex flex-col gap-3 w-full">
+            <a
+              href={config?.demoUrl || "/demo"}
+              className="premium-button button-dark download-button w-full"
+            >
+              Open live browser demo <ExternalLink size={16} className="ml-2" />
+            </a>
+            <a
+              href="/install"
+              className="text-center text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
+            >
+              Read the manual installation guide →
+            </a>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   if (!release?.downloadUrl) return null;
 

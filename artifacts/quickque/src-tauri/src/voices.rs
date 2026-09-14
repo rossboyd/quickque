@@ -22,6 +22,7 @@ use tauri::{AppHandle, Manager};
 pub const ROOT_NAME: &str = "cloned-voices-v1";
 pub const LOCAL_VOICE_PREFIX: &str = "chatterbox-local:";
 const MAX_NAME_BYTES: usize = 80;
+const MAX_PROFILE_CHARS: usize = 40;
 const MAX_RECORDING_BYTES: u64 = 64 * 1024 * 1024;
 const MIN_SECONDS: f64 = 5.0;
 const MAX_SECONDS: f64 = 10.0;
@@ -33,6 +34,12 @@ pub struct VoiceMetadata {
     pub id: String,
     pub name: String,
     pub revision: u64,
+    #[serde(default)]
+    pub emotion: Option<String>,
+    #[serde(default)]
+    pub gender: Option<String>,
+    #[serde(default)]
+    pub age_range: Option<String>,
     pub duration_seconds: f64,
     pub sample_rate: u32,
     pub recording_sha256: String,
@@ -65,6 +72,23 @@ fn validate_name(value: &str) -> Result<(), String> {
         return Err("VOICE_NAME_INVALID: Choose a voice name up to 80 characters.".into());
     }
     Ok(())
+}
+
+fn normalise_profile_value(value: Option<String>, field: &str) -> Result<Option<String>, String> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let value = value.trim();
+    if value.chars().count() > MAX_PROFILE_CHARS {
+        return Err(format!(
+            "VOICE_PROFILE_INVALID: {field} must be {MAX_PROFILE_CHARS} characters or fewer."
+        ));
+    }
+    if value.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(value.to_owned()))
+    }
 }
 
 pub fn id(value: &str) -> Result<(), String> {
@@ -273,6 +297,9 @@ fn write_voice(
         id: voice_id.clone(),
         name: display_name.trim().to_owned(),
         revision: 1,
+        emotion: None,
+        gender: None,
+        age_range: None,
         duration_seconds,
         sample_rate,
         recording_sha256: sha256(bytes),
@@ -381,6 +408,34 @@ pub fn voice_library_rename(
         })?,
     )
     .map_err(|_| "VOICE_STORAGE_UNAVAILABLE: Could not rename local voice.".to_string())?;
+    Ok(voice)
+}
+
+#[tauri::command]
+pub fn voice_library_update_profile(
+    app: AppHandle,
+    voice_id: String,
+    emotion: Option<String>,
+    gender: Option<String>,
+    age_range: Option<String>,
+) -> Result<VoiceMetadata, String> {
+    // Validate every field before reading or writing metadata so an invalid
+    // profile can never result in a partially updated metadata file.
+    let emotion = normalise_profile_value(emotion, "Emotion")?;
+    let gender = normalise_profile_value(gender, "Gender")?;
+    let age_range = normalise_profile_value(age_range, "Age range")?;
+    let folder = folder(&app, &voice_id)?;
+    let mut voice = metadata(&folder.join("metadata.json"))?;
+    voice.emotion = emotion;
+    voice.gender = gender;
+    voice.age_range = age_range;
+    voice.updated_at = now();
+    let metadata_bytes = serde_json::to_vec_pretty(&voice).map_err(|_| {
+        "VOICE_METADATA_INVALID: Could not encode local voice metadata.".to_string()
+    })?;
+    atomic_write(&folder.join("metadata.json"), &metadata_bytes).map_err(|_| {
+        "VOICE_STORAGE_UNAVAILABLE: Could not update local voice profile.".to_string()
+    })?;
     Ok(voice)
 }
 
@@ -581,5 +636,38 @@ mod tests {
             assert!(id(value).is_err());
         }
         assert!(id(&"a".repeat(32)).is_ok());
+    }
+
+    #[test]
+    fn legacy_metadata_defaults_profile_fields() {
+        let value = serde_json::json!({
+            "id": "a".repeat(32),
+            "name": "Legacy voice",
+            "revision": 3,
+            "durationSeconds": 6.0,
+            "sampleRate": 48000,
+            "recordingSha256": "hash",
+            "consentConfirmed": true,
+            "createdAt": 1,
+            "updatedAt": 2
+        });
+        let metadata: VoiceMetadata = serde_json::from_value(value).unwrap();
+        assert_eq!(metadata.emotion, None);
+        assert_eq!(metadata.gender, None);
+        assert_eq!(metadata.age_range, None);
+    }
+
+    #[test]
+    fn profile_values_are_trimmed_cleared_and_bounded() {
+        assert_eq!(
+            normalise_profile_value(Some("  warm  ".into()), "Emotion").unwrap(),
+            Some("warm".into())
+        );
+        assert_eq!(
+            normalise_profile_value(Some("   ".into()), "Emotion").unwrap(),
+            None
+        );
+        assert!(normalise_profile_value(Some("x".repeat(41)), "Emotion").is_err());
+        assert!(normalise_profile_value(Some("x".repeat(40)), "Emotion").is_ok());
     }
 }

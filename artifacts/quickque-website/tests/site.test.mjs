@@ -47,7 +47,7 @@ test('SSR remains readable without JavaScript and has no remote first-frame depe
   const { html } = render('/', {}, data);
   const head = html;
   assert.match(head, /<h1[^>]*>Keep your place\./);
-  assert.match(head, /href="https:\/\/quickque\.rossly\.co\/demo\/read\/seed-1"/);
+  assert.match(head, /href="\/demo\/read\/seed-1"/);
   assert.match(head, /src="\/images\/library\.webp"/);
   assert.doesNotMatch(head, /https?:\/\/[^"]+\.(?:css|woff2?|ttf)/);
   assert.doesNotMatch(head, /Loading (article|manual)/);

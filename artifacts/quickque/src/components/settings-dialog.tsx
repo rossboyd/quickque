@@ -1,5 +1,6 @@
 import { LicenceSettings } from './licence-settings';
 import { useRef, useState } from 'react';
+import { useLocation } from 'wouter';
 import { useStore } from '@/lib/store';
 import { 
   Settings as SettingsIcon, 
@@ -43,6 +44,7 @@ export function SettingsDialog() {
   ]);
   
   const [open, setOpen] = useState(false);
+  const [, setLocation] = useLocation();
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [importFailed, setImportFailed] = useState(false);
   const [reading, setReading] = useState(false);
@@ -205,7 +207,7 @@ export function SettingsDialog() {
           </div>
           
 </TabsContent>
-<TabsContent value="audio" className="min-h-0 overflow-y-auto space-y-6 py-4 pr-2"><AudioSetup referencedVoiceIds={referencedVoiceIds} /><VoiceFollowSetupButton /></TabsContent>
+<TabsContent value="audio" className="min-h-0 overflow-y-auto space-y-6 py-4 pr-2"><div className="rounded-xl border border-primary/25 bg-primary/5 p-4"><div className="font-medium">Your Voices</div><p className="mt-1 text-sm text-muted-foreground">Create and organize unlimited local rehearsal voices.</p><button type="button" data-testid="link-open-your-voices" onClick={() => { setOpen(false); setLocation('/voices'); }} className="mt-3 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Open Your Voices</button></div><AudioSetup referencedVoiceIds={referencedVoiceIds} /><VoiceFollowSetupButton /></TabsContent>
 <TabsContent value="storage" className="min-h-0 overflow-y-auto space-y-6 py-4 pr-2"><section className="space-y-4"><h3 className="font-semibold">Script storage</h3>            <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 pt-1">
                 <div className="font-medium">Script folder</div>

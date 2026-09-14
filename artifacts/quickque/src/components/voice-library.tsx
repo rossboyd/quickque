@@ -31,6 +31,8 @@ export function VoiceLibraryPanel({
   const [consent, setConsent] = useState(false);
   const [reviewed, setReviewed] = useState<VoiceRecording | null>(null);
   const [rerecordingVoiceId, setRerecordingVoiceId] = useState<string | null>(null);
+  const [profileDrafts, setProfileDrafts] = useState<Record<string, { emotion: string; gender: string; ageRange: string }>>({});
+  const [profileSaving, setProfileSaving] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!isDesktop()) return;
@@ -91,6 +93,19 @@ export function VoiceLibraryPanel({
     catch (error) { if (token === previewToken.current) setMessage(String(error)); }
     finally { if (token === previewToken.current) setPreviewing(null); }
   };
+  const saveProfile = async (voice: ClonedVoice) => {
+    const draft = profileDrafts[voice.id] ?? { emotion: voice.emotion ?? '', gender: voice.gender ?? '', ageRange: voice.ageRange ?? '' };
+    setProfileSaving(voice.id);
+    try {
+      const updated = await library.updateProfile(voice.id, draft);
+      setVoices(current => current.map(item => item.id === voice.id ? updated : item));
+      setMessage('Profile notes saved locally.');
+    } catch (error) { setMessage(String(error)); }
+    finally { setProfileSaving(null); }
+  };
+
+  const draftFor = (voice: ClonedVoice) => profileDrafts[voice.id] ?? { emotion: voice.emotion ?? '', gender: voice.gender ?? '', ageRange: voice.ageRange ?? '' };
+
   const verify = async (voice: ClonedVoice) => {
     setMessage('Checking saved recording…');
     try { const info = await library.verify(voice.id); setMessage(`Saved sample verified: ${info.durationSeconds.toFixed(1)}s, ${info.sampleRate / 1000} kHz, ${Math.round(info.bytes / 1024)} KB. WAV and checksum checks passed.`); }
@@ -162,8 +177,16 @@ export function VoiceLibraryPanel({
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{voice.name}</p>
               <p className="text-xs text-muted-foreground">{voice.durationSeconds.toFixed(1)}s · revision {voice.revision}{voice.available ? '' : ' · recording unavailable'}</p>
+              <p className="mt-1 flex flex-wrap gap-1">{[voice.emotion, voice.gender, voice.ageRange].filter(Boolean).map(tag => <span key={tag} className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">{tag}</span>)}</p>
               <button type="button" className="mt-1 text-xs text-primary" onClick={() => void verify(voice)}>Verify saved sample</button>
-              {previewing === voice.id && <button type="button" className="ml-3 text-xs text-primary" onClick={() => { previewToken.current++; void library.stopPreview(); setPreviewing(null); setMessage('Playback stopped.'); }}>Stop sample</button>}
+              <div className="mt-3 grid grid-cols-1 gap-2 border-t border-border/60 pt-3 sm:grid-cols-3">
+                {([['emotion', 'Emotion note', 'e.g. grounded, bright'], ['gender', 'Gender note', 'optional'], ['ageRange', 'Age range note', 'e.g. 30s–40s']] as const).map(([key, label, placeholder]) => (
+                  <label key={key} className="text-[11px] font-medium text-muted-foreground">{label}
+                    <input data-testid={`input-${key}-${voice.id}`} value={draftFor(voice)[key]} onChange={event => setProfileDrafts(current => ({ ...current, [voice.id]: { ...draftFor(voice), [key]: event.target.value } }))} placeholder={placeholder} className="mt-1 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground" />
+                  </label>
+                ))}
+                <button type="button" data-testid={`button-save-profile-${voice.id}`} onClick={() => void saveProfile(voice)} disabled={profileSaving === voice.id} className="sm:col-span-3 justify-self-start rounded-md border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50">{profileSaving === voice.id ? 'Saving…' : 'Save profile notes'}</button>
+              </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <button type="button" data-testid={`button-preview-cloned-voice-${voice.id}`} onClick={() => void preview(voice)} disabled={previewing === voice.id} className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Preview ${voice.name}`}><Play className="h-4 w-4" /></button>

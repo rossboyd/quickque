@@ -1312,6 +1312,7 @@ pub fn run() {
             voices::voice_library_list,
             voices::voice_library_create,
             voices::voice_library_rename,
+            voices::voice_library_update_profile,
             voices::voice_library_rerecord,
             voices::voice_library_delete,
             voices::voice_library_read_recording,
