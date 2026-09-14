@@ -1,0 +1,100 @@
+Navigated to https://quickque.rossly.co/admin/
+index-D3dyVE5U.js:49 Error: No QueryClient set, use QueryClientProvider to set one
+    at Cx (index-D3dyVE5U.js:9:183277)
+    at DC (index-D3dyVE5U.js:9:184341)
+    at Oh (index-D3dyVE5U.js:9:185296)
+    at XC (index-D3dyVE5U.js:9:189768)
+    at A2 (index-D3dyVE5U.js:9:192562)
+    at Rc (index-D3dyVE5U.js:8:34149)
+    at Yc (index-D3dyVE5U.js:8:62247)
+    at ty (index-D3dyVE5U.js:8:72751)
+    at Cy (index-D3dyVE5U.js:8:106767)
+    at PS (index-D3dyVE5U.js:8:105832) '\n    at A2 (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:192562)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at YN (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:49:121307)\n    at Yo (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:38652)\n    at vd (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:49:121504)\n    at sw (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:39471)\n    at KN (<anonymous>)\n    at Provider (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:77814)\n    at TooltipProvider (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:177250)\n    at jw (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:73540)\n    at kw (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:73305)\n    at Cb (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:37973)\n    at Bb (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:75174)\n    at XN (<anonymous>)\n    at Bb (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:75174)'
+onCaughtError @ index-D3dyVE5U.js:49
+Hp @ index-D3dyVE5U.js:8
+Pp.y.componentDidCatch.e.callback @ index-D3dyVE5U.js:8
+Qm @ index-D3dyVE5U.js:8
+Zm @ index-D3dyVE5U.js:8
+ay @ index-D3dyVE5U.js:8
+cy @ index-D3dyVE5U.js:8
+qr @ index-D3dyVE5U.js:8
+cy @ index-D3dyVE5U.js:8
+qr @ index-D3dyVE5U.js:8
+cy @ index-D3dyVE5U.js:8
+qr @ index-D3dyVE5U.js:8
+cy @ index-D3dyVE5U.js:8
+ky @ index-D3dyVE5U.js:8
+Dy @ index-D3dyVE5U.js:8
+Ey @ index-D3dyVE5U.js:8
+wy @ index-D3dyVE5U.js:8
+Py @ index-D3dyVE5U.js:8
+zs @ index-D3dyVE5U.js:8
+jy @ index-D3dyVE5U.js:8
+Dy @ index-D3dyVE5U.js:8
+Ey @ index-D3dyVE5U.js:8
+wy @ index-D3dyVE5U.js:8
+By @ index-D3dyVE5U.js:8
+Ae @ index-D3dyVE5U.js:1
+postMessage
+J @ index-D3dyVE5U.js:1
+V_.t.unstable_scheduleCallback @ index-D3dyVE5U.js:1
+Hy @ index-D3dyVE5U.js:8
+qy @ index-D3dyVE5U.js:8
+(anonymous) @ index-D3dyVE5U.js:8
+index-D3dyVE5U.js:9 ErrorBoundary caught an error: Error: No QueryClient set, use QueryClientProvider to set one
+    at Cx (index-D3dyVE5U.js:9:183277)
+    at DC (index-D3dyVE5U.js:9:184341)
+    at Oh (index-D3dyVE5U.js:9:185296)
+    at XC (index-D3dyVE5U.js:9:189768)
+    at A2 (index-D3dyVE5U.js:9:192562)
+    at Rc (index-D3dyVE5U.js:8:34149)
+    at Yc (index-D3dyVE5U.js:8:62247)
+    at ty (index-D3dyVE5U.js:8:72751)
+    at Cy (index-D3dyVE5U.js:8:106767)
+    at PS (index-D3dyVE5U.js:8:105832) 
+    at A2 (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:192562)
+    at main (<anonymous>)
+    at div (<anonymous>)
+    at YN (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:49:121307)
+    at Yo (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:38652)
+    at vd (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:49:121504)
+    at sw (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:39471)
+    at KN (<anonymous>)
+    at Provider (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:77814)
+    at TooltipProvider (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:177250)
+    at jw (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:73540)
+    at kw (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:73305)
+    at Cb (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:37973)
+    at Bb (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:75174)
+    at XN (<anonymous>)
+    at Bb (https://quickque.rossly.co/admin/assets/index-D3dyVE5U.js:9:75174)
+componentDidCatch @ index-D3dyVE5U.js:9
+Pp.y.componentDidCatch.e.callback @ index-D3dyVE5U.js:8
+Qm @ index-D3dyVE5U.js:8
+Zm @ index-D3dyVE5U.js:8
+ay @ index-D3dyVE5U.js:8
+cy @ index-D3dyVE5U.js:8
+qr @ index-D3dyVE5U.js:8
+cy @ index-D3dyVE5U.js:8
+qr @ index-D3dyVE5U.js:8
+cy @ index-D3dyVE5U.js:8
+qr @ index-D3dyVE5U.js:8
+cy @ index-D3dyVE5U.js:8
+ky @ index-D3dyVE5U.js:8
+Dy @ index-D3dyVE5U.js:8
+Ey @ index-D3dyVE5U.js:8
+wy @ index-D3dyVE5U.js:8
+Py @ index-D3dyVE5U.js:8
+zs @ index-D3dyVE5U.js:8
+jy @ index-D3dyVE5U.js:8
+Dy @ index-D3dyVE5U.js:8
+Ey @ index-D3dyVE5U.js:8
+wy @ index-D3dyVE5U.js:8
+By @ index-D3dyVE5U.js:8
+Ae @ index-D3dyVE5U.js:1
+postMessage
+J @ index-D3dyVE5U.js:1
+V_.t.unstable_scheduleCallback @ index-D3dyVE5U.js:1
+Hy @ index-D3dyVE5U.js:8
+qy @ index-D3dyVE5U.js:8
+(anonymous) @ index-D3dyVE5U.js:8
