@@ -91,6 +91,7 @@ export const getHealthCheckQueryKey = () => {
     ] as const;
     }
 
+
 export const getHealthCheckQueryOptions = <TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
@@ -514,6 +515,77 @@ export const useUpdateAdminLicenceStatus = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateAdminLicenceStatusMutationOptions(options));
+    }
+
+export const getReissueAdminLicenceKeyUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/licences/${id}/reissue-key`
+}
+
+/**
+ * @summary Replace a licence activation key
+ */
+export const reissueAdminLicenceKey = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<LicenceCreationResponse> => {
+
+  return customFetch<LicenceCreationResponse>(getReissueAdminLicenceKeyUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getReissueAdminLicenceKeyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reissueAdminLicenceKey>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reissueAdminLicenceKey>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['reissueAdminLicenceKey'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reissueAdminLicenceKey>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  reissueAdminLicenceKey(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReissueAdminLicenceKeyMutationResult = NonNullable<Awaited<ReturnType<typeof reissueAdminLicenceKey>>>
+
+    export type ReissueAdminLicenceKeyMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Replace a licence activation key
+ */
+export const useReissueAdminLicenceKey = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reissueAdminLicenceKey>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reissueAdminLicenceKey>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getReissueAdminLicenceKeyMutationOptions(options));
     }
 
 export const getDeleteAdminLicenceDeviceUrl = (id: string,

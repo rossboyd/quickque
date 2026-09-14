@@ -153,6 +153,32 @@ export const UpdateAdminLicenceStatusResponse = zod.object({
 
 
 /**
+ * @summary Replace a licence activation key
+ */
+export const ReissueAdminLicenceKeyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ReissueAdminLicenceKeyResponse = zod.object({
+  "licence": zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "plan": zod.string(),
+  "source": zod.string(),
+  "active": zod.boolean(),
+  "paidThrough": zod.string().nullish(),
+  "purchasedAt": zod.string(),
+  "deviceLimit": zod.number().int(),
+  "stripeCustomerId": zod.string().nullish(),
+  "stripeSubscriptionId": zod.string().nullish(),
+  "stripeCheckoutSessionId": zod.string().nullish(),
+  "deviceCount": zod.number().int()
+}),
+  "licenceKey": zod.string()
+})
+
+
+/**
  * @summary Delete admin licence device
  */
 export const DeleteAdminLicenceDeviceParams = zod.object({
@@ -163,3 +189,4 @@ export const DeleteAdminLicenceDeviceParams = zod.object({
 export const DeleteAdminLicenceDeviceResponse = zod.object({
   "success": zod.boolean().optional()
 })
+

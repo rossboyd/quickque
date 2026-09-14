@@ -43,7 +43,7 @@ function SignInPage() {
         <h1 className="text-2xl font-bold tracking-tight">Quickque Admin</h1>
         <p className="mt-2 text-sm text-muted-foreground">Private operations console</p>
         <label htmlFor="email" className="mt-8 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Email</label>
-        <input id="email" value="rossboyd@live.com" disabled className="mt-2 h-10 w-full border border-border bg-muted px-3 font-mono text-sm text-muted-foreground" />
+        <input id="email" value="rossboyd@live.com" autoComplete="username" disabled className="mt-2 h-10 w-full border border-border bg-muted px-3 font-mono text-sm text-muted-foreground" />
         <label htmlFor="password" className="mt-5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Password</label>
         <input
           id="password"

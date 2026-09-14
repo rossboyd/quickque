@@ -52,9 +52,15 @@ router.get('/admin/licences/:id', async (req, res): Promise<void> => {
     'Not recorded' model, 'Not recorded' "osVersion", activated_at "firstSeenAt",
     activated_at "lastSeenAt", true active
     FROM quickque_licence_devices WHERE licence_id=$1 ORDER BY activated_at DESC`, [req.params.id]);
-  const leases = await pool.query(`SELECT lease_id id, action, recorded_at "createdAt",
-    NULL::text "ipAddress", concat('Plan: ', plan, '; expires: ', coalesce(expires_at::text,'never'), '; revoked: ', revoked::text) details
-    FROM quickque_licence_lease_audit WHERE licence_id=$1 ORDER BY recorded_at DESC LIMIT 100`, [req.params.id]);
+  const leases = await pool.query(`SELECT id, action, "createdAt", "ipAddress", details FROM (
+    SELECT lease_id id, action, recorded_at "createdAt",
+      NULL::text "ipAddress", concat('Plan: ', plan, '; expires: ', coalesce(expires_at::text,'never'), '; revoked: ', revoked::text) details
+      FROM quickque_licence_lease_audit WHERE licence_id=$1
+    UNION ALL
+    SELECT id, action, created_at "createdAt", NULL::text "ipAddress",
+      CASE WHEN details = '{}'::jsonb THEN NULL ELSE details::text END details
+      FROM quickque_licence_admin_audit WHERE licence_id=$1
+    ) activity ORDER BY "createdAt" DESC LIMIT 100`, [req.params.id]);
   res.json({ ...publicRow(result.rows[0]), devices: devices.rows, auditRows: leases.rows });
 });
 
@@ -97,6 +103,22 @@ router.patch('/admin/licences/:id/status', async (req, res): Promise<void> => {
     await client.query('INSERT INTO quickque_licence_admin_audit(id,admin_user_id,licence_id,action,details) VALUES($1,$2,$3,$4,$5)',
       [randomUUID(),res.locals.adminUserId,req.params.id,req.body.active ? 'activate' : 'revoke',{}]);
     await client.query('COMMIT'); res.json(publicRow(updated.rows[0]));
+  } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+});
+
+router.post('/admin/licences/:id/reissue-key', async (req, res): Promise<void> => {
+  if (!uuidPattern.test(req.params.id as string)) { res.status(400).json({ error: 'Invalid licence' }); return; }
+  const key = `QQ-${randomBytes(32).toString('base64url')}`;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const updated = await client.query('UPDATE quickque_licences SET key_hash=$1 WHERE id=$2 RETURNING *', [keyHash(key),req.params.id]);
+    if (!updated.rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Licence not found' }); return; }
+    await client.query(`INSERT INTO quickque_licence_admin_audit
+      (id,admin_user_id,licence_id,action,details) VALUES($1,$2,$3,'reissue_key',$4)`,
+      [randomUUID(),res.locals.adminUserId,req.params.id,{ existingDevicesRetained: true }]);
+    await client.query('COMMIT');
+    res.json({ licence: publicRow(updated.rows[0]), licenceKey: key });
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 });
 

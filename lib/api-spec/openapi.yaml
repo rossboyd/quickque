@@ -116,6 +116,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Licence"
+  /admin/licences/{id}/reissue-key:
+    post:
+      operationId: reissueAdminLicenceKey
+      tags: [admin]
+      summary: Replace a licence activation key
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A replacement key that is returned once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LicenceCreationResponse"
   /admin/licences/{id}/devices/{deviceId}:
     delete:
       operationId: deleteAdminLicenceDevice

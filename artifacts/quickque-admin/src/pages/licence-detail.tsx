@@ -1,14 +1,15 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useParams, Link } from "wouter";
 import { 
   useGetAdminLicence, 
   useUpdateAdminLicenceStatus,
   useDeleteAdminLicenceDevice,
+  useReissueAdminLicenceKey,
   getGetAdminLicenceQueryKey 
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDateTime } from "@/lib/format";
-import { ArrowLeft, MonitorSmartphone, Shield, Power, PowerOff, Trash2, CalendarDays, ExternalLink, Activity } from "lucide-react";
+import { ArrowLeft, MonitorSmartphone, Shield, Power, PowerOff, Trash2, CalendarDays, ExternalLink, Activity, RefreshCw, Copy, Check, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function LicenceDetail() {
@@ -16,6 +17,9 @@ export default function LicenceDetail() {
   const { data: licence, isLoading, isError } = useGetAdminLicence(id);
   const updateStatus = useUpdateAdminLicenceStatus();
   const deleteDevice = useDeleteAdminLicenceDevice();
+  const reissueKey = useReissueAdminLicenceKey();
+  const [replacementKey, setReplacementKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -54,6 +58,27 @@ export default function LicenceDetail() {
         }
       }
     );
+  };
+
+  const handleReissueKey = () => {
+    if (!confirm("Replace this licence key? The previous key will stop activating new devices. Existing devices will remain attached.")) return;
+    reissueKey.mutate(
+      { id },
+      {
+        onSuccess: (result) => {
+          setReplacementKey(result.licenceKey);
+          setCopied(false);
+          queryClient.invalidateQueries({ queryKey: getGetAdminLicenceQueryKey(id) });
+        },
+        onError: () => toast({ title: "Failed to reissue licence key", variant: "destructive" }),
+      },
+    );
+  };
+
+  const copyReplacementKey = async () => {
+    if (!replacementKey) return;
+    await navigator.clipboard.writeText(replacementKey);
+    setCopied(true);
   };
 
   if (isLoading) {
@@ -99,6 +124,14 @@ export default function LicenceDetail() {
           <p className="text-sm text-muted-foreground font-mono mt-1">{licence.id}</p>
         </div>
         <button
+          onClick={handleReissueKey}
+          disabled={reissueKey.isPending}
+          className="h-10 px-4 text-sm font-medium inline-flex items-center gap-2 border border-border bg-card hover:bg-muted disabled:opacity-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${reissueKey.isPending ? "animate-spin" : ""}`} />
+          Reissue key
+        </button>
+        <button
           onClick={handleToggleStatus}
           disabled={updateStatus.isPending}
           className={`h-10 px-4 text-sm font-medium inline-flex items-center gap-2 border transition-colors ${
@@ -116,6 +149,30 @@ export default function LicenceDetail() {
           )}
         </button>
       </div>
+
+      {replacementKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="replacement-key-title" className="w-full max-w-lg border border-border bg-card p-6 shadow-xl">
+            <h2 id="replacement-key-title" className="text-lg font-semibold">Replacement key generated</h2>
+            <div className="mt-4 flex gap-3 border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              <p>This key is shown once. The previous key can no longer activate devices.</p>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <code className="min-w-0 flex-1 break-all border border-border bg-muted p-3 text-sm">{replacementKey}</code>
+              <button onClick={() => void copyReplacementKey()} className="w-12 shrink-0 border border-border bg-foreground text-background" aria-label="Copy replacement key">
+                {copied ? <Check className="mx-auto h-4 w-4" /> : <Copy className="mx-auto h-4 w-4" />}
+              </button>
+            </div>
+            <button
+              onClick={() => setReplacementKey(null)}
+              className="mt-6 h-10 w-full bg-foreground px-4 text-sm font-medium text-background"
+            >
+              I have copied the key
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="md:col-span-2 space-y-6">
