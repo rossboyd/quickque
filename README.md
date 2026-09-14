@@ -33,11 +33,20 @@ hardware and OS requirements yourself.
 
 Quickque's source code and documentation remain available under the [MIT
 License](LICENSE), and source builds remain available using the commands below.
-Separately, a proposed packaged Mac distribution is priced at **£77 as a
-one-time purchase**. A purchased version is intended to remain usable forever;
-future major upgrades may carry a separate charge. The price is for the
-optional packaged distribution, not for permission to use the MIT-licensed
-source.
+Separately, the proposed packaged Mac distribution offers Monthly and Lifetime
+licences. The Lifetime price comes from `QUICKQUE_PRICE_GBP`; Monthly is always
+one tenth of that configured amount for each 30-day period. Lifetime grants
+permanent access to the included paid features on up to two devices and
+includes future Quickque updates when released. Updates are not guaranteed,
+and new paid features may require a separate licence or paid upgrade. These
+prices are for the optional packaged distribution, not permission to use the
+MIT-licensed source.
+
+Free includes a 30-second Voice Follow allowance per reader session. Monthly
+access returns to Free when the paid period ends; Lifetime persists on up to two
+activated devices. Monthly renewal may be cancelled at any time and access
+continues to the end of the current period. Quickque does not voluntarily offer
+refunds, subject to rights that cannot legally be waived.
 
 There is no verified release or completed native Mac validation yet, so live
 purchases remain gated. The dummy preview checkout creates neither a licence,

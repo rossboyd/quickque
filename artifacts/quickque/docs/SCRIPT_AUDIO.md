@@ -40,7 +40,7 @@ Chatterbox/Perth watermark; upstream notices remain applicable.
 
 ## Paid access and development
 
-Monthly (£2.50) and lifetime (£25) include generation, saved playback and MP4
+Monthly and Lifetime paid access include generation, saved playback and MP4
 export. Native commands enforce access, not a frontend/localStorage flag.
 Settings → Debug → Licensed mode is the temporary access switch requested by the
 owner. It is available in packaged Mac test builds, defaults to Unlicensed and

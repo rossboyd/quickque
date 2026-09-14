@@ -6,14 +6,13 @@ export function issueLease(entitlement: Entitlement, deviceId: string, privateKe
   if (!/^[a-f0-9]{64}$/.test(deviceId) || !/^[a-zA-Z0-9_-]{1,64}$/.test(keyId)) throw new Error('Invalid lease identity');
   if (!['subscription', 'perpetual'].includes(entitlement.plan) || !entitlement.id ||
       (entitlement.plan === 'subscription' && !Number.isSafeInteger(entitlement.paidThrough)) ||
-      (entitlement.plan === 'perpetual' && entitlement.updatesUntil === null) ||
       (entitlement.updatesUntil !== null && !Number.isSafeInteger(entitlement.updatesUntil))) throw new Error('Invalid purchase entitlement');
   const revoked = !entitlement.active || (entitlement.plan === 'subscription' && entitlement.paidThrough! <= now);
   const claims = { schema: 1, product: 'quickque', leaseId: randomUUID(), licenceId: entitlement.id, deviceId,
     plan: entitlement.plan, features: revoked ? [] : ['saved_audio', 'voice_follow'], issuedAt: now,
     refreshAfter: now + DAY,
     expiresAt: revoked ? now + DAY : entitlement.plan === 'subscription' ? Math.min(now + 30 * DAY, entitlement.paidThrough!) : null,
-    updatesUntil: entitlement.updatesUntil, revoked };
+    updatesUntil: entitlement.plan === 'perpetual' ? null : entitlement.updatesUntil, revoked };
   const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
   const privateKey = createPrivateKey(privateKeyPem);
   if (privateKey.asymmetricKeyType !== 'ed25519') throw new Error('An Ed25519 signing key is required');

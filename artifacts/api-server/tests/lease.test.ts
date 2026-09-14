@@ -20,9 +20,9 @@ test('subscription cannot outlive its prepaid entitlement', () => {
   const expired = claims(issueLease({ ...entitlement, paidThrough: 999 }, device, pem, 'production', 1000));
   assert.equal(expired.revoked, true); assert.deepEqual(expired.features, []);
 });
-test('perpetual leases carry a version cutoff without an offline expiration', () => {
+test('perpetual leases have no expiry or update cutoff', () => {
   const lease = claims(issueLease({ ...entitlement, plan: 'perpetual', updatesUntil: 4000 }, device, pem, 'production', 1000));
-  assert.equal(lease.expiresAt, null); assert.equal(lease.updatesUntil, 4000);
+  assert.equal(lease.expiresAt, null); assert.equal(lease.updatesUntil, null);
 });
 test('revocations are signed and never grant features', () => {
   const lease = claims(issueLease({ ...entitlement, active: false }, device, pem, 'production', 1000));

@@ -38,12 +38,11 @@ pub fn verify(envelope: &Envelope, keys: &[(String, String)], device: &str) -> R
     Ok(lease)
 }
 
-pub fn access(lease: &Lease, now: u64, last_seen: u64, release_date: u64) -> Access {
+pub fn access(lease: &Lease, now: u64, last_seen: u64, _release_date: u64) -> Access {
     if lease.revoked { return Access::Revoked; }
     // A small tolerance accommodates ordinary clock correction, not an offline extension.
     if now.saturating_add(300) < last_seen || now.saturating_add(300) < lease.issued_at { return Access::ClockIncorrect; }
     if lease.expires_at.is_some_and(|end| now >= end) { return Access::Expired; }
-    if lease.updates_until.is_some_and(|end| release_date > end) { return Access::UpdateRequired; }
     Access::Active
 }
 
@@ -82,11 +81,11 @@ mod tests {
         assert_eq!(access(&lease,1000,1500,1000),Access::ClockIncorrect);
         lease.revoked=true; assert_eq!(access(&lease,1000,1000,1000),Access::Revoked);
     }
-    #[test] fn perpetual_survives_expiry_of_updates_only_on_eligible_builds() {
+    #[test] fn perpetual_access_survives_legacy_update_cutoffs() {
         let (env, keys)=signed(); let mut lease=verify(&env,&keys,"mac-a").unwrap();
         lease.plan="perpetual".into(); lease.expires_at=None; lease.updates_until=Some(2000);
         assert_eq!(access(&lease,999999,999999,1999),Access::Active);
-        assert_eq!(access(&lease,999999,999999,2001),Access::UpdateRequired);
+        assert_eq!(access(&lease,999999,999999,2001),Access::Active);
         lease.updates_until=None; assert_eq!(access(&lease,999999,999999,2001),Access::Active);
     }
 }

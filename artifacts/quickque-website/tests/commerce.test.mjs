@@ -7,9 +7,22 @@ import { readCommercePrice } from '../lib/server/commercePrice.js';
 test('GBP display price remains valid copy for the planned offer', () => {
   assert.deepEqual(readCommercePrice('25'), {
     amount: 2500,
+    monthlyAmount: 250,
     currency: 'gbp',
-    displayPrice: '£25'
+    displayPrice: '£25',
+    monthlyDisplayPrice: '£2.50'
   });
+});
+
+test('monthly price is always one tenth of the configured lifetime price', () => {
+  assert.deepEqual(readCommercePrice('40.50'), {
+    amount: 4050,
+    monthlyAmount: 405,
+    currency: 'gbp',
+    displayPrice: '£40.50',
+    monthlyDisplayPrice: '£4.05'
+  });
+  assert.throws(() => readCommercePrice('25.01'), /divide evenly/i);
 });
 
 test('website startup and active pages do not import payment runtime modules', () => {

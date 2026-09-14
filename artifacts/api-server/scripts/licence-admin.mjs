@@ -27,8 +27,7 @@ if (action === 'keys') {
       if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('A customer email is required: email=customer@example.com');
       const paidThrough = options.plan === 'subscription' ? Math.floor(Date.parse(options['paid-through']) / 1000) : null;
       if (options.plan === 'subscription' && (!Number.isSafeInteger(paidThrough) || paidThrough <= Date.now() / 1000)) throw new Error('A future paid-through date is required');
-      const anniversary = new Date(); anniversary.setUTCFullYear(anniversary.getUTCFullYear() + 1);
-      const updatesUntil = options.plan === 'perpetual' ? Math.floor(anniversary.getTime() / 1000) : null;
+      const updatesUntil = null;
       const key = `QQ-${randomBytes(32).toString('base64url')}`;
       const id = randomUUID();
       await pool.query('INSERT INTO quickque_licences (id,key_hash,plan,paid_through,updates_until,customer_email) VALUES ($1,$2,$3,$4,$5,$6)', [id, createHash('sha256').update(key).digest('hex'), options.plan, paidThrough, updatesUntil, email]);

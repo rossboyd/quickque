@@ -39,7 +39,7 @@ const questions = [
   ['Do my scripts or voice go to the cloud?', 'No. Your scripts, voice samples and generated speech stay on your Mac. Voice features need an initial model download, then process audio locally. You don’t need an account to write, present or rehearse.'],
   ['Can I use it for a self-tape?', 'Scene Partner reads the other characters’ lines so you can practise your part. Use a separate phone or camera to record the take. Mac audio is still being tested, so try the setup before relying on it for a session.'],
   ['Can I bring my existing scripts?', 'Yes. Import TXT, DOCX, RTF, and text-based PDFs. Quickque extracts the text locally; scanned PDFs need OCR elsewhere first.'],
-  ['Is it a subscription?', 'You can use Quickque for free. Pro will offer monthly or lifetime access for unlimited Voice Follow and AI voice playback. Lifetime includes one year of updates, then you keep the versions covered by your purchase. Paid plans aren’t available yet.'],
+  ['Is it a subscription?', 'You can use Quickque for free, including 30 seconds of Voice Follow per reader session. Pro will offer monthly or lifetime access to the included paid features on up to two devices. Lifetime includes future Quickque updates when released, but updates are not guaranteed and new paid features may require another licence or upgrade.'],
 ];
 
 export function HomePage({ context }: { context?: any }) {

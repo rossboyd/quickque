@@ -54,3 +54,12 @@ Upload the DMG to the GitHub release page before publishing the release. The
 website links to the stable asset URL:
 `https://github.com/rossboyd/quickque/releases/download/v0.1.0/Quickque_0.1.0_aarch64.dmg`.
 That URL is expected to remain unavailable until the asset is attached.
+
+## Updates
+
+Sparkle 2 is the selected update mechanism for packaged Mac releases. The
+appcast will be served from `https://quickque.rossly.co/appcast.xml` and point
+to signed, notarized assets on GitHub Releases. Sparkle is not active in the
+current unsigned test build because no production Sparkle EdDSA public key or
+signed appcast has been configured. See
+[`SPARKLE_UPDATES.md`](SPARKLE_UPDATES.md) for the release procedure.

@@ -102,10 +102,12 @@ website checks.
 ## Free, Monthly and Lifetime plans
 
 The planned Free app includes 30 seconds of active Voice Follow per session.
-Monthly unlocks unlimited Voice Follow and saved AI audio for £2.50/month; Lifetime is a permanent
-unlock including future updates to these paid features in Quickque for Mac. The current
-lifetime price is £25, controlled by `QUICKQUE_PRICE_GBP`. Monthly is configured
-as 250 pence in `config/site.json`.
+Monthly unlocks unlimited Voice Follow and saved AI audio for one tenth of the
+configured Lifetime price per 30-day period. Lifetime is a permanent unlock for
+the included paid features on up to two devices and includes future Quickque
+updates when released. The Lifetime price is controlled by
+`QUICKQUE_PRICE_GBP`; the server derives Monthly from it, so price copy must
+never be hardcoded in components or configuration.
 
 The MIT source licence is unchanged. Paid activation and subscription management
 are not implemented. The native Free session timer awaits Mac verification. Payments remain disabled. The optional
