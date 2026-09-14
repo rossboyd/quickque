@@ -13,6 +13,7 @@ export interface SiteConfig {
   repository: string;
   branch: string;
   basePath: string;
+  demoUrl: string;
   productionOrigin: string | null;
   guideVersion: string;
   sourceCommand: string;

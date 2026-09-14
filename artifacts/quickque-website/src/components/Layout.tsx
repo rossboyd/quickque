@@ -31,6 +31,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Link href="/pricing" className="hover:text-[var(--accent)] transition-colors">Pricing</Link>
           <Link href="/guide" className="hover:text-[var(--accent)] transition-colors">Manual</Link>
           <Link href="/install" className="hover:text-[var(--accent)] transition-colors">Install</Link>
+          <a href={config?.demoUrl} className="hover:text-[var(--accent)] transition-colors">Live demo</a>
           <a href={config?.repository} target="_blank" rel="noreferrer" className="hover:text-[var(--accent)] transition-colors">GitHub</a>
         <Link href="/pricing" className="site-nav-cta">Get started <span aria-hidden="true">↗</span></Link>
         </nav>
@@ -53,6 +54,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Link href="/pricing" className="block py-2">Pricing</Link>
           <Link href="/guide" className="block py-2">Manual</Link>
           <Link href="/install" className="block py-2">Source build</Link>
+           <a href={config?.demoUrl} className="block py-2">Live demo</a>
           <a href={config?.repository} target="_blank" rel="noreferrer" className="block py-2">GitHub</a>
         </nav>
       )}

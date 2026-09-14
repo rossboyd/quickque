@@ -88,7 +88,7 @@ export function HomePage({ context }: { context?: any }) {
         <div className="eyebrow"><span className="status-dot" /> A TELEPROMPTER FOR YOUR MAC</div>
         <h1>Keep your place.<br /><span>Sound like yourself.</span></h1>
         <p className="hero-description">Keep your script in view for a talk, a video call or a rehearsal.<br className="desktop-break" /> Quickque handles the prompting. Your words and voice stay on your Mac.</p>
-        <div className="hero-actions"><Link href="/pricing" className="premium-button button-light">See plans <ArrowUpRight size={18} /></Link><a href="#in-action" className="premium-button button-ghost">See it in action <ArrowDown size={16} /></a></div>
+         <div className="hero-actions"><Link href="/pricing" className="premium-button button-light">See plans <ArrowUpRight size={18} /></Link><a href={config?.demoUrl} className="premium-button button-ghost">Open the live demo <ArrowUpRight size={16} /></a></div>
         <div className="hero-footnote"><span className="hero-platform"><Command size={13} /> Apple Silicon · macOS 14+</span><span className="hero-footnote-divider" /><span>Free to start. No account needed. Source build available.</span></div>
       </div>
       <div className="hero-bottom site-container"><span>YOUR SCRIPT. YOUR PACE. YOUR MAC.</span><button className="motion-toggle" aria-pressed={motionPaused} onClick={() => setMotionPaused(value => !value)}>{motionPaused ? <Play size={12} /> : <Pause size={12} />}{motionPaused ? 'Resume motion' : 'Pause motion'}</button></div>

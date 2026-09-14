@@ -2,6 +2,7 @@
   "repository": "https://github.com/rossboyd/quickque",
   "branch": "main",
   "basePath": "/",
+  "demoUrl": "https://quickque.rossly.co/demo/read/seed-1",
   "productionOrigin": null,
   "guideVersion": "Current source \u00b7 0.1.0",
   "commerce": {
