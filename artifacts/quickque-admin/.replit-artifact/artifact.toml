@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/admin/"
+title = "Quickque Admin"
+description = "A private Quickque operations console for managing purchased, gifted, and tester licences, activated devices, issued lease history, and licence-linked Stripe payment status."
+version = "1.0.0"
+id = "artifacts/quickque-admin"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/admin/" ]
+localPort = 24495
+
+[services.development]
+run = "pnpm --filter @workspace/quickque-admin run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/quickque-admin", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/quickque-admin/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24495"
+BASE_PATH = "/admin/"
