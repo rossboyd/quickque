@@ -1,6 +1,5 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
   description: API specification
@@ -10,6 +9,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: admin
+    description: Admin operations
 paths:
   /healthz:
     get:
@@ -24,6 +25,123 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /admin/summary:
+    get:
+      operationId: getAdminSummary
+      tags: [admin]
+      summary: Get admin summary
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSummary"
+  /admin/licences:
+    get:
+      operationId: getAdminLicences
+      tags: [admin]
+      summary: Get admin licences
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Licence"
+    post:
+      operationId: createAdminLicence
+      tags: [admin]
+      summary: Create admin licence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LicenceInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LicenceCreationResponse"
+  /admin/licences/{id}:
+    get:
+      operationId: getAdminLicence
+      tags: [admin]
+      summary: Get admin licence detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LicenceDetail"
+  /admin/licences/{id}/status:
+    patch:
+      operationId: updateAdminLicenceStatus
+      tags: [admin]
+      summary: Update admin licence status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LicenceStatusUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Licence"
+  /admin/licences/{id}/devices/{deviceId}:
+    delete:
+      operationId: deleteAdminLicenceDevice
+      tags: [admin]
+      summary: Delete admin licence device
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
 components:
   schemas:
     HealthStatus:
@@ -33,4 +151,123 @@ components:
           type: string
       required:
         - status
-
+    AdminSummary:
+      type: object
+      required: [total, active, gifts, testers, subscriptions, lifetime, recentIssuances]
+      properties:
+        total:
+          type: integer
+        active:
+          type: integer
+        gifts:
+          type: integer
+        testers:
+          type: integer
+        subscriptions:
+          type: integer
+        lifetime:
+          type: integer
+        recentIssuances:
+          type: integer
+    Licence:
+      type: object
+      required: [id, email, plan, source, active, purchasedAt, deviceLimit, deviceCount]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        plan:
+          type: string
+        source:
+          type: string
+        active:
+          type: boolean
+        paidThrough:
+          type: ["string", "null"]
+        purchasedAt:
+          type: string
+        deviceLimit:
+          type: integer
+        stripeCustomerId:
+          type: ["string", "null"]
+        stripeSubscriptionId:
+          type: ["string", "null"]
+        stripeCheckoutSessionId:
+          type: ["string", "null"]
+        deviceCount:
+          type: integer
+    LicenceInput:
+      type: object
+      required: [email, source, plan]
+      properties:
+        email:
+          type: string
+        source:
+          type: string
+        plan:
+          type: string
+        paidThrough:
+          type: ["string", "null"]
+        note:
+          type: ["string", "null"]
+    LicenceCreationResponse:
+      type: object
+      required: [licence, licenceKey]
+      properties:
+        licence:
+          $ref: "#/components/schemas/Licence"
+        licenceKey:
+          type: string
+    Device:
+      type: object
+      required: [id, hardwareId, model, osVersion, firstSeenAt, lastSeenAt, active]
+      properties:
+        id:
+          type: string
+        hardwareId:
+          type: string
+        model:
+          type: string
+        osVersion:
+          type: string
+        firstSeenAt:
+          type: string
+        lastSeenAt:
+          type: string
+        active:
+          type: boolean
+    AuditRow:
+      type: object
+      required: [id, action, createdAt]
+      properties:
+        id:
+          type: string
+        action:
+          type: string
+        createdAt:
+          type: string
+        ipAddress:
+          type: ["string", "null"]
+        details:
+          type: ["string", "null"]
+    LicenceDetail:
+      allOf:
+        - $ref: "#/components/schemas/Licence"
+        - type: object
+          required: [devices, auditRows]
+          properties:
+            devices:
+              type: array
+              items:
+                $ref: "#/components/schemas/Device"
+            auditRows:
+              type: array
+              items:
+                $ref: "#/components/schemas/AuditRow"
+    LicenceStatusUpdate:
+      type: object
+      required: [active]
+      properties:
+        active:
+          type: boolean

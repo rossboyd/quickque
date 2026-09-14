@@ -27,3 +27,4 @@ channel = "stable-25_05"
 [userenv.shared]
 CODEX_HOME = "/home/runner/workspace/.codex"
 QUICKQUE_PRICE_GBP = "25"
+QUICKQUE_ADMIN_EMAILS = "rossboyd@live.com"
