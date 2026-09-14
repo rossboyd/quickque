@@ -8,6 +8,7 @@
 
 export * from './adminSummary';
 export * from './auditRow';
+export * from './deleteAdminLicence200';
 export * from './deleteAdminLicenceDevice200';
 export * from './device';
 export * from './getAdminLicencesParams';

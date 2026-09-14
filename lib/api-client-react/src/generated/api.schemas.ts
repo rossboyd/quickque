@@ -36,6 +36,7 @@ export interface Licence {
   /** @nullable */
   stripeCheckoutSessionId?: string | null;
   deviceCount: number;
+  canDelete?: boolean;
 }
 
 export interface LicenceInput {
@@ -84,6 +85,10 @@ export interface LicenceStatusUpdate {
 
 export type GetAdminLicencesParams = {
 search?: string;
+};
+
+export type DeleteAdminLicence200 = {
+  success?: boolean;
 };
 
 export type DeleteAdminLicenceDevice200 = {

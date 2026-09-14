@@ -21,6 +21,7 @@ import type {
 
 import type {
   AdminSummary,
+  DeleteAdminLicence200,
   DeleteAdminLicenceDevice200,
   GetAdminLicencesParams,
   HealthStatus,
@@ -444,6 +445,77 @@ export function useGetAdminLicence<TData = Awaited<ReturnType<typeof getAdminLic
 
 
 
+
+export const getDeleteAdminLicenceUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/licences/${id}`
+}
+
+/**
+ * @summary Delete an unused licence
+ */
+export const deleteAdminLicence = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<DeleteAdminLicence200> => {
+
+  return customFetch<DeleteAdminLicence200>(getDeleteAdminLicenceUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteAdminLicenceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminLicence>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAdminLicence>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteAdminLicence'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAdminLicence>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAdminLicence(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAdminLicenceMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAdminLicence>>>
+
+    export type DeleteAdminLicenceMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete an unused licence
+ */
+export const useDeleteAdminLicence = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminLicence>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAdminLicence>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteAdminLicenceMutationOptions(options));
+    }
 
 export const getUpdateAdminLicenceStatusUrl = (id: string,) => {
 

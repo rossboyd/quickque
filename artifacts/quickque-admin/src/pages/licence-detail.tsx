@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { 
   useGetAdminLicence, 
   useUpdateAdminLicenceStatus,
   useDeleteAdminLicenceDevice,
   useReissueAdminLicenceKey,
-  getGetAdminLicenceQueryKey 
+  useDeleteAdminLicence,
+  getGetAdminLicenceQueryKey,
+  getGetAdminLicencesQueryKey,
+  getGetAdminSummaryQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDateTime } from "@/lib/format";
@@ -18,6 +21,8 @@ export default function LicenceDetail() {
   const updateStatus = useUpdateAdminLicenceStatus();
   const deleteDevice = useDeleteAdminLicenceDevice();
   const reissueKey = useReissueAdminLicenceKey();
+  const deleteLicence = useDeleteAdminLicence();
+  const [, setLocation] = useLocation();
   const [replacementKey, setReplacementKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirmedCopied, setConfirmedCopied] = useState(false);
@@ -83,6 +88,24 @@ export default function LicenceDetail() {
     setCopied(true);
   };
 
+  const handleDeleteLicence = () => {
+    if (!licence?.canDelete) return;
+    if (!confirm(`Permanently delete the unused licence for ${licence.email}? This cannot be undone.`)) return;
+    deleteLicence.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          queryClient.removeQueries({ queryKey: getGetAdminLicenceQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getGetAdminLicencesQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetAdminSummaryQueryKey() });
+          setLocation("/licences");
+          toast({ title: "Unused licence deleted" });
+        },
+        onError: () => toast({ title: "Licence could not be deleted", variant: "destructive" }),
+      },
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="p-8 max-w-6xl mx-auto flex items-center justify-center h-full">
@@ -133,6 +156,16 @@ export default function LicenceDetail() {
           <RefreshCw className={`h-4 w-4 ${reissueKey.isPending ? "animate-spin" : ""}`} />
           Reissue key
         </button>
+        {licence.canDelete && (
+          <button
+            onClick={handleDeleteLicence}
+            disabled={deleteLicence.isPending}
+            className="h-10 px-4 text-sm font-medium inline-flex items-center gap-2 border border-destructive text-destructive hover:bg-destructive/10 disabled:opacity-50"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete unused
+          </button>
+        )}
         <button
           onClick={handleToggleStatus}
           disabled={updateStatus.isPending}

@@ -50,7 +50,8 @@ export const GetAdminLicencesResponseItem = zod.object({
   "stripeCustomerId": zod.string().nullish(),
   "stripeSubscriptionId": zod.string().nullish(),
   "stripeCheckoutSessionId": zod.string().nullish(),
-  "deviceCount": zod.number().int()
+  "deviceCount": zod.number().int(),
+  "canDelete": zod.boolean().optional()
 })
 export const GetAdminLicencesResponse = zod.array(GetAdminLicencesResponseItem)
 
@@ -79,7 +80,8 @@ export const CreateAdminLicenceResponse = zod.object({
   "stripeCustomerId": zod.string().nullish(),
   "stripeSubscriptionId": zod.string().nullish(),
   "stripeCheckoutSessionId": zod.string().nullish(),
-  "deviceCount": zod.number().int()
+  "deviceCount": zod.number().int(),
+  "canDelete": zod.boolean().optional()
 }),
   "licenceKey": zod.string()
 })
@@ -104,7 +106,8 @@ export const GetAdminLicenceResponse = zod.object({
   "stripeCustomerId": zod.string().nullish(),
   "stripeSubscriptionId": zod.string().nullish(),
   "stripeCheckoutSessionId": zod.string().nullish(),
-  "deviceCount": zod.number().int()
+  "deviceCount": zod.number().int(),
+  "canDelete": zod.boolean().optional()
 }).and(zod.object({
   "devices": zod.array(zod.object({
   "id": zod.string(),
@@ -123,6 +126,18 @@ export const GetAdminLicenceResponse = zod.object({
   "details": zod.string().nullish()
 }))
 }))
+
+
+/**
+ * @summary Delete an unused licence
+ */
+export const DeleteAdminLicenceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteAdminLicenceResponse = zod.object({
+  "success": zod.boolean().optional()
+})
 
 
 /**
@@ -148,7 +163,8 @@ export const UpdateAdminLicenceStatusResponse = zod.object({
   "stripeCustomerId": zod.string().nullish(),
   "stripeSubscriptionId": zod.string().nullish(),
   "stripeCheckoutSessionId": zod.string().nullish(),
-  "deviceCount": zod.number().int()
+  "deviceCount": zod.number().int(),
+  "canDelete": zod.boolean().optional()
 })
 
 
@@ -172,7 +188,8 @@ export const ReissueAdminLicenceKeyResponse = zod.object({
   "stripeCustomerId": zod.string().nullish(),
   "stripeSubscriptionId": zod.string().nullish(),
   "stripeCheckoutSessionId": zod.string().nullish(),
-  "deviceCount": zod.number().int()
+  "deviceCount": zod.number().int(),
+  "canDelete": zod.boolean().optional()
 }),
   "licenceKey": zod.string()
 })

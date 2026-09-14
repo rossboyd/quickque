@@ -23,4 +23,5 @@ export interface Licence {
   /** @nullable */
   stripeCheckoutSessionId?: string | null;
   deviceCount: number;
+  canDelete?: boolean;
 }

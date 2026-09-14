@@ -92,6 +92,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LicenceDetail"
+    delete:
+      operationId: deleteAdminLicence
+      tags: [admin]
+      summary: Delete an unused licence
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Licence deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "409":
+          description: Licence has activated devices or issued leases
   /admin/licences/{id}/status:
     patch:
       operationId: updateAdminLicenceStatus
@@ -215,6 +237,8 @@ components:
           type: ["string", "null"]
         deviceCount:
           type: integer
+        canDelete:
+          type: boolean
     LicenceInput:
       type: object
       required: [email, source, plan]

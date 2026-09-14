@@ -61,7 +61,41 @@ router.get('/admin/licences/:id', async (req, res): Promise<void> => {
       CASE WHEN details = '{}'::jsonb THEN NULL ELSE details::text END details
       FROM quickque_licence_admin_audit WHERE licence_id=$1
     ) activity ORDER BY "createdAt" DESC LIMIT 100`, [req.params.id]);
-  res.json({ ...publicRow(result.rows[0]), devices: devices.rows, auditRows: leases.rows });
+  const usage = await pool.query(`SELECT
+    EXISTS(SELECT 1 FROM quickque_licence_devices WHERE licence_id=$1)
+    OR EXISTS(SELECT 1 FROM quickque_licence_lease_audit WHERE licence_id=$1)
+    AS used`, [req.params.id]);
+  res.json({ ...publicRow(result.rows[0]), canDelete: !usage.rows[0].used, devices: devices.rows, auditRows: leases.rows });
+});
+
+router.delete('/admin/licences/:id', async (req, res): Promise<void> => {
+  if (!uuidPattern.test(req.params.id as string)) { res.status(400).json({ error: 'Invalid licence' }); return; }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const licence = await client.query(`SELECT * FROM quickque_licences
+      WHERE id=$1 FOR UPDATE`, [req.params.id]);
+    if (!licence.rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Licence not found' }); return; }
+    const usage = await client.query(`SELECT
+      EXISTS(SELECT 1 FROM quickque_licence_devices WHERE licence_id=$1)
+      OR EXISTS(SELECT 1 FROM quickque_licence_lease_audit WHERE licence_id=$1)
+      AS used`, [req.params.id]);
+    if (usage.rows[0].used) {
+      await client.query('ROLLBACK');
+      res.status(409).json({ error: 'A licence that has activated a device or issued a lease cannot be deleted' });
+      return;
+    }
+    await client.query(`INSERT INTO quickque_licence_admin_audit
+      (id,admin_user_id,licence_id,action,details) VALUES($1,$2,$3,'delete_licence',$4)`,
+      [randomUUID(),res.locals.adminUserId,req.params.id,{
+        licenceId: req.params.id,
+        plan: licence.rows[0].plan,
+        source: licence.rows[0].licence_source,
+      }]);
+    await client.query('DELETE FROM quickque_licences WHERE id=$1', [req.params.id]);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 });
 
 router.post('/admin/licences', async (req, res): Promise<void> => {
