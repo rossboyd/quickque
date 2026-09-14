@@ -411,6 +411,7 @@ export function Editor({
           actor={script.actor}
           onChange={handleActorChange}
           onClose={() => setShowActorPanel(false)}
+          onRehearse={() => void startReader()}
           sections={script.sections}
           onDeleteCharacter={handleDeleteCharacter}
         />

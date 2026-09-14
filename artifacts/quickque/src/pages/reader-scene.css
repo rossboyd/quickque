@@ -5,6 +5,34 @@
 .scene-reader [aria-label="Presentation timing"] { padding: 4px 8px; }
 .scene-reader [aria-label="Presentation timing"] > :not(:first-child) { display: none; }
 
+.scene-notes-rail {
+  margin-bottom: 1rem;
+  border: 1px solid hsl(var(--foreground) / 0.14);
+  border-left: 3px solid hsl(var(--primary));
+  border-radius: 0.75rem;
+  background: hsl(var(--background) / 0.9);
+  color: hsl(var(--foreground));
+  padding: 0.75rem 0.875rem;
+  box-shadow: 0 12px 30px hsl(222 47% 4% / 0.16);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.scene-reader [data-spoken-word="active"] {
+  position: relative;
+  z-index: 1;
+}
+
+@media (min-width: 1100px) {
+  .scene-notes-rail {
+    position: absolute;
+    left: calc(100% + 1.5rem);
+    top: 0;
+    width: min(15rem, 18vw);
+    margin: 0;
+  }
+}
+
 .present-titlebar {
   background: linear-gradient(180deg, hsl(var(--background) / 0.2), transparent);
 }
@@ -89,5 +117,6 @@
   .scene-reader .scene-transport button[aria-label="Start or resume scene"] { width: 38px; height: 38px; }
   .scene-reader [data-scene-section-heading] { display: none; }
   .scene-reader [aria-label="Current scene turn"] { padding: 6px 8px; margin-bottom: 6px; line-height: 1.3; }
+  .scene-reader .scene-notes-rail { padding: 6px 8px; margin-bottom: 6px; }
   .scene-reader .scene-notes { max-height: 3.9em; overflow-y: auto; }
 }

@@ -1,6 +1,6 @@
 import { ChatterboxSetup } from './chatterbox-setup';
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash, Users, User, Volume2, Square, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Users, User, Volume2, Square, RefreshCw, X, Play, Settings2, Sparkles, ChevronRight, ChevronDown, Palette, Check } from 'lucide-react';
 import { createSceneSpeech, voiceFailureMessage } from '@/lib/scene-speech';
 import { createVoiceLibrary, type ClonedVoice } from '@/lib/voice-library';
 import { VoiceLibraryPanel } from '@/components/voice-library';
@@ -23,12 +23,14 @@ export function ActorAuthoringPanel({
   actor,
   onChange,
   onClose,
+  onRehearse,
   sections,
   onDeleteCharacter,
 }: {
   actor?: ScriptActor;
   onChange: (actor: ScriptActor) => void;
   onClose: () => void;
+  onRehearse: () => void;
   sections: ScriptSection[];
   onDeleteCharacter: (oldId: string, newId: string | null) => void;
 }) {
@@ -39,7 +41,7 @@ export function ActorAuthoringPanel({
   const voiceLoadGeneration = useRef(0);
   const [loadingVoices, setLoadingVoices] = useState(true);
   const [editingCharId, setEditingCharId] = useState<string | null>(null);
-  
+
   // Deletion state
   const [deletingCharId, setDeletingCharId] = useState<string | null>(null);
   const [reassignToId, setReassignToId] = useState<string | 'unassign'>('unassign');
@@ -55,7 +57,7 @@ export function ActorAuthoringPanel({
       if (generation !== voiceLoadGeneration.current) return;
       setVoices(localVoices);
       setPreviewError(null);
-      setVoiceRefreshStatus(`${localVoices.length} cloned ${localVoices.length === 1 ? "voice" : "voices"} found. Choose a voice and preview it.`);
+      setVoiceRefreshStatus(`${localVoices.length} cloned ${localVoices.length === 1 ? "voice" : "voices"} found.`);
     } catch (error) {
       if (generation === voiceLoadGeneration.current) {
         setVoices([]);
@@ -78,7 +80,6 @@ export function ActorAuthoringPanel({
   const reportStopFailure = () => {
     const message = 'Could not confirm speech stopped. Restart Quickque before using microphone following.';
     setPreviewError(message);
-    // The app-level toast survives closure/navigation of the cast panel.
     toast({ title: 'Speech stop failed', description: message, variant: 'destructive' });
   };
 
@@ -139,7 +140,6 @@ export function ActorAuthoringPanel({
   const confirmDeleteChar = () => {
     if (!deletingCharId) return;
     stopPreview();
-    // Cast, selected roles and turn references must commit as one transaction.
     onDeleteCharacter(deletingCharId, reassignToId === 'unassign' ? null : reassignToId);
     setDeletingCharId(null);
     setReassignToId('unassign');
@@ -187,7 +187,6 @@ export function ActorAuthoringPanel({
 
   useEffect(() => {
     return () => {
-      // Cleanup reads refs, not the initial render's isPreviewing state.
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
       void speechRef.current.stop().catch(() => {
@@ -200,8 +199,6 @@ export function ActorAuthoringPanel({
     };
   }, []);
 
-  // Moving to another script or changing its saved voice configuration must
-  // also cancel a preview, even if this panel remains mounted.
   useEffect(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
@@ -210,324 +207,441 @@ export function ActorAuthoringPanel({
   }, [actor]);
 
   return (
-    <div className="absolute inset-y-0 right-0 w-full md:w-96 bg-background border-l border-border shadow-2xl flex flex-col z-50">
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Users className="w-5 h-5 text-primary" />
-          Scene Partner Cast
-        </h2>
-        <button aria-label="Close scene partner cast" onClick={handleClose} className="p-2 hover:bg-muted rounded-full">
-          &times;
-        </button>
-      </div>
-
-      <div className="p-4 border-b border-border flex items-center justify-between">
-        <div className="space-y-0.5">
-          <label className="text-sm font-medium">Partner audio</label>
-          <p className="text-xs text-muted-foreground">Record on another camera. Quickque never records.</p>
+    <div className="absolute inset-y-0 right-0 w-full md:w-[420px] bg-background border-l border-border shadow-[0_0_40px_rgba(0,0,0,0.1)] flex flex-col z-50 overflow-hidden text-foreground">
+      {/* Header Area */}
+      <div className="flex-none px-5 py-4 border-b border-border bg-card/80 backdrop-blur-xl z-10">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <Users className="w-4 h-4" />
+            </div>
+            Scene Cast
+          </h2>
+          <button
+            aria-label="Close setup"
+            onClick={handleClose}
+            className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground rounded-full transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <button
-          role="switch"
-          aria-label="Partner audio"
-          aria-checked={currentActor.enabled}
-          onClick={handleToggle}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-            currentActor.enabled ? 'bg-primary' : 'bg-muted'
-          }`}
-        >
-          <span
-            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-              currentActor.enabled ? 'translate-x-6' : 'translate-x-1'
-            }`}
-          />
-        </button>
+
+        <div className={`p-3.5 rounded-xl border transition-all ${
+          currentActor.enabled
+            ? 'bg-primary/5 border-primary/20 shadow-sm'
+            : 'bg-muted/40 border-border/50'
+        }`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1 flex-1">
+              <label className="text-sm font-semibold flex items-center gap-2 cursor-pointer select-none" onClick={handleToggle}>
+                Rehearsal Audio
+              </label>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Quickque will read aloud the lines of any character assigned as AI Partner.
+              </p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={currentActor.enabled}
+              onClick={handleToggle}
+              className={`relative shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                currentActor.enabled ? 'bg-primary' : 'bg-muted-foreground/30'
+              }`}
+            >
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                currentActor.enabled ? 'translate-x-[22px]' : 'translate-x-0.5'
+              }`} />
+            </button>
+          </div>
+        </div>
       </div>
 
-      {(
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          <p className="text-sm font-medium">1. Add cast · 2. Assign In Person or AI Partner · 3. Assign turns in the editor · 4. Preview partner voices · 5. Rehearse</p>
-          <p className="text-xs text-muted-foreground">Choose In Person for characters you or another person will perform. AI Partner reads its lines using a local voice. Give each character a colour to recognise their turns. All In Person means silent cues; all AI Partner means a full read-through.</p>
-          {voiceRefreshStatus && <p role="status" className="text-xs text-muted-foreground">{voiceRefreshStatus}</p>}
-          {voiceLoadError && <p role="alert" className="text-sm text-destructive">{voiceLoadError}</p>}
+      {/* Main List Area */}
+      <div className="flex-1 overflow-y-auto bg-muted/10">
+        <div className="p-5 space-y-3">
+          {voiceRefreshStatus && (
+            <p role="status" className="text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-900/50">
+              {voiceRefreshStatus}
+            </p>
+          )}
+          {voiceLoadError && (
+            <p role="alert" className="text-xs font-medium text-destructive bg-destructive/10 p-2.5 rounded-lg border border-destructive/20">
+              {voiceLoadError}
+            </p>
+          )}
           {previewError && (
-            <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm">
-              <p className="text-destructive">{previewError}</p>
-              <div className="mt-2 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => void loadVoices()}
-                  disabled={loadingVoices}
-                  className="flex items-center gap-1 font-medium text-primary hover:underline disabled:opacity-50"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${loadingVoices ? 'animate-spin' : ''}`} />
-                  Refresh voices
-                </button>
-              </div>
+            <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-3.5 space-y-2">
+              <p className="text-xs font-medium text-destructive leading-relaxed">{previewError}</p>
+              <button
+                type="button"
+                onClick={() => void loadVoices()}
+                disabled={loadingVoices}
+                className="flex items-center gap-1.5 text-xs font-semibold text-destructive hover:text-destructive/80 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingVoices ? 'animate-spin' : ''}`} />
+                Retry loading voices
+              </button>
             </div>
           )}
-          <div className="space-y-4">
-            {currentActor.characters.map((char) => (
-              <div
-                key={char.id}
-                className="bg-card border border-border border-l-4 rounded-xl overflow-hidden shadow-sm"
-                style={{ borderLeftColor: getCharacterColor(char) }}
-              >
-                <div 
-                  className="p-3 bg-muted/50 flex items-center justify-between cursor-pointer"
-                  onClick={() => handleSetEditingCharId(editingCharId === char.id ? null : char.id)}
-                    onKeyDown={event => {
-                      if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
-                        event.preventDefault();
-                        handleSetEditingCharId(editingCharId === char.id ? null : char.id);
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Edit ${char.name}`}
-                    aria-expanded={editingCharId === char.id}
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span aria-hidden="true" className="h-4 w-4 shrink-0 rounded-full border border-foreground/20" style={{ backgroundColor: getCharacterColor(char) }} />
-                    <div>
-                      <h3 className="font-medium text-sm break-words">{char.name}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {currentActor.myRoleIds.includes(char.id) ? "In Person" : "AI Partner"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!currentActor.myRoleIds.includes(char.id) && (
-                      <button
-                        aria-label={isPreviewing === char.id ? `Stop preview for ${char.name}` : `Preview voice for ${char.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          previewVoice(char);
-                        }}
-                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-background rounded"
-                      >
-                        {isPreviewing === char.id ? <Square className="w-4 h-4 fill-current" /> : <Volume2 className="w-4 h-4" />}
-                      </button>
-                    )}
+
+          {currentActor.characters.length === 0 ? (
+            <div className="py-12 px-6 text-center">
+              <div className="w-16 h-16 mx-auto bg-muted rounded-full flex items-center justify-center mb-4 border border-border/50">
+                <User className="w-8 h-8 text-muted-foreground/50" />
+              </div>
+              <h3 className="text-sm font-semibold mb-1">No characters</h3>
+              <p className="text-xs text-muted-foreground max-w-[200px] mx-auto">Add characters to start assigning rehearsal roles.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {currentActor.characters.map((char) => {
+                const isExpanded = editingCharId === char.id;
+                const isInPerson = currentActor.myRoleIds.includes(char.id);
+
+                return (
+                  <div
+                    key={char.id}
+                    className={`group flex flex-col rounded-xl border transition-all duration-200 ${
+                      isExpanded
+                        ? 'border-border bg-card shadow-md relative z-10'
+                        : 'border-transparent bg-muted/40 hover:bg-muted/60'
+                    }`}
+                  >
+                    {/* Collapsed/Header View */}
                     <button
-                      aria-label={`Delete ${char.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeletingCharId(char.id);
-                      }}
-                      className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded"
+                      type="button"
+                      className="flex w-full items-center gap-3 p-3 text-left outline-none rounded-xl focus-visible:ring-2 focus-visible:ring-primary"
+                      onClick={() => handleSetEditingCharId(isExpanded ? null : char.id)}
                     >
-                      <Trash className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="px-3 py-3 border-t border-border space-y-3">
-                  <div role="group" aria-label={`Who performs ${char.name}?`} className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
-                    {(['In Person', 'AI Partner'] as const).map(label => {
-                      const selected = currentActor.myRoleIds.includes(char.id) === (label === 'In Person');
-                      return <button key={label} type="button" aria-pressed={selected}
-                        onClick={() => setAssignment(char.id, label === 'In Person')}
-                        className={`flex items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-primary ${selected ? 'bg-background text-foreground shadow-sm ring-1 ring-border' : 'text-muted-foreground hover:text-foreground'}`}>
-                        {label === 'In Person' ? <User className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}{label}
-                      </button>;
-                    })}
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs font-medium">Character colour</span>
-                    <input type="color" aria-label={`Colour for ${char.name}`} value={getCharacterColor(char)}
-                      onChange={event => handleUpdateChar(char.id, { accentColor: event.target.value })}
-                      className="h-8 w-10 cursor-pointer rounded border border-border bg-transparent" />
-                  </div>
-                  <div role="group" aria-label={`Colour presets for ${char.name}`} className="flex flex-wrap gap-2">
-                    {CHARACTER_COLORS.map(color => <button key={color.value} type="button"
-                      aria-label={color.name} title={color.name} aria-pressed={getCharacterColor(char).toLowerCase() === color.value}
-                      onClick={() => handleUpdateChar(char.id, { accentColor: color.value })}
-                      className={`h-7 w-7 rounded-full border-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${getCharacterColor(char).toLowerCase() === color.value ? 'border-foreground ring-2 ring-background ring-offset-2 ring-offset-foreground' : 'border-foreground/20'}`}
-                      style={{ backgroundColor: color.value }} />)}
-                  </div>
-                </div>
-
-                {editingCharId === char.id && (
-                  <div className="p-4 space-y-4 border-t border-border bg-background">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">Character Name</label>
-                      <input
-                        type="text"
-                        aria-label="Character Name"
-                        maxLength={200}
-                        value={char.name}
-                        onChange={(e) => handleUpdateChar(char.id, { name: e.target.value })}
-                        className="w-full bg-transparent border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
-                        placeholder="e.g. Juliet"
+                      <div
+                        className="h-5 w-5 shrink-0 rounded-full border-[1.5px] border-black/10 dark:border-white/10 shadow-sm"
+                        style={{ backgroundColor: getCharacterColor(char) }}
                       />
-                    </div>
-                    
-                    <details className="space-y-3">
-                      <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Optional character descriptions</summary>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium">Age Description</label>
-                        <input
-                          type="text"
-                          aria-label="Age Description"
-                          maxLength={200}
-                          value={char.age}
-                          onChange={(e) => handleUpdateChar(char.id, { age: e.target.value })}
-                          className="w-full bg-transparent border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
-                          placeholder="e.g. 20s"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium">Gender</label>
-                        <input
-                          type="text"
-                          aria-label="Gender"
-                          maxLength={200}
-                          value={char.gender}
-                          onChange={(e) => handleUpdateChar(char.id, { gender: e.target.value })}
-                          className="w-full bg-transparent border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
-                          placeholder="e.g. Female"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">Performance Style / Notes</label>
-                      <input
-                        type="text"
-                        aria-label="Performance Style"
-                        maxLength={500}
-                        value={char.style}
-                        onChange={(e) => handleUpdateChar(char.id, { style: e.target.value })}
-                        className="w-full bg-transparent border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
-                        placeholder="e.g. Enthusiastic, slight accent"
-                      />
-                    </div>
-
-                    </details>
-                    {!currentActor.myRoleIds.includes(char.id) && (
-                      <div className="space-y-3 pt-3 border-t border-border">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium">Chatterbox voice</label>
-                          <p className="text-xs text-muted-foreground">Scene Partner uses Chatterbox Turbo only. Record or manage voices in Settings → Chatterbox Turbo voices.</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="truncate font-medium text-[15px] text-foreground">
+                          {char.name || 'Unnamed Character'}
                         </div>
-                        
-                        <ChatterboxSetup compact onReady={() => void loadVoices()} />
-
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <label className="text-xs font-medium">Voice Selection</label>
-                            <button
-                              type="button"
-                              onClick={() => void loadVoices()}
-                              disabled={loadingVoices}
-                              className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
-                            >
-                              <RefreshCw className={`w-3 h-3 ${loadingVoices ? 'animate-spin' : ''}`} />
-                              Refresh voices
-                            </button>
-                          </div>
-                          <select
-                            aria-label="Voice Selection"
-                            value={char.voice.voiceId}
-                             onChange={(e) => {
-                               const selected = voices.find(voice => voice.referenceId === e.target.value);
-                               handleUpdateChar(char.id, {
-                                 voice: {
-                                   ...char.voice,
-                                   voiceId: e.target.value,
-                                   ...(selected ? { voiceRevision: selected.revision } : {}),
-                                 },
-                               });
-                             }}
-                            className="w-full bg-transparent border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
-                            disabled={voices.length === 0 || loadingVoices}
-                          >
-                            {!loadingVoices && char.voice.voiceId && !voices.some(voice => voice.referenceId === char.voice.voiceId) &&
-                              <option value={char.voice.voiceId}>Saved voice unavailable — choose a voice</option>}
-                            {loadingVoices ? (
-                              <option value="">Loading voices...</option>
-                            ) : voices.length === 0 ? (
-                              <option value="">No cloned voices found...</option>
-                            ) : (
-                              voices.map(v => (
-                                <option key={v.id} value={v.referenceId}>{v.name} (revision {v.revision})</option>
-                              ))
-                            )}
-                          </select>
-                          {!loadingVoices && (voiceLoadError || voices.length === 0) && (
-                            <p role="status" className="text-xs text-muted-foreground">
-                              {voiceLoadError ? voiceLoadError : 'No cloned voices are available. Create one in Settings → Chatterbox Turbo voices.'}
-                            </p>
+                        <div className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5 mt-0.5">
+                          {isInPerson ? (
+                            <><User className="w-3 h-3" /> You (In Person)</>
+                          ) : (
+                            <><Sparkles className="w-3 h-3 text-primary/70" /> AI Partner</>
                           )}
                         </div>
+                      </div>
 
-                        <details className="rounded-md border border-border p-3">
-                          <summary className="cursor-pointer text-xs font-medium text-primary">Create or manage cloned voices</summary>
-                          <div className="mt-3">
-                            <VoiceLibraryPanel
-                              referencedVoiceIds={currentActor.characters
-                                .map(character => character.voice.voiceId)
-                                .filter(Boolean)}
-                              onVoicesChange={setVoices}
-                            />
+                      {!isInPerson && !isExpanded && (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); previewVoice(char); }}
+                          className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full border shadow-sm transition-colors ${
+                            isPreviewing === char.id
+                              ? 'bg-primary border-primary text-primary-foreground animate-pulse'
+                              : 'bg-background border-border text-muted-foreground hover:text-primary hover:border-primary/30'
+                          }`}
+                        >
+                          {isPreviewing === char.id ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current ml-0.5" />}
+                        </div>
+                      )}
+                    </button>
+
+                    {/* Expanded View */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 space-y-5 border-t border-border mt-1 pt-4">
+                        {/* Name Input */}
+                        <div>
+                          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Character Name</label>
+                          <input
+                            type="text"
+                            value={char.name}
+                            onChange={(e) => handleUpdateChar(char.id, { name: e.target.value })}
+                            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:font-normal"
+                            placeholder="e.g. Juliet"
+                          />
+                        </div>
+
+                        {/* Role Assignment */}
+                        <div>
+                          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Who performs this role?</label>
+                          <div className="flex p-1 bg-muted/60 rounded-lg border border-border/50">
+                            <button
+                              type="button"
+                              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-md transition-all ${
+                                isInPerson
+                                  ? 'bg-background text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/5'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                              onClick={() => setAssignment(char.id, true)}
+                            >
+                              <User className="w-3.5 h-3.5" />
+                              In Person
+                            </button>
+                            <button
+                              type="button"
+                              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-md transition-all ${
+                                !isInPerson
+                                  ? 'bg-background text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/5'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                              onClick={() => setAssignment(char.id, false)}
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                              AI Partner
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* AI Partner Settings */}
+                        {!isInPerson && (
+                          <div className="space-y-4 pt-4 border-t border-border/50">
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Voice Selection</label>
+                                <button
+                                  type="button"
+                                  onClick={() => void loadVoices()}
+                                  disabled={loadingVoices}
+                                  className="flex items-center gap-1 text-[10px] text-primary hover:underline disabled:opacity-50 font-medium"
+                                >
+                                  <RefreshCw className={`w-3 h-3 ${loadingVoices ? 'animate-spin' : ''}`} />
+                                  Refresh
+                                </button>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <div className="relative flex-1 min-w-0">
+                                  <select
+                                    value={char.voice.voiceId}
+                                    onChange={(e) => {
+                                      const selected = voices.find(voice => voice.referenceId === e.target.value);
+                                      handleUpdateChar(char.id, {
+                                        voice: {
+                                          ...char.voice,
+                                          voiceId: e.target.value,
+                                          ...(selected ? { voiceRevision: selected.revision } : {}),
+                                        },
+                                      });
+                                    }}
+                                    className="w-full bg-background border border-border rounded-lg pl-3 pr-8 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none truncate"
+                                    disabled={voices.length === 0 || loadingVoices}
+                                  >
+                                    {!loadingVoices && char.voice.voiceId && !voices.some(voice => voice.referenceId === char.voice.voiceId) && (
+                                      <option value={char.voice.voiceId}>Saved voice unavailable...</option>
+                                    )}
+                                    {loadingVoices ? (
+                                      <option value="">Loading voices...</option>
+                                    ) : voices.length === 0 ? (
+                                      <option value="">No cloned voices found</option>
+                                    ) : (
+                                      voices.map(v => (
+                                        <option key={v.id} value={v.referenceId}>{v.name} (revision {v.revision})</option>
+                                      ))
+                                    )}
+                                  </select>
+                                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
+                                    <ChevronDown className="w-4 h-4" />
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => previewVoice(char)}
+                                  disabled={!char.voice.voiceId}
+                                  className={`shrink-0 aspect-square w-[42px] flex items-center justify-center rounded-lg border transition-all ${
+                                    isPreviewing === char.id
+                                      ? 'bg-primary border-primary text-primary-foreground shadow-inner'
+                                      : 'bg-primary/10 border-primary/20 text-primary hover:bg-primary/20 hover:border-primary/30 disabled:opacity-50 disabled:bg-muted disabled:text-muted-foreground disabled:border-border'
+                                  }`}
+                                >
+                                  {isPreviewing === char.id ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center">
+                                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Speaking Rate</label>
+                                <span className="text-[11px] font-medium text-foreground bg-muted px-1.5 py-0.5 rounded">{char.voice.rate.toFixed(1)}x</span>
+                              </div>
+                              <input
+                                type="range"
+                                min="0.5"
+                                max="2"
+                                step="0.1"
+                                value={char.voice.rate}
+                                onChange={(e) => handleUpdateChar(char.id, { voice: { ...char.voice, rate: parseFloat(e.target.value) } })}
+                                className="w-full accent-primary h-1.5 bg-muted rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
+                              />
+                              <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
+                                <span>Slower</span>
+                                <span>Faster</span>
+                              </div>
+                            </div>
+
+                            <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
+                              <ChatterboxSetup compact onReady={() => void loadVoices()} />
+                            </div>
+
+                            <details className="group/voice rounded-lg border border-border bg-muted/20 overflow-hidden">
+                              <summary className="flex items-center gap-2.5 p-3.5 cursor-pointer text-xs font-semibold text-foreground outline-none select-none hover:bg-muted/30 transition-colors">
+                                <Settings2 className="w-4 h-4 text-primary" />
+                                Manage Voice Library
+                                <ChevronDown className="w-4 h-4 text-muted-foreground ml-auto transition-transform group-open/voice:rotate-180" />
+                              </summary>
+                              <div className="px-3.5 pb-4 pt-2 border-t border-border/50 bg-background">
+                                <VoiceLibraryPanel
+                                  referencedVoiceIds={currentActor.characters
+                                    .map(character => character.voice.voiceId)
+                                    .filter(Boolean)}
+                                  onVoicesChange={setVoices}
+                                />
+                              </div>
+                            </details>
+                          </div>
+                        )}
+
+                        {/* Color Selection */}
+                        <div className="space-y-2 pt-4 border-t border-border/50">
+                          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Palette className="w-3 h-3" /> Character Color
+                          </label>
+                          <div className="flex flex-wrap gap-2.5">
+                            {CHARACTER_COLORS.map(color => {
+                              const isSelected = getCharacterColor(char).toLowerCase() === color.value.toLowerCase();
+                              return (
+                                <button
+                                  key={color.value}
+                                  type="button"
+                                  aria-label={color.name}
+                                  title={color.name}
+                                  onClick={() => handleUpdateChar(char.id, { accentColor: color.value })}
+                                  className={`w-6 h-6 rounded-full transition-all flex items-center justify-center shadow-sm ${
+                                    isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background scale-110' : 'hover:scale-110 ring-1 ring-black/10 dark:ring-white/10'
+                                  }`}
+                                  style={{ backgroundColor: color.value }}
+                                >
+                                  {isSelected && <Check className="w-3 h-3 text-white drop-shadow-md" />}
+                                </button>
+                              );
+                            })}
+                            <div className="relative w-6 h-6 rounded-full overflow-hidden ring-1 ring-black/10 dark:ring-white/10 hover:scale-110 transition-transform shadow-sm">
+                              <input
+                                type="color"
+                                aria-label={`Custom color for ${char.name}`}
+                                value={getCharacterColor(char)}
+                                onChange={event => handleUpdateChar(char.id, { accentColor: event.target.value })}
+                                className="absolute inset-0 w-[200%] h-[200%] -translate-x-1/4 -translate-y-1/4 cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Optional Details */}
+                        <details className="group/details pt-2 border-t border-border/50">
+                          <summary className="flex items-center gap-2 text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground outline-none w-fit">
+                            <ChevronRight className="w-3.5 h-3.5 transition-transform group-open/details:rotate-90" />
+                            Advanced Character Details
+                          </summary>
+                          <div className="pt-4 pb-2 space-y-4 pl-1">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Age</label>
+                                <input
+                                  type="text"
+                                  value={char.age}
+                                  onChange={(e) => handleUpdateChar(char.id, { age: e.target.value })}
+                                  className="w-full bg-transparent border border-border rounded-md px-2.5 py-1.5 text-xs focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                  placeholder="e.g. 20s"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Gender</label>
+                                <input
+                                  type="text"
+                                  value={char.gender}
+                                  onChange={(e) => handleUpdateChar(char.id, { gender: e.target.value })}
+                                  className="w-full bg-transparent border border-border rounded-md px-2.5 py-1.5 text-xs focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                  placeholder="e.g. Female"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Style / Notes</label>
+                              <input
+                                type="text"
+                                value={char.style}
+                                onChange={(e) => handleUpdateChar(char.id, { style: e.target.value })}
+                                className="w-full bg-transparent border border-border rounded-md px-2.5 py-1.5 text-xs focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                placeholder="e.g. Enthusiastic, slight accent"
+                              />
+                            </div>
                           </div>
                         </details>
 
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between">
-                            <label className="text-xs font-medium">Speaking Rate ({char.voice.rate.toFixed(1)}x)</label>
-                          </div>
-                          <input
-                            type="range"
-                            aria-label="Speaking Rate"
-                            disabled
-                            min="0.5"
-                            max="2"
-                            step="0.1"
-                            value={char.voice.rate}
-                            onChange={(e) => handleUpdateChar(char.id, { voice: { ...char.voice, rate: parseFloat(e.target.value) } })}
-                            className="w-full"
-                          />
+                        {/* Delete Action */}
+                        <div className="pt-2 border-t border-border/50 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setDeletingCharId(char.id); }}
+                            className="text-[11px] font-medium text-destructive hover:bg-destructive/10 px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Remove Character
+                          </button>
                         </div>
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
 
           <button
             onClick={handleAddChar}
             disabled={currentActor.characters.length >= 100}
-            className={`w-full py-3 border-2 border-dashed border-border rounded-xl text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors flex items-center justify-center gap-2 text-sm font-medium ${
+            className={`w-full mt-4 py-3.5 border border-dashed border-border/80 rounded-xl text-muted-foreground hover:bg-card hover:border-primary/30 hover:text-foreground transition-all flex items-center justify-center gap-2 text-sm font-medium shadow-sm ${
               currentActor.characters.length >= 100 ? 'opacity-50 cursor-not-allowed' : ''
             }`}
           >
             <Plus className="w-4 h-4" />
-            {currentActor.characters.length >= 100 ? 'Maximum 100 Characters Reached' : 'Add Character'}
+            {currentActor.characters.length >= 100 ? 'Maximum Characters Reached' : 'Add Character'}
           </button>
         </div>
-      )}
+      </div>
+
+      {/* Footer Area */}
+      <div className="flex-none p-5 bg-background border-t border-border/80 z-10 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
+        <button
+          onClick={() => {
+            handleClose();
+            onRehearse();
+          }}
+          className="w-full h-11 bg-primary text-primary-foreground rounded-lg font-medium shadow-sm hover:bg-primary/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+        >
+          <Play className="w-4 h-4 fill-current" />
+          Start Rehearsal
+        </button>
+      </div>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deletingCharId} onOpenChange={(o) => !o && setDeletingCharId(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete Character</DialogTitle>
+            <DialogTitle>Remove Character</DialogTitle>
             <DialogDescription>
-              Are you sure you want to remove this character? You can reassign their lines to another character.
+              Are you sure you want to remove this character? You can reassign their lines to someone else.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Reassign lines to:</label>
+          <div className="py-4">
+            <label className="text-sm font-medium mb-2 block">Reassign lines to:</label>
+            <div className="relative">
               <select
                 aria-label="Reassign lines to"
                 value={reassignToId}
                 onChange={(e) => setReassignToId(e.target.value)}
-                className="w-full bg-transparent border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                className="w-full bg-background border border-border rounded-lg pl-3 pr-8 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none"
               >
                 <option value="unassign">Unassign lines</option>
                 {currentActor.characters
@@ -538,20 +652,23 @@ export function ActorAuthoringPanel({
                     </option>
                   ))}
               </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
+                <ChevronDown className="w-4 h-4" />
+              </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <button
               onClick={() => setDeletingCharId(null)}
-              className="px-4 py-2 text-sm font-medium hover:bg-muted rounded-md"
+              className="px-4 py-2 text-sm font-medium hover:bg-muted rounded-lg transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={confirmDeleteChar}
-              className="px-4 py-2 text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-md"
+              className="px-4 py-2 text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-lg shadow-sm transition-colors"
             >
-              Delete
+              Remove Character
             </button>
           </DialogFooter>
         </DialogContent>

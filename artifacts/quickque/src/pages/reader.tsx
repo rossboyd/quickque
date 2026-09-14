@@ -300,7 +300,7 @@ export default function Reader() {
     [characters],
   );
   const stopFlowBeforePartnerRef = useRef<() => Promise<void>>(async () => {});
-  const [sceneFlowEnabled, setSceneFlowEnabled] = useState(false);
+  const [sceneFlowEnabled, setSceneFlowEnabled] = useState(true);
   const [sceneSilentManual, setSceneSilentManual] = useState(false);
   const effectiveSceneMyRoleIds = sceneSilentManual
     ? characters.map(character => character.id)
@@ -1470,7 +1470,7 @@ export default function Reader() {
                        <label className="flex items-center gap-2">
                          <input type="checkbox" checked={sceneFlowEnabled}
                            onChange={event => setSceneFlowEnabled(event.target.checked)} />
-                         Follow my turn with local Mac Flow
+                          Follow my words and continue to the AI partner
                        </label>
                        {!isDesktop() && <label className="flex items-center gap-2">
                          <input type="checkbox" checked={sceneSilentManual}
@@ -1517,7 +1517,7 @@ export default function Reader() {
                   checked={sceneFlowEnabled}
                   onChange={event => setSceneFlowEnabled(event.target.checked)}
                 />
-                Follow my turn
+                 Auto-follow
               </label>
               {!isDesktop() && (
                 <label className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
@@ -1664,7 +1664,7 @@ export default function Reader() {
                 ref={el => { sectionRefs.current[idx] = el; }}
                 // Never fade whole inactive sections: custom foreground colours
                 // can become unreadable at 30% alpha over a camera/background.
-                className={`transition-opacity duration-500 opacity-100 ${isPerformance ? 'border-l-4 pl-4' : ''}`}
+                className={`transition-opacity duration-500 opacity-100 ${isPerformance ? 'scene-turn relative border-l-4 pl-4' : ''}`}
                 style={isPerformance ? { borderLeftColor: getCharacterColor(characters.find(character => character.id === script.sections[idx]?.characterId)) } : undefined}
               >
                 {isPerformance && <p
@@ -1694,7 +1694,7 @@ export default function Reader() {
                   // visible metadata from the live section instead.
                   const raw = script.sections[idx] ?? section;
                   const character = characters.find(item => item.id === raw.characterId);
-                  if (!raw.notes?.trim() && !sceneFlowEnabled && !scene.message &&
+                  if (!sceneFlowEnabled && !scene.message &&
                     ![character?.age, character?.gender, character?.style].some(value => value?.trim())) return null;
                   const mine = !!character && effectiveSceneMyRoleIds.includes(character.id);
                   const ownership = !character
@@ -1711,13 +1711,11 @@ export default function Reader() {
                         <p className="font-bold text-base leading-snug">
                           {character?.name ?? 'Unassigned'} <span className="font-normal text-muted-foreground">— {ownership}</span>
                         </p>
-                        <button
-                          type="button"
-                          className="text-xs underline"
-                          onClick={() => setShowSceneNotes(value => !value)}
-                        >
-                          {showSceneNotes ? 'Hide notes' : 'Show notes'}
-                        </button>
+                        {mine && sceneFlowEnabled && flow.status === 'listening' && (
+                          <span className="rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary">
+                            Listening · continues automatically
+                          </span>
+                        )}
                       </div>
                       {character && [character.age, character.gender, character.style]
                         .filter(value => value.trim()).length > 0 && (
@@ -1725,11 +1723,6 @@ export default function Reader() {
                           {[character.age, character.gender, character.style]
                             .filter(value => value.trim())
                             .join(' · ')}
-                        </p>
-                      )}
-                      {showSceneNotes && raw.notes?.trim() && (
-                        <p className="scene-notes mt-2 whitespace-pre-wrap text-sm font-normal opacity-90">
-                          <span className="font-semibold">Notes: </span>{raw.notes}
                         </p>
                       )}
                       {mine && sceneFlowEnabled && (
@@ -1768,6 +1761,25 @@ export default function Reader() {
                     </aside>
                   );
                 })()}
+                {sceneEnabled && idx === scene.turnIndex && script.sections[idx]?.notes?.trim() && (
+                  <aside className="scene-notes-rail" aria-label="Performance notes">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Notes</p>
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-primary hover:underline"
+                        onClick={() => setShowSceneNotes(value => !value)}
+                      >
+                        {showSceneNotes ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    {showSceneNotes && (
+                      <p className="scene-notes mt-2 whitespace-pre-wrap text-sm font-normal leading-relaxed">
+                        {script.sections[idx].notes}
+                      </p>
+                    )}
+                  </aside>
+                )}
                 {!sceneEnabled && idx === activeSectionIdx && (script.sections[idx]?.notes?.trim()) && (
                   <aside
                     className="mb-4 rounded-lg border border-border bg-muted/50 px-4 py-3"
@@ -1808,10 +1820,16 @@ export default function Reader() {
                        const spokenToken = sceneSection && scene.progress
                          ? sceneFlowTokens.find(token => token.start < scene.progress!.charEnd && token.end > scene.progress!.charStart)
                          : undefined;
-                       const partnerActive = !!spokenToken && localStart <= spokenToken.index && localEnd >= spokenToken.index;
+                        const partnerActive = !!spokenToken && localStart <= spokenToken.index && localEnd >= spokenToken.index;
                        const actorActive = sceneSection && scene.phase === 'waiting' && sceneFlowEnabled &&
                          flow.anchor >= localStart && flow.anchor <= localEnd;
-                       const isRead = flow.anchor > (sceneEnabled ? localEnd : span.endTokenIdx!);
+                        const partnerRead = sceneSection && scene.phase === 'speaking' && !!spokenToken &&
+                          localEnd < spokenToken.index;
+                        const actorRead = sceneSection && scene.phase === 'waiting' && sceneFlowEnabled &&
+                          flow.anchor > localEnd;
+                        const isRead = sceneEnabled
+                          ? partnerRead || actorRead
+                          : flow.anchor > span.endTokenIdx!;
                        const isActive = sceneEnabled
                          ? partnerActive || actorActive
                          : flow.anchor >= span.startTokenIdx! && flow.anchor <= span.endTokenIdx!;
@@ -1822,12 +1840,12 @@ export default function Reader() {
                         if (isActive) {
                            // This is an explicit contrast pair, independent of
                            // a user's reader background or foreground colour.
-                           className += "bg-primary text-primary-foreground rounded px-1 py-0.5 shadow-sm";
+                            className += "bg-primary text-primary-foreground rounded-md px-1.5 py-1 font-bold shadow-lg ring-2 ring-primary/40";
                         } else if (isRead) {
                            // Retain the chosen reader text colour. Underline and
                            // a modest alpha change communicate progress without
                            // swapping to a theme colour that may not contrast.
-                           className += "opacity-80 underline decoration-current/40 underline-offset-4";
+                            className += "opacity-65 underline decoration-current/60 decoration-2 underline-offset-4";
                         }
                       }
                       
@@ -1837,7 +1855,7 @@ export default function Reader() {
                           data-reader-anchor={`${section.id}:${i}`}
                           className={className}
                            ref={isActive ? activeTokenSpanRef : null}
-                           data-spoken-word={isActive ? 'active' : undefined}
+                            data-spoken-word={isActive ? 'active' : isRead ? 'read' : undefined}
                         >
                           {span.text}
                         </span>

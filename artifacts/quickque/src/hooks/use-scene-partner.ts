@@ -43,7 +43,7 @@ const idle: SceneState = { phase: 'idle', turnIndex: 0, generation: 0, message: 
  * stops the old engine first; no old promise can update the newly built state.
  */
 export function useScenePartner(args: UseScenePartnerArgs): ScenePartner {
-  const debugLicence = useLicence();
+  const licence = useLicence();
   const [state, setState] = useState<SceneState>(idle);
   const beforeSpeakRef = useRef(args.beforePartnerSpeak);
   beforeSpeakRef.current = args.beforePartnerSpeak;
@@ -54,13 +54,13 @@ export function useScenePartner(args: UseScenePartnerArgs): ScenePartner {
   const lifecycleRef = useRef<SceneLifecycle | null>(null);
 
   const signature = useMemo(() => JSON.stringify({
-    licensed: debugLicence.licensed,
+    licensed: licence.licensed,
     scriptId: args.script?.id,
     enabled: args.enabled,
     turns: args.turns.map(turn => [turn.id, turn.content, turn.characterId ?? null]),
     myRoleIds: [...args.myRoleIds].sort(),
     voiceSignature: args.voiceSignature,
-  }), [debugLicence.licensed, args.enabled, args.script?.id, args.turns, args.myRoleIds, args.voiceSignature]);
+  }), [licence.licensed, args.enabled, args.script?.id, args.turns, args.myRoleIds, args.voiceSignature]);
 
   useEffect(() => {
     actionGeneration.current++;
