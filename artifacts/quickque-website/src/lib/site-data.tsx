@@ -35,6 +35,12 @@ export interface SiteConfig {
   };
   release: {
     status: string;
+    tag?: string;
+    assetName?: string;
+    downloadPageUrl?: string;
+    downloadUrl?: string;
+    minimumMacOS?: string;
+    architecture?: string;
     [key: string]: unknown;
   };
   [key: string]: unknown;

@@ -39,7 +39,7 @@ export function PricingPage({ context }: { context?: any }) {
       </article>)}
     </section>
     <div className="mx-auto mt-7 max-w-6xl px-6 text-sm leading-relaxed text-[var(--text-muted)]">
-      <p><strong>Paid plans are coming soon.</strong> Prices are in GBP. Checkout and purchase activation aren’t connected yet. Quickque is currently available as a source build; there isn’t a ready-to-install Mac download.</p>
+      <p><strong>Paid plans are coming soon.</strong> Prices are in GBP. Checkout and purchase activation aren’t connected yet. A free, unsigned Apple Silicon test DMG is available for Macs running macOS 26 or newer.</p>
     </div>
     <section id="licence" className="mx-auto max-w-3xl space-y-8 px-6 pt-16">
       <div><h2 className="text-2xl font-semibold">What stays free?</h2><p className="mt-3 leading-relaxed text-[var(--text-muted)]">Writing, importing, editing, manual reading and timed scrolling stay free. You can also download the voice models, record voice samples and generate rehearsal audio. Try Voice Follow and AI voice playback with a 30-second allowance. When the timer ends, choose a plan or continue with Free. Your scripts, voices and saved audio stay put.</p></div>

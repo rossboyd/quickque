@@ -41,3 +41,16 @@ app, matching ICNS contents against the source asset and confirming all three
 native helpers and the Chatterbox runtime exist and are executable. Finder/Dock
 visual appearance still requires human inspection. Source icon hashes pass on
 Linux; the DMG checks themselves require the Mac build.
+
+## Public test release
+
+The first public test release uses the `v0.1.0` tag and the asset
+`Quickque_0.1.0_aarch64.dmg`. It is Apple Silicon-only, requires macOS 26 or
+newer, and is unsigned. Testers should use Finder's Control-click → **Open**
+flow for the first launch if macOS warns about the developer; nobody should
+disable Gatekeeper.
+
+Upload the DMG to the GitHub release page before publishing the release. The
+website links to the stable asset URL:
+`https://github.com/rossboyd/quickque/releases/download/v0.1.0/Quickque_0.1.0_aarch64.dmg`.
+That URL is expected to remain unavailable until the asset is attached.

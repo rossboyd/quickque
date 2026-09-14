@@ -84,16 +84,18 @@ WebP files when the pictured UI changes. Never publish a private script.
 ## Release readiness
 
 `config/site.json` holds the repository, branch, guide version, source command,
-website base path, production origin, and release-readiness statement.
-The release endpoint was empty when checked on 2026-09-12. No binary installer
-is provided by this site. Missing or invalid configuration must fail closed.
+website base path, production origin, release tag, asset name, and release
+readiness statement. The `v0.1.0` release is an unsigned Apple Silicon test
+DMG requiring macOS 26 or newer. The installer link is intentionally kept
+separate from the verified-release status until the asset and native Mac
+checks are complete. Missing or invalid configuration must fail closed.
 Changing a release flag is not enough to make prebuilt installation available.
 
-A future release integration must consume independently verified Mac outputs,
-identify a concrete Apple Silicon asset and published checksum, link its
-inspectable installer source, and test missing assets, failed downloads,
-unsupported platforms, checksum failures, and existing installations. It must
-never silently overwrite, elevate privileges, or disable Gatekeeper. Native
+The current release integration identifies a concrete Apple Silicon asset and
+release page, and the install page performs an advisory browser compatibility
+check before linking to it. It must never silently overwrite, elevate
+privileges, or disable Gatekeeper. The check warns when browser data is
+unavailable or spoofable, and blocks only clearly unsupported devices. Native
 build/signing/device verification belongs to the desktop release work, not the
 website checks.
 
@@ -108,7 +110,7 @@ as 250 pence in `config/site.json`.
 The MIT source licence is unchanged. Paid activation and subscription management
 are not implemented. The native Free session timer awaits Mac verification. Payments remain disabled. The optional
 dummy checkout makes no payment-provider calls and issues no entitlement or
-download. No verified prebuilt release is available. See the
+download. The v0.1.0 DMG is a test build, not a verified production release. See the
 [commerce runbook](docs/COMMERCE.md) for confirmed plans and remaining work.
 
 ## Public origin and indexing

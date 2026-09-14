@@ -11,12 +11,23 @@ native macOS verification._
 
 ## Status
 
-This repository is currently source-only. It does not claim a public production
-site, a published installer, or a release download. The browser path can be
-run from source. The macOS path is implemented in the source tree but
-macOS-specific window, microphone, model, packaging, and phone behavior still
-needs validation on supported hardware; a browser build is not proof of a
-working Mac app.
+The repository includes the browser source and a first Apple Silicon Mac test
+release. The `v0.1.0` release is an unsigned DMG for testing, not a signed or
+notarized production distribution. The native window, microphone, model,
+packaging, and phone behavior still needs validation on supported hardware; a
+browser build is not proof of a working Mac app.
+
+### Mac test download
+
+The test DMG is published in the
+[Quickque v0.1.0 release](https://github.com/rossboyd/quickque/releases/tag/v0.1.0)
+as `Quickque_0.1.0_aarch64.dmg`. It requires an Apple Silicon Mac running
+macOS 26 or newer. The download is unsigned, so macOS may require Finder's
+Control-click → **Open** flow on first launch. Do not disable Gatekeeper.
+
+The website performs an advisory browser compatibility check before linking to
+the asset. Browser detection can be unavailable or spoofed; confirm the
+hardware and OS requirements yourself.
 
 ## Source rights and optional packaged Mac app
 
@@ -124,10 +135,10 @@ WKWebView behavior.
 
 ## Build the desktop source
 
-Desktop development requires an Apple Silicon Mac running macOS 14 or newer,
-Xcode 16 (including its Swift 6 toolchain), Xcode command-line tools, and the
-stable Rust toolchain installed with `rustup`, in addition to Node.js 24 and
-pnpm 10.26.1. Install the command-line tools if needed with
+Desktop development requires an Apple Silicon Mac running macOS 26 or newer,
+Xcode 26 with Swift 6.2 and the macOS 26 SDK, Xcode command-line tools, and
+the stable Rust toolchain installed with `rustup`, in addition to Node.js 24
+and pnpm 10.26.1. Install the command-line tools if needed with
 `xcode-select --install`. The canonical Mac source build below is generated
 from [`config/site.json`](artifacts/quickque-website/config/site.json); keep
 this block synchronized with that source command:

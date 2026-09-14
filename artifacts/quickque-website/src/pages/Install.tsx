@@ -2,6 +2,7 @@ import React from 'react';
 import { useGuideArticle, useSiteConfig } from '../hooks/useData';
 import { Meta } from '../components/Meta';
 import { MarkdownView } from './MarkdownView';
+import { DownloadGate } from '../components/DownloadGate';
 
 export function InstallPage({ context }: { context?: any }) {
   const { article, loading, error } = useGuideArticle('requirements-installation');
@@ -14,13 +15,15 @@ export function InstallPage({ context }: { context?: any }) {
 
   return (
     <div className="max-w-3xl mx-auto w-full px-4 py-16">
-      <Meta title="Install Quickque" description="How to build and install Quickque from source." context={context} />
+      <Meta title="Install Quickque" description="Download the Apple Silicon test DMG or build Quickque from source." context={context} />
       <div className="mb-12 border-b border-[var(--border)] pb-8">
         <h1 className="text-4xl font-semibold mb-4">{article.title}</h1>
         <p className="text-xl text-[var(--text-muted)]">{article.description}</p>
       </div>
 
       <MarkdownView content={article.body || ''} basePath={config?.basePath} />
+
+      <DownloadGate />
 
       {editLink && (
         <div className="mt-16 pt-8 border-t border-[var(--border)]">
