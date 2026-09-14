@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { issueLease, keyHash } from '../licensing/lease';
+import { auditForLease, issueLease, keyHash, type LeaseAction } from '../licensing/lease';
 const router = Router();
 const attempts = new Map<string, { count: number; until: number }>();
 router.post('/licences/:action', async (req, res) => {
@@ -17,10 +17,14 @@ router.post('/licences/:action', async (req, res) => {
   const { licenceKey, deviceId } = req.body ?? {};
   if (typeof licenceKey !== 'string' || !/^QQ-[A-Za-z0-9_-]{43}$/.test(licenceKey) || typeof deviceId !== 'string' || !/^[a-f0-9]{64}$/.test(deviceId)) { res.status(400).json({ error: 'INVALID_REQUEST' }); return; }
   try {
-    const { entitlementForDevice } = await import('../licensing/repository');
-    const entitlement = await entitlementForDevice(keyHash(licenceKey), deviceId, req.params.action === 'deactivate');
-    if (!entitlement) { res.status(401).json({ error: 'INVALID_KEY', message: 'This licence key was not recognised.' }); return; }
-    res.json(issueLease(entitlement, deviceId, signingKey, keyId));
+    const { issueForDevice } = await import('../licensing/repository');
+    const action = req.params.action as LeaseAction;
+    const envelope = await issueForDevice(keyHash(licenceKey), deviceId, action, entitlement => {
+      const issued = issueLease(entitlement, deviceId, signingKey, keyId);
+      return { envelope: issued, audit: auditForLease(issued, action) };
+    });
+    if (!envelope) { res.status(401).json({ error: 'INVALID_KEY', message: 'This licence key was not recognised.' }); return; }
+    res.json(envelope);
   } catch (error) {
     if (error instanceof Error && error.message === 'DEVICE_LIMIT') { res.status(409).json({ error: 'DEVICE_LIMIT', message: 'Deactivate another Mac before using this licence here.' }); return; }
     // Never include signing material, purchase keys or database errors in responses/logs.

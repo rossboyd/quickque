@@ -14,15 +14,22 @@ This implements public-key signed leases, not a claim to reproduce Sketch's priv
 
 The issuer uses Node's Ed25519 implementation; Rust uses ed25519-dalek strict verification. The signature covers `quickque-lease-v1\n<keyId>\n<base64url payload>`. Unknown keys, tampering, wrong product/schema/device and invalid policy are rejected. The envelope is verified before claims become trusted. Key rotation uses a compiled allowlist of public keys.
 
+Every successfully signed activation, renewal and deactivation is appended to
+`quickque_licence_lease_audit` in the same transaction as device allocation.
+The audit stores the lease and licence IDs, hashed device ID, action, plan,
+features, signing-key ID and lease timestamps. It deliberately stores neither
+the raw customer key nor the signed envelope. The licence record distinguishes
+verified purchases from `gift` and `tester` grants.
+
 Mac identification hashes the stable IOPlatformUUID with a Quickque-specific domain. Raw serial numbers, network addresses and script/voice contents are not sent. OS updates do not change this fingerprint. The purchase key and signed envelope live in macOS Keychain. Clock high-water marks and a monotonic in-process clock detect ordinary rollback; a valid online renewal can recover after correcting the clock. This is not resistance to a user patching the binary or restoring an entire machine backup.
 
 ## Configure a test deployment
 
 1. Generate Ed25519 keys using `node artifacts/api-server/scripts/licence-admin.mjs keys directory=/secure/location id=production-1`. Do not commit the generated private key.
-2. Apply `lib/db/migrations/0001_licences.sql`, then `0002_licence_purchase_identity.sql`, to the intended PostgreSQL database. These migrations are supplied but are not automatically run at application startup.
+2. Apply the numbered SQL migrations in `lib/db/migrations/` in order. These migrations are supplied but are not automatically run at application startup.
 3. Set server secrets `QUICKQUE_LICENCE_PRIVATE_KEY` (PEM), `QUICKQUE_LICENCE_KEY_ID` and `DATABASE_URL`. Deploy the existing API server over HTTPS. Routes: POST `/api/licences/activate`, `/renew`, `/deactivate`; request `{ licenceKey, deviceId }`. Successful responses are signed envelopes. Purchase keys are hashed in the database. Transactions serialize device allocation (two Macs by default).
 4. Build the desktop app with `QUICKQUE_LICENCE_PUBLIC_KEYS` set to the JSON array from public-keys.json and `QUICKQUE_LICENCE_SERVER=https://your-host/api/licences`. `QUICKQUE_RELEASE_TIMESTAMP` remains in the lease schema for compatibility with older test leases but does not limit Lifetime updates. Never embed the private key.
-5. Grant a test entitlement with `node artifacts/api-server/scripts/licence-admin.mjs grant plan=perpetual email=customer@example.com` or `grant plan=subscription paid-through=YYYY-MM-DD email=customer@example.com`. This prints the random purchase key once for operator delivery. Activate it in Settings → General with the testing bypass off.
+5. Grant a complimentary Lifetime entitlement with `node artifacts/api-server/scripts/licence-admin.mjs grant plan=perpetual source=gift email=customer@example.com note="Launch gift"`. For a time-limited tester licence, use `grant plan=subscription source=tester paid-through=YYYY-MM-DD email=customer@example.com note="Beta tester"`. The command accepts only `gift` or `tester`; paid purchases must come from verified Stripe fulfilment. It prints the random licence key once for operator delivery. Activate it in Settings → General with the testing bypass off.
 6. Exercise offline launch, expired subscription returning to Free, modified lease, the two-device limit, deactivation, clock correction, and Lifetime access on a later app release. Full Keychain/device/audio verification requires a Mac build.
 
 No production key, licence endpoint, entitlement database or Stripe checkout is provisioned by these code changes. Unconfigured builds explain that activation is unavailable and retain the testing bypass. Monthly/lifetime buttons do not simulate a completed purchase.

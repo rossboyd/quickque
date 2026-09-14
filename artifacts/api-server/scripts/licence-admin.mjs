@@ -22,17 +22,22 @@ if (action === 'keys') {
       await pool.query('UPDATE quickque_licences SET active = false WHERE id = $1', [options.id]);
       console.log('Revocation recorded. Existing offline leases remain valid until renewal or expiry.');
     } else {
-      if (!['subscription', 'perpetual'].includes(options.plan)) throw new Error('grant plan=subscription paid-through=YYYY-MM-DD OR grant plan=perpetual');
+      if (!['subscription', 'perpetual'].includes(options.plan) || !['gift', 'tester'].includes(options.source)) {
+        throw new Error('grant plan=perpetual source=gift|tester email=customer@example.com [note=reason] OR grant plan=subscription source=tester paid-through=YYYY-MM-DD email=customer@example.com [note=reason]');
+      }
+      if (options.plan === 'subscription' && options.source !== 'tester') throw new Error('Time-limited complimentary licences must use source=tester');
       const email = options.email?.trim();
       if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('A customer email is required: email=customer@example.com');
+      const note = options.note?.trim() || null;
+      if (note && note.length > 500) throw new Error('Grant notes must not exceed 500 characters');
       const paidThrough = options.plan === 'subscription' ? Math.floor(Date.parse(options['paid-through']) / 1000) : null;
       if (options.plan === 'subscription' && (!Number.isSafeInteger(paidThrough) || paidThrough <= Date.now() / 1000)) throw new Error('A future paid-through date is required');
       const updatesUntil = null;
       const key = `QQ-${randomBytes(32).toString('base64url')}`;
       const id = randomUUID();
-      await pool.query('INSERT INTO quickque_licences (id,key_hash,plan,paid_through,updates_until,customer_email) VALUES ($1,$2,$3,$4,$5,$6)', [id, createHash('sha256').update(key).digest('hex'), options.plan, paidThrough, updatesUntil, email]);
+      await pool.query('INSERT INTO quickque_licences (id,key_hash,plan,paid_through,updates_until,customer_email,licence_source,grant_note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [id, createHash('sha256').update(key).digest('hex'), options.plan, paidThrough, updatesUntil, email, options.source, note]);
       // This is the operator's one-time delivery output, not an application/request log.
-      console.log(JSON.stringify({ id, licenceKey: key, updatesUntil, paidThrough }));
+      console.log(JSON.stringify({ id, licenceKey: key, source: options.source, updatesUntil, paidThrough }));
     }
   } finally { await pool.end(); }
 } else throw new Error('Use keys, grant, or revoke. See docs/licensing.md.');

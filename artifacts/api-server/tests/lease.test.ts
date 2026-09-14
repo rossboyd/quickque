@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { generateKeyPairSync, verify } from 'node:crypto';
-import { issueLease, keyHash, DAY } from '../src/licensing/lease.ts';
+import { auditForLease, issueLease, keyHash, DAY } from '../src/licensing/lease.ts';
 const { privateKey, publicKey } = generateKeyPairSync('ed25519');
 const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 const device = 'a'.repeat(64);
@@ -23,6 +23,21 @@ test('subscription cannot outlive its prepaid entitlement', () => {
 test('perpetual leases have no expiry or update cutoff', () => {
   const lease = claims(issueLease({ ...entitlement, plan: 'perpetual', updatesUntil: 4000 }, device, pem, 'production', 1000));
   assert.equal(lease.expiresAt, null); assert.equal(lease.updatesUntil, null);
+});
+test('issued lease audit contains identifiers and policy but no purchase key or envelope', () => {
+  const envelope = issueLease(entitlement, device, pem, 'production', 1000);
+  const audit = auditForLease(envelope, 'activate');
+  assert.equal(audit.licenceId, entitlement.id);
+  assert.equal(audit.deviceId, device);
+  assert.equal(audit.action, 'activate');
+  assert.equal(audit.signingKeyId, 'production');
+  assert.equal(audit.issuedAt, 1000);
+  assert.equal(audit.refreshAfter, 1000 + DAY);
+  assert.equal(audit.expiresAt, 1000 + 30 * DAY);
+  assert.deepEqual(audit.features, ['saved_audio', 'voice_follow']);
+  assert.equal('licenceKey' in audit, false);
+  assert.equal('payload' in audit, false);
+  assert.equal('signature' in audit, false);
 });
 test('revocations are signed and never grant features', () => {
   const lease = claims(issueLease({ ...entitlement, active: false }, device, pem, 'production', 1000));
