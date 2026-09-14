@@ -67,3 +67,6 @@ Thumbs.db
 
 # Standalone licence verifier build output
 /lib/licence-core/target/
+
+# Rust build outputs
+**/target/

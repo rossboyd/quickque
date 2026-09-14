@@ -21,6 +21,7 @@ import type {
 
 import type {
   AdminSummary,
+  AnonymousAnalyticsEvent,
   DeleteAdminLicence200,
   DeleteAdminLicenceDevice200,
   GetAdminLicencesParams,
@@ -136,6 +137,77 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
+
+export const getRecordAnonymousAnalyticsEventUrl = () => {
+
+
+
+
+  return `/api/analytics/events`
+}
+
+/**
+ * @summary Add anonymous usage metadata to daily aggregates
+ */
+export const recordAnonymousAnalyticsEvent = async (anonymousAnalyticsEvent: AnonymousAnalyticsEvent, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getRecordAnonymousAnalyticsEventUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(anonymousAnalyticsEvent)
+  }
+);}
+
+
+
+
+
+export const getRecordAnonymousAnalyticsEventMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordAnonymousAnalyticsEvent>>, TError,{data: BodyType<AnonymousAnalyticsEvent>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordAnonymousAnalyticsEvent>>, TError,{data: BodyType<AnonymousAnalyticsEvent>}, TContext> => {
+
+const mutationKey = ['recordAnonymousAnalyticsEvent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordAnonymousAnalyticsEvent>>, {data: BodyType<AnonymousAnalyticsEvent>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recordAnonymousAnalyticsEvent(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordAnonymousAnalyticsEventMutationResult = NonNullable<Awaited<ReturnType<typeof recordAnonymousAnalyticsEvent>>>
+    export type RecordAnonymousAnalyticsEventMutationBody = BodyType<AnonymousAnalyticsEvent>
+    export type RecordAnonymousAnalyticsEventMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add anonymous usage metadata to daily aggregates
+ */
+export const useRecordAnonymousAnalyticsEvent = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordAnonymousAnalyticsEvent>>, TError,{data: BodyType<AnonymousAnalyticsEvent>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordAnonymousAnalyticsEvent>>,
+        TError,
+        {data: BodyType<AnonymousAnalyticsEvent>},
+        TContext
+      > => {
+      return useMutation(getRecordAnonymousAnalyticsEventMutationOptions(options));
+    }
 
 export const getGetAdminSummaryUrl = () => {
 

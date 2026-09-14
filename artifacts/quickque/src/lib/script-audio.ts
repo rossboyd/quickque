@@ -8,6 +8,7 @@ import { audioEntryIdentity } from './script-audio-model';
 import type { SceneVoice } from './scene-lifecycle';
 import type { SceneSpeechProgress } from './scene-lifecycle';
 import { tokenize } from './flow/tokenize';
+import { recordAnonymousAnalytics } from './anonymous-analytics';
 
 export type AudioStatus = { status: 'ready' | 'missing'; revision: string; entries: { id: string; key: string; durationSeconds: number }[]; missing?: number };
 export const AUDIO_CHANGED = 'quickque:script-audio-changed';
@@ -48,6 +49,7 @@ export async function generateAudio(request: AudioRequest): Promise<AudioStatus>
     } catch { recordFlowDebug('audio_listener_failed'); }
     const result = await invoke<AudioStatus>('script_audio_generate', { request });
     recordFlowDebug('audio_generate_ready');
+    recordAnonymousAnalytics({ event: 'voice_used', voiceMode: 'chatterbox' });
     Object.assign(job, { running: false, stage: 'ready', completed: job.total });
     return result;
   } catch (error) {

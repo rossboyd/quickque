@@ -16,6 +16,7 @@ mod turbo;
 mod script_audio;
 mod debug_licence;
 mod licence;
+mod analytics;
 use remote::{RemoteInfo, RemoteService, RemoteSnapshot, RemoteStatus};
 
 mod local_library;
@@ -1311,6 +1312,7 @@ pub fn run() {
             licence::licence_activate,
             licence::licence_refresh,
             licence::licence_deactivate,
+            analytics::record_anonymous_analytics_event,
             debug_licence_get,
             debug_licence_set,
             flow_command,

@@ -25,6 +25,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /analytics/events:
+    post:
+      operationId: recordAnonymousAnalyticsEvent
+      tags: [analytics]
+      summary: Add anonymous usage metadata to daily aggregates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnonymousAnalyticsEvent"
+      responses:
+        "204":
+          description: Aggregate updated
   /admin/summary:
     get:
       operationId: getAdminSummary
@@ -184,6 +198,33 @@ paths:
                     type: boolean
 components:
   schemas:
+    AnonymousAnalyticsEvent:
+      type: object
+      required: [event]
+      properties:
+        event:
+          type: string
+          enum: [app_open, script_created, voice_used, reading_session]
+        appSurface:
+          type: string
+          enum: [mac, browser]
+        scriptPurpose:
+          type: string
+          enum: [presentation, performance]
+        creationSource:
+          type: string
+          enum: [blank, sample, duplicate, import]
+        voiceMode:
+          type: string
+          enum: [voice_follow, scene_partner, chatterbox]
+        scriptWordCount:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+        activeSeconds:
+          type: integer
+          minimum: 0
+          maximum: 86400
     HealthStatus:
       type: object
       properties:

@@ -3,10 +3,12 @@ import adminLicencesRouter from './adminLicences';
 import adminSessionRouter from './adminSession';
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import analyticsRouter from './analytics';
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(analyticsRouter);
 router.use(licencesRouter);
 router.use(adminSessionRouter);
 router.use(adminLicencesRouter);

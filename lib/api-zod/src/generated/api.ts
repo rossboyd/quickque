@@ -18,6 +18,30 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * @summary Add anonymous usage metadata to daily aggregates
+ */
+export const recordAnonymousAnalyticsEventBodyScriptWordCountMin = 0;
+export const recordAnonymousAnalyticsEventBodyScriptWordCountMax = 1000000;
+
+export const recordAnonymousAnalyticsEventBodyActiveSecondsMin = 0;
+export const recordAnonymousAnalyticsEventBodyActiveSecondsMax = 86400;
+
+
+
+export const RecordAnonymousAnalyticsEventBody = zod.object({
+  "event": zod.enum(['app_open', 'script_created', 'voice_used', 'reading_session']),
+  "appSurface": zod.enum(['mac', 'browser']).optional(),
+  "scriptPurpose": zod.enum(['presentation', 'performance']).optional(),
+  "creationSource": zod.enum(['blank', 'sample', 'duplicate', 'import']).optional(),
+  "voiceMode": zod.enum(['voice_follow', 'scene_partner', 'chatterbox']).optional(),
+  "scriptWordCount": zod.number().int().min(recordAnonymousAnalyticsEventBodyScriptWordCountMin).max(recordAnonymousAnalyticsEventBodyScriptWordCountMax).optional(),
+  "activeSeconds": zod.number().int().min(recordAnonymousAnalyticsEventBodyActiveSecondsMin).max(recordAnonymousAnalyticsEventBodyActiveSecondsMax).optional()
+})
+
+export const RecordAnonymousAnalyticsEventResponse = zod.void()
+
+
+/**
  * @summary Get admin summary
  */
 export const GetAdminSummaryResponse = zod.object({

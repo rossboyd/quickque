@@ -7,6 +7,12 @@
  */
 
 export * from './adminSummary';
+export * from './anonymousAnalyticsEvent';
+export * from './anonymousAnalyticsEventAppSurface';
+export * from './anonymousAnalyticsEventCreationSource';
+export * from './anonymousAnalyticsEventEvent';
+export * from './anonymousAnalyticsEventScriptPurpose';
+export * from './anonymousAnalyticsEventVoiceMode';
 export * from './auditRow';
 export * from './deleteAdminLicence200';
 export * from './deleteAdminLicenceDevice200';

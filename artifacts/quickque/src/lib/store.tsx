@@ -66,6 +66,7 @@ import {
 } from './actor-model.ts';
 import { StartupShell } from '@/components/startup-shell';
 import { getStartupContract, type HydrationPhase } from './startup';
+import { recordAnonymousAnalytics } from './anonymous-analytics';
 
 const SEED_SCRIPTS: Script[] = createInitialScripts();
 type StoreContextType = {
@@ -816,13 +817,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
     const nextOrder = [newId, ...customOrderRef.current.filter(id => id !== newId)];
-    return commitLibrary({
+    const committed = commitLibrary({
       scripts: [newScript, ...scriptsRef.current],
       trash: trashRef.current,
       customOrder: nextOrder,
       sortMode: sortModeRef.current,
       activeScriptId: newId,
-    }).ok ? newId : '';
+    }).ok;
+    if (committed) recordAnonymousAnalytics({
+      event: 'script_created',
+      scriptPurpose: purpose,
+      creationSource: sample ? 'sample' : 'blank',
+    });
+    return committed ? newId : '';
   }, [commitLibrary]);
 
   const updateScript = useCallback((
@@ -971,13 +978,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ...(remappedActor ? { actor: remappedActor.actor } : {}),
     };
     const nextOrder = [newId, ...customOrderRef.current.filter(orderId => orderId !== newId)];
-    return commitLibrary({
+    const committed = commitLibrary({
       scripts: [newScript, ...scriptsRef.current],
       trash: trashRef.current,
       customOrder: nextOrder,
       sortMode: sortModeRef.current,
       activeScriptId: newId,
-    }).ok ? newId : null;
+    }).ok;
+    if (committed) recordAnonymousAnalytics({
+      event: 'script_created',
+      scriptPurpose: newScript.purpose,
+      creationSource: 'duplicate',
+    });
+    return committed ? newId : null;
   }, [commitLibrary]);
 
   const setSortMode = useCallback((mode: SortMode) => {
@@ -1741,6 +1754,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (sample) Object.assign(newScript, createMatildaSample(sample.voices, now), { id: newId });
     if (!commitUserScripts([newScript, ...scriptsRef.current], true)) return '';
     setActiveScriptId(newId);
+    recordAnonymousAnalytics({
+      event: 'script_created',
+      scriptPurpose: purpose,
+      creationSource: sample ? 'sample' : 'blank',
+    });
     return newId;
   }, [commitUserScripts]);
 
@@ -1791,8 +1809,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })),
       };
 
-      commitUserScripts([newScript, ...scriptsRef.current]);
+      if (!commitUserScripts([newScript, ...scriptsRef.current])) return null;
       setActiveScriptId(newId);
+      recordAnonymousAnalytics({
+        event: 'script_created',
+        scriptPurpose: newScript.purpose,
+        creationSource: 'duplicate',
+      });
       return newId;
     },
     [commitUserScripts],

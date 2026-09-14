@@ -5,6 +5,69 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type AnonymousAnalyticsEventEvent = typeof AnonymousAnalyticsEventEvent[keyof typeof AnonymousAnalyticsEventEvent];
+
+
+export const AnonymousAnalyticsEventEvent = {
+  app_open: 'app_open',
+  script_created: 'script_created',
+  voice_used: 'voice_used',
+  reading_session: 'reading_session',
+} as const;
+
+export type AnonymousAnalyticsEventAppSurface = typeof AnonymousAnalyticsEventAppSurface[keyof typeof AnonymousAnalyticsEventAppSurface];
+
+
+export const AnonymousAnalyticsEventAppSurface = {
+  mac: 'mac',
+  browser: 'browser',
+} as const;
+
+export type AnonymousAnalyticsEventScriptPurpose = typeof AnonymousAnalyticsEventScriptPurpose[keyof typeof AnonymousAnalyticsEventScriptPurpose];
+
+
+export const AnonymousAnalyticsEventScriptPurpose = {
+  presentation: 'presentation',
+  performance: 'performance',
+} as const;
+
+export type AnonymousAnalyticsEventCreationSource = typeof AnonymousAnalyticsEventCreationSource[keyof typeof AnonymousAnalyticsEventCreationSource];
+
+
+export const AnonymousAnalyticsEventCreationSource = {
+  blank: 'blank',
+  sample: 'sample',
+  duplicate: 'duplicate',
+  import: 'import',
+} as const;
+
+export type AnonymousAnalyticsEventVoiceMode = typeof AnonymousAnalyticsEventVoiceMode[keyof typeof AnonymousAnalyticsEventVoiceMode];
+
+
+export const AnonymousAnalyticsEventVoiceMode = {
+  voice_follow: 'voice_follow',
+  scene_partner: 'scene_partner',
+  chatterbox: 'chatterbox',
+} as const;
+
+export interface AnonymousAnalyticsEvent {
+  event: AnonymousAnalyticsEventEvent;
+  appSurface?: AnonymousAnalyticsEventAppSurface;
+  scriptPurpose?: AnonymousAnalyticsEventScriptPurpose;
+  creationSource?: AnonymousAnalyticsEventCreationSource;
+  voiceMode?: AnonymousAnalyticsEventVoiceMode;
+  /**
+     * @minimum 0
+     * @maximum 1000000
+     */
+  scriptWordCount?: number;
+  /**
+     * @minimum 0
+     * @maximum 86400
+     */
+  activeSeconds?: number;
+}
+
 export interface HealthStatus {
   status: string;
 }

@@ -59,6 +59,7 @@ import {
   applyDocumentTheme,
   QUICKQUE_READER_THEME_ATTRIBUTE,
 } from '@/lib/settings-persistence';
+import { recordAnonymousAnalytics } from '@/lib/anonymous-analytics';
 
 type ReaderPositionSnapshot = {
   anchorId: string;
@@ -375,6 +376,39 @@ export default function Reader() {
   });
   const isPlaying = !sceneEnabled && readMode === 'manual' && playbackState.phase === 'playing';
   const timerState = playbackState.timerState;
+  const analyticsTimerRef = useRef(timerState);
+  analyticsTimerRef.current = timerState;
+  useEffect(() => {
+    if (!script) return;
+    const wordCount = script.sections.reduce((total, section) => {
+      const words = section.content.trim().match(/\S+/g);
+      return total + (words?.length ?? 0);
+    }, 0);
+    return () => {
+      const activeSeconds = Math.min(86_400, Math.round(
+        getElapsedMs(analyticsTimerRef.current, performance.now()) / 1000,
+      ));
+      if (activeSeconds < 1) return;
+      recordAnonymousAnalytics({
+        event: 'reading_session',
+        scriptPurpose: getScriptPurpose(script),
+        scriptWordCount: wordCount,
+        activeSeconds,
+      });
+    };
+  }, [script?.id]);
+  const lastVoiceAnalyticsRef = useRef({ flowListening: false, sceneSpeaking: false });
+  useEffect(() => {
+    const flowListening = flow.status === 'listening';
+    const sceneSpeaking = sceneEnabled && scene.phase === 'speaking';
+    if (flowListening && !lastVoiceAnalyticsRef.current.flowListening) {
+      recordAnonymousAnalytics({ event: 'voice_used', voiceMode: 'voice_follow' });
+    }
+    if (sceneSpeaking && !lastVoiceAnalyticsRef.current.sceneSpeaking) {
+      recordAnonymousAnalytics({ event: 'voice_used', voiceMode: 'scene_partner' });
+    }
+    lastVoiceAnalyticsRef.current = { flowListening, sceneSpeaking };
+  }, [flow.status, scene.phase, sceneEnabled]);
   const pausePlayback = useCallback(() => {
     const wasRequested = ['starting', 'playing'].includes(playback.state.phase);
     playback.pause();

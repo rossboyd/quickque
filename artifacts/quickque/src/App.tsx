@@ -18,6 +18,7 @@ import {
 import { StoreProvider } from '@/lib/store';
 import Library from '@/pages/library';
 import Reader from '@/pages/reader';
+import { recordAnonymousAnalytics } from '@/lib/anonymous-analytics';
 
 const routerBase =
   import.meta.env.BASE_URL === './'
@@ -46,6 +47,10 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
 function App() {
   useEffect(() => {
     recordFlowDebug(isDesktop() ? 'ui_desktop' : 'ui_browser');
+    if (sessionStorage.getItem('quickque-open-counted') !== 'true') {
+      sessionStorage.setItem('quickque-open-counted', 'true');
+      recordAnonymousAnalytics({ event: 'app_open' });
+    }
   }, []);
   return (
     <StoreProvider>
