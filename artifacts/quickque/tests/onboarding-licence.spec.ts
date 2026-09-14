@@ -21,7 +21,7 @@ test('welcome has four steps and optional audio never blocks a browser workspace
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('quickque_profile')!).onboardingComplete)).toBe(true);
 });
 
-test('settings separates audio, storage and developer controls with keyboard tabs', async ({ page }) => {
+test('settings separates licence, audio and storage controls with keyboard tabs', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(() => localStorage.setItem('quickque_profile', JSON.stringify({ name: 'Sam', onboardingComplete: true })));
   await page.reload();
@@ -29,14 +29,16 @@ test('settings separates audio, storage and developer controls with keyboard tab
   const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
   await expect(settings.getByRole('tab')).toHaveCount(5);
   await expect(settings.getByRole('switch', { name: 'Licensed mode' })).toHaveCount(0);
+  await settings.getByRole('textbox', { name: 'Licence key' }).fill('QQ-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG');
+  await expect(settings.getByRole('button', { name: 'Activate licence' })).toBeEnabled();
+  await settings.getByRole('button', { name: 'Activate licence' }).click();
+  await expect(settings.getByText(/install the latest Mac release/i)).toBeVisible();
   await settings.getByRole('tab', { name: 'Voices & audio' }).click();
   await expect(settings.getByText('1. Download the voice model')).toBeVisible();
   await expect(settings.getByText('Voice Follow · Scroll as you speak')).toBeVisible();
   await settings.getByRole('tab', { name: 'Storage & backups' }).click();
   await expect(settings.getByRole('button', { name: 'Export script backup' })).toBeVisible();
   await settings.getByRole('tab', { name: 'Help & diagnostics' }).click();
-  await settings.getByText('Developer options', { exact: true }).click();
-  await expect(settings.getByRole('switch', { name: 'Licensed mode' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(settings).toHaveCount(0);
 });

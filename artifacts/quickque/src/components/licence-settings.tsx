@@ -5,9 +5,14 @@ export function LicenceSettings() {
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const cleanKey = key.replace(/\s+/g, '');
   const run = async (action: 'activate' | 'refresh' | 'deactivate') => {
+    if (action === 'activate' && !status?.configured) {
+      setMessage('Licence activation is unavailable in this copy of Quickque. Please install the latest Mac release and try again.');
+      return;
+    }
     setBusy(true); setMessage(null);
-    try { const next = await licenceOperation(action, key.trim()); setKey(''); setMessage(action === 'deactivate' ? 'This Mac has been deactivated.' : next.message); }
+    try { const next = await licenceOperation(action, cleanKey); setKey(''); setMessage(action === 'deactivate' ? 'This Mac has been deactivated.' : next.message); }
     catch (error) { setMessage(String(error)); } finally { setBusy(false); }
   };
   const date = (time: number) => new Date(time * 1000).toLocaleDateString();
@@ -16,9 +21,16 @@ export function LicenceSettings() {
     <p role="status" className="text-sm text-muted-foreground">{status?.message ?? 'Checking saved licence…'}</p>
     {status?.offlineUntil && <p className="text-sm">Offline access until {date(status.offlineUntil)}.</p>}
     {status?.updatesUntil && <p className="text-sm">Updates included through {date(status.updatesUntil)}. Eligible versions remain yours to use.</p>}
-    <label className="block space-y-1 text-sm"><span>Licence key</span><input type="password" value={key} onChange={event => setKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="QQ-…" className="w-full rounded-md border border-border bg-background px-3 py-2" /></label>
+    <label className="block space-y-1 text-sm"><span>Licence key</span><input type="password" value={key} onChange={event => { setKey(event.target.value); setMessage(null); }} onPaste={event => {
+      const pasted = event.clipboardData.getData('text').replace(/\s+/g, '');
+      if (pasted !== event.clipboardData.getData('text')) {
+        event.preventDefault();
+        setKey(pasted);
+        setMessage(null);
+      }
+    }} autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="QQ-…" className="w-full rounded-md border border-border bg-background px-3 py-2" /></label>
     <div className="flex flex-wrap gap-2">
-      <button type="button" onClick={() => void run('activate')} disabled={busy || !status?.configured || !key.trim()} className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50">{busy ? 'Working…' : 'Activate licence'}</button>
+      <button type="button" onClick={() => void run('activate')} disabled={busy || !cleanKey} className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50">{busy ? 'Working…' : 'Activate licence'}</button>
       {status?.canRefresh && <><button type="button" disabled={busy} onClick={() => void run('refresh')} className="rounded-md border border-border px-3 py-2 text-sm">Check licence online</button><button type="button" disabled={busy} onClick={() => void run('deactivate')} className="rounded-md border border-border px-3 py-2 text-sm">Deactivate this Mac</button></>}
     </div>
     {message && <p role="status" className="text-sm">{message}</p>}
