@@ -82,6 +82,9 @@ test('AI trial stops at the remaining audible time and presents real upgrade cho
   await expect(upgrade.getByRole('button', { name: /Monthly/ })).toBeVisible();
   await upgrade.getByRole('button', { name: /Lifetime/ }).click();
   await expect(upgrade.getByText(/Lifetime checkout is not connected/)).toBeVisible();
+  await upgrade.getByRole('button', { name: 'I have a licence key' }).click();
+  await upgrade.getByRole('textbox', { name: 'Licence key' }).fill('QQ-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG');
+  await expect(upgrade.getByRole('button', { name: 'Activate licence' })).toBeEnabled();
   await upgrade.getByRole('button', { name: 'Continue with Free' }).click();
   await expect(upgrade).toHaveCount(0);
 });
