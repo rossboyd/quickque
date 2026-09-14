@@ -14,7 +14,6 @@ use tauri::{AppHandle, Emitter, Manager};
 mod remote;
 mod turbo;
 mod script_audio;
-mod debug_licence;
 mod licence;
 mod analytics;
 use remote::{RemoteInfo, RemoteService, RemoteSnapshot, RemoteStatus};
@@ -1015,20 +1014,6 @@ fn monitor_voice_allowance(app: AppHandle, process: Arc<Mutex<ProcessState>>, ge
 }
 
 #[tauri::command]
-fn debug_licence_get() -> bool { debug_licence::licensed() }
-
-#[tauri::command]
-fn debug_licence_set(app: AppHandle, state: tauri::State<'_, AppState>, licensed: bool) -> Result<bool, String> {
-    let _guard = state.flow.command_lock.lock().map_err(|_| "Voice Follow state unavailable.")?;
-    let mut process = state.flow.process.lock().map_err(|_| "Voice allowance unavailable.")?;
-    debug_licence::save(&app, licensed)?;
-    process.allowance.set_unlimited(licence::has_feature("voice_follow"));
-    drop(process);
-    if !script_audio::paid() { let _ = script_audio::cancel(&app.state::<script_audio::AudioState>()); }
-    Ok(licensed)
-}
-
-#[tauri::command]
 fn flow_command(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
@@ -1306,15 +1291,13 @@ pub fn run() {
         .manage(script_audio::AudioState::default())
         .manage(local_library::LocalLibraryState::default())
         .manage(voices::VoiceLibraryState::default())
-        .setup(|app| { debug_licence::load(app.handle()); licence::load(); licence::start_background(app.handle().clone()); Ok(()) })
+        .setup(|app| { licence::load(); licence::start_background(app.handle().clone()); Ok(()) })
         .invoke_handler(tauri::generate_handler![
             licence::licence_status,
             licence::licence_activate,
             licence::licence_refresh,
             licence::licence_deactivate,
             analytics::record_anonymous_analytics_event,
-            debug_licence_get,
-            debug_licence_set,
             flow_command,
             script_audio::script_audio_entitlement,
             script_audio::script_audio_status,

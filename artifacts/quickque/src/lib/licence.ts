@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { isDesktop } from './desktop';
-import { useDebugLicence } from './debug-licence';
-export type LicenceStatus = { status: string; message: string; configured: boolean; testingBypass?: boolean; canRefresh?: boolean; plan?: string; offlineUntil?: number | null; updatesUntil?: number | null; lastChecked?: number | null };
+export type LicenceStatus = { status: string; message: string; configured: boolean; canRefresh?: boolean; plan?: string; offlineUntil?: number | null; updatesUntil?: number | null; lastChecked?: number | null };
 export const LICENCE_UPDATED = 'quickque:licence-updated';
 export async function readLicence(): Promise<LicenceStatus> {
   if (!isDesktop()) return { status: 'desktop-required', configured: false, message: 'Activate a licence in the Quickque Mac app.' };
@@ -15,7 +14,6 @@ export async function licenceOperation(action: 'activate' | 'refresh' | 'deactiv
   return result;
 }
 export function useLicence() {
-  const bypass = useDebugLicence();
   const [status, setStatus] = useState<LicenceStatus | null>(null);
   useEffect(() => {
     let active = true;
@@ -26,5 +24,5 @@ export function useLicence() {
     const listener = isDesktop() ? listen('licence-changed', refresh).catch(() => () => {}) : Promise.resolve(() => {});
     return () => { active = false; clearInterval(timer); window.removeEventListener(LICENCE_UPDATED, refresh); void listener.then(remove => remove()); };
   }, []);
-  return { status, licensed: bypass.licensed || status?.status === 'active', loaded: bypass.loaded && status !== null, testingBypass: bypass.licensed };
+  return { status, licensed: status?.status === 'active', loaded: status !== null };
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { licenceOperation, useLicence } from '@/lib/licence';
 export function LicenceSettings() {
-  const { status, testingBypass } = useLicence();
+  const { status } = useLicence();
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -14,7 +14,6 @@ export function LicenceSettings() {
   return <section className="space-y-3 rounded-xl border border-border p-4">
     <h3 className="font-semibold">Your licence</h3>
     <p role="status" className="text-sm text-muted-foreground">{status?.message ?? 'Checking saved licence…'}</p>
-    {testingBypass && <p className="text-xs text-muted-foreground">Testing bypass is enabled in Developer options. Purchase verification is shown separately here.</p>}
     {status?.offlineUntil && <p className="text-sm">Offline access until {date(status.offlineUntil)}.</p>}
     {status?.updatesUntil && <p className="text-sm">Updates included through {date(status.updatesUntil)}. Eligible versions remain yours to use.</p>}
     <label className="block space-y-1 text-sm"><span>Licence key</span><input type="password" value={key} onChange={event => setKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="QQ-…" className="w-full rounded-md border border-border bg-background px-3 py-2" /></label>

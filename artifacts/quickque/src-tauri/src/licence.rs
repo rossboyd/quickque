@@ -68,7 +68,6 @@ fn access_for(current: &Cache) -> Option<Access> {
     current.lease.as_ref().map(|lease| access(lease, now(), current.stored.last_seen.max(monotonic_floor), release_date()))
 }
 pub fn has_feature(feature: &str) -> bool {
-    if crate::debug_licence::licensed() { return true; }
     cache().lock().ok().is_some_and(|current| current.error.is_none() && access_for(&current)==Some(Access::Active) && current.lease.as_ref().is_some_and(|lease| lease.features.iter().any(|item| item==feature)))
 }
 #[tauri::command]
@@ -83,7 +82,7 @@ pub fn licence_status() -> Value {
         None => (if configured() { "unlicensed" } else { "not-configured" }, if configured() { "Activate a purchase to enable paid features." } else { "Purchase activation is not connected in this build yet." }),
     };
     json!({"status": if current.error.is_some() {"error"} else {status}, "message":current.error.as_deref().unwrap_or(message),
-        "configured":configured(), "testingBypass":crate::debug_licence::licensed(),
+        "configured":configured(),
         "plan":current.lease.as_ref().map(|l| &l.plan), "offlineUntil":current.lease.as_ref().and_then(|l| l.expires_at),
         "updatesUntil":current.lease.as_ref().and_then(|l| l.updates_until), "lastChecked":current.lease.as_ref().map(|l| l.issued_at),
         "canRefresh":!current.stored.licence_key.is_empty()})

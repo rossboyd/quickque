@@ -1,5 +1,4 @@
 import { LicenceSettings } from './licence-settings';
-import { useDebugLicence, setDebugLicensed } from '@/lib/debug-licence';
 import { useRef, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { 
@@ -51,9 +50,6 @@ export function SettingsDialog() {
   const [folderError, setFolderError] = useState<string | null>(null);
   const [debugPreferenceError, setDebugPreferenceError] = useState(false);
   const debugVisible = useFlowDebugVisibility();
-  const debugLicence = useDebugLicence();
-  const [licenceBusy, setLicenceBusy] = useState(false);
-  const [licenceError, setLicenceError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const handleChooseFolder = async () => {
@@ -349,19 +345,7 @@ export function SettingsDialog() {
             )}
           </div>
 
-<details className="rounded-lg border border-border p-4"><summary className="cursor-pointer text-sm font-medium">Developer options</summary><div className="mt-4 space-y-3">            <div className="flex items-center justify-between gap-4">
-              <div>
-                <div className="font-medium">Licence mode: {debugLicence.licensed ? 'Licensed' : 'Unlicensed'}</div>
-                <p className="mt-1 text-sm text-muted-foreground">Temporary testing switch. Licensed unlocks unlimited Voice Follow and saved AI audio on Mac. Unlicensed uses the 30-second session allowance. No payment or licence is verified.</p>
-              </div>
-              <input type="checkbox" role="switch" aria-label="Licensed mode" checked={debugLicence.licensed} disabled={!debugLicence.loaded || licenceBusy} className="h-5 w-5 shrink-0 accent-primary" onChange={async event => {
-                const licensed = event.target.checked;
-                setLicenceBusy(true); setLicenceError(null);
-                try { await setDebugLicensed(licensed); } catch (error) { setLicenceError(String(error)); }
-                finally { setLicenceBusy(false); }
-              }} />
-            </div>
-            {licenceError && <p role="alert" className="text-sm text-destructive">{licenceError}</p>}</div></details></TabsContent>
+</TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>
