@@ -25,14 +25,14 @@ Mac identification hashes the stable IOPlatformUUID with a Quickque-specific dom
 
 ## Configure a test deployment
 
-1. Generate Ed25519 keys using `node artifacts/api-server/scripts/licence-admin.mjs keys directory=/secure/location id=production-1`. Do not commit the generated private key.
+1. Generate Ed25519 keys using `node artifacts/api-server/scripts/licence-admin.mjs keys directory=/secure/location id=production-1`. Do not commit the generated private key. Replit Secrets may flatten PEM line breaks; the server restores standard PKCS#8 formatting before use.
 2. Apply the numbered SQL migrations in `lib/db/migrations/` in order. These migrations are supplied but are not automatically run at application startup.
 3. Set server secrets `QUICKQUE_LICENCE_PRIVATE_KEY` (PEM), `QUICKQUE_LICENCE_KEY_ID` and `DATABASE_URL`. Deploy the existing API server over HTTPS. Routes: POST `/api/licences/activate`, `/renew`, `/deactivate`; request `{ licenceKey, deviceId }`. Successful responses are signed envelopes. Purchase keys are hashed in the database. Transactions serialize device allocation (two Macs by default).
 4. Build the desktop app with `QUICKQUE_LICENCE_PUBLIC_KEYS` set to the JSON array from public-keys.json and `QUICKQUE_LICENCE_SERVER=https://your-host/api/licences`. `QUICKQUE_RELEASE_TIMESTAMP` remains in the lease schema for compatibility with older test leases but does not limit Lifetime updates. Never embed the private key.
 5. Grant a complimentary Lifetime entitlement with `node artifacts/api-server/scripts/licence-admin.mjs grant plan=perpetual source=gift email=customer@example.com note="Launch gift"`. For a time-limited tester licence, use `grant plan=subscription source=tester paid-through=YYYY-MM-DD email=customer@example.com note="Beta tester"`. The command accepts only `gift` or `tester`; paid purchases must come from verified Stripe fulfilment. It prints the random licence key once for operator delivery. Activate it in Settings → General with the testing bypass off.
 6. Exercise offline launch, expired subscription returning to Free, modified lease, the two-device limit, deactivation, clock correction, and Lifetime access on a later app release. Full Keychain/device/audio verification requires a Mac build.
 
-No production key, licence endpoint, entitlement database or Stripe checkout is provisioned by these code changes. Unconfigured builds explain that activation is unavailable and retain the testing bypass. Monthly/lifetime buttons do not simulate a completed purchase.
+The production signing key remains server-only. The Mac packaging workflow embeds only the public verification key and public HTTPS licence endpoint, and fails if licensing configuration is missing. Monthly/lifetime buttons must use verified Stripe checkout fulfilment; they must never simulate a completed purchase.
 
 ## Stripe boundary
 

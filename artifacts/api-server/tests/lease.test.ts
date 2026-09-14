@@ -15,6 +15,12 @@ test('lease signatures cover key id and exact payload bytes', () => {
   assert.equal(claims(lease).deviceId, device);
   assert.equal(claims(lease).expiresAt, 1000 + 30 * DAY);
 });
+test('lease signing accepts a PEM flattened by a secure environment store', () => {
+  const flattened = pem.replace(/\r?\n/g, '');
+  const lease = issueLease(entitlement, device, flattened, 'production', 1000);
+  const message = Buffer.from(`quickque-lease-v1\n${lease.keyId}\n${lease.payload}`);
+  assert.ok(verify(null, message, publicKey, Buffer.from(lease.signature, 'base64url')));
+});
 test('subscription cannot outlive its prepaid entitlement', () => {
   assert.equal(claims(issueLease({ ...entitlement, paidThrough: 2000 }, device, pem, 'production', 1000)).expiresAt, 2000);
   const expired = claims(issueLease({ ...entitlement, paidThrough: 999 }, device, pem, 'production', 1000));

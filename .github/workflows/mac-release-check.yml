@@ -16,6 +16,8 @@ jobs:
     timeout-minutes: 90
     env:
       QUICKQUE_PRICE_GBP: "25"
+      QUICKQUE_LICENCE_PUBLIC_KEYS: '[["production-2026-01","TyKZLy4noARaZRyw6PtABnwtS3gF4zSAvcPHJLmYK7w"]]'
+      QUICKQUE_LICENCE_SERVER: "https://quickque.rossly.co/api/licences"
       # Hosted VMs validate packaged imports; physical Metal/audio tests remain separate.
       QUICKQUE_BUILD_PACKAGE_ONLY: "1"
     steps:
@@ -31,6 +33,8 @@ jobs:
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - run: pnpm install --frozen-lockfile
+      - name: Set immutable release timestamp
+        run: echo "QUICKQUE_RELEASE_TIMESTAMP=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
       - name: Check application source
         run: pnpm --filter @workspace/quickque typecheck
       - name: Build and verify unsigned Mac package
