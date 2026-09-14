@@ -1,12 +1,11 @@
 import { Link, useLocation } from "wouter";
-import { useClerk, useUser } from "@clerk/react";
 import { LayoutDashboard, KeyRound, LogOut, TerminalSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAdminAuth } from "@/lib/admin-auth";
 
 export function Sidebar() {
   const [location] = useLocation();
-  const { signOut } = useClerk();
-  const { user } = useUser();
+  const { email, logout } = useAdminAuth();
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -48,11 +47,11 @@ export function Sidebar() {
       <div className="border-t border-border p-4">
         <div className="flex items-center justify-between px-2">
           <div className="flex flex-col overflow-hidden">
-            <span className="truncate text-sm font-medium">{user?.fullName || 'Admin User'}</span>
-            <span className="truncate text-xs text-muted-foreground">{user?.primaryEmailAddress?.emailAddress}</span>
+            <span className="truncate text-sm font-medium">Administrator</span>
+            <span className="truncate text-xs text-muted-foreground">{email}</span>
           </div>
           <button 
-            onClick={() => signOut({ redirectUrl: "/" })}
+            onClick={() => void logout()}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors border border-transparent hover:border-border"
             title="Sign out"
           >

@@ -1,10 +1,8 @@
-import { useEffect, useRef } from "react";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk } from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
-import { shadcn } from '@clerk/themes';
-import { Switch, Route, useLocation, Router as WouterRouter, Redirect, Link } from 'wouter';
+import { useState, type FormEvent } from "react";
+import { Switch, Route, Router as WouterRouter, Redirect } from 'wouter';
 import { queryClient } from "@/lib/queryClient";
-import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { AdminAuthProvider, useAdminAuth } from "@/lib/admin-auth";
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -15,111 +13,61 @@ import LicenceDetail from '@/pages/licence-detail';
 import NotFound from '@/pages/not-found';
 import { Sidebar } from "@/components/layout/sidebar";
 
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
-
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-function stripBase(path: string): string {
-  return basePath && path.startsWith(basePath)
-    ? path.slice(basePath.length) || "/"
-    : path;
-}
-
-if (!clerkPubKey) {
-  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
-}
-
-const clerkAppearance = {
-  theme: shadcn,
-  cssLayerName: "clerk",
-  options: {
-    logoPlacement: "inside" as const,
-    logoLinkUrl: basePath || "/",
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
-  },
-  variables: {
-    colorPrimary: "hsl(221 100% 50%)",
-    colorForeground: "hsl(0 0% 9%)",
-    colorMutedForeground: "hsl(0 0% 45%)",
-    colorDanger: "hsl(0 84% 60%)",
-    colorBackground: "hsl(0 0% 100%)",
-    colorInput: "hsl(0 0% 100%)",
-    colorInputForeground: "hsl(0 0% 9%)",
-    colorNeutral: "hsl(0 0% 89%)",
-    fontFamily: "'Geist', sans-serif",
-    borderRadius: "0px",
-  },
-  elements: {
-    rootBox: "w-full flex justify-center",
-    cardBox: "bg-card rounded-none border border-border w-[440px] max-w-full overflow-hidden",
-    card: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    footer: "!shadow-none !border-0 !bg-transparent !rounded-none",
-  },
-};
-
 function SignInPage() {
+  const { email, loading, login } = useAdminAuth();
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!loading && email) return <Redirect to="/dashboard" />;
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      await login("rossboyd@live.com", password);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to sign in");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
-      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
+      <form onSubmit={submit} className="w-full max-w-sm border border-border bg-card p-8">
+        <img src={`${basePath}/logo.svg`} alt="" className="mb-8 h-10 w-10" />
+        <h1 className="text-2xl font-bold tracking-tight">Quickque Admin</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Private operations console</p>
+        <label htmlFor="email" className="mt-8 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Email</label>
+        <input id="email" value="rossboyd@live.com" disabled className="mt-2 h-10 w-full border border-border bg-muted px-3 font-mono text-sm text-muted-foreground" />
+        <label htmlFor="password" className="mt-5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Password</label>
+        <input
+          id="password"
+          type="password"
+          autoComplete="current-password"
+          autoFocus
+          required
+          value={password}
+          onChange={event => setPassword(event.target.value)}
+          className="mt-2 h-10 w-full border border-border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+        />
+        {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+        <button type="submit" disabled={submitting || loading} className="mt-6 h-10 w-full bg-foreground px-4 text-sm font-medium text-background disabled:opacity-50">
+          {submitting ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
     </div>
   );
-}
-
-function SignUpPage() {
-  return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
-      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
-    </div>
-  );
-}
-
-function ClerkQueryClientCacheInvalidator() {
-  const { addListener } = useClerk();
-  const queryClient = useQueryClient();
-  const prevUserIdRef = useRef<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    const unsubscribe = addListener(({ user }) => {
-      const userId = user?.id ?? null;
-      if (
-        prevUserIdRef.current !== undefined &&
-        prevUserIdRef.current !== userId
-      ) {
-        queryClient.clear();
-      }
-      prevUserIdRef.current = userId;
-    });
-    return unsubscribe;
-  }, [addListener, queryClient]);
-
-  return null;
 }
 
 function HomeRedirect() {
-  return (
-    <>
-      <Show when="signed-in">
-        <Redirect to="/dashboard" />
-      </Show>
-      <Show when="signed-out">
-        <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4">
-          <div className="w-full max-w-sm text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Quickque Admin</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Internal operations console</p>
-            <div className="mt-8">
-              <Link href="/sign-in" className="inline-flex h-10 w-full items-center justify-center border border-border bg-foreground px-4 text-sm font-medium text-background hover:bg-foreground/90 transition-colors">
-                Sign In
-              </Link>
-            </div>
-          </div>
-        </div>
-      </Show>
-    </>
-  );
+  const { loading, email } = useAdminAuth();
+  if (loading) return <div className="min-h-[100dvh] bg-background" />;
+  return <Redirect to={email ? "/dashboard" : "/sign-in"} />;
 }
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -134,59 +82,26 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
 }
 
 function ProtectedRoute({ component: Component, path }: { component: React.ComponentType, path: string }) {
+  const { loading, email } = useAdminAuth();
   return (
     <Route path={path}>
-      <Show when="signed-in">
-        <ProtectedLayout>
-          <Component />
-        </ProtectedLayout>
-      </Show>
-      <Show when="signed-out">
-        <Redirect to="/" />
-      </Show>
+      {loading ? <div className="min-h-[100dvh] bg-background" /> : email ? (
+        <ProtectedLayout><Component /></ProtectedLayout>
+      ) : <Redirect to="/sign-in" />}
     </Route>
   );
 }
 
-function ClerkProviderWithRoutes() {
-  const [, setLocation] = useLocation();
-
+function Routes() {
   return (
-    <ClerkProvider
-      publishableKey={clerkPubKey}
-      proxyUrl={clerkProxyUrl}
-      appearance={clerkAppearance}
-      signInUrl={`${basePath}/sign-in`}
-      signUpUrl={`${basePath}/sign-up`}
-      localization={{
-        signIn: {
-          start: {
-            title: "Quickque Console",
-            subtitle: "Sign in to access admin controls",
-          },
-        },
-      }}
-      routerPush={(to) => setLocation(stripBase(to))}
-      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-    >
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <ClerkQueryClientCacheInvalidator />
-          <Switch>
-            <Route path="/" component={HomeRedirect} />
-            <Route path="/sign-in/*?" component={SignInPage} />
-            <Route path="/sign-up/*?" component={SignUpPage} />
-
-            <ProtectedRoute path="/dashboard" component={Dashboard} />
-            <ProtectedRoute path="/licences" component={Licences} />
-            <ProtectedRoute path="/licences/:id" component={LicenceDetail} />
-
-            <Route component={NotFound} />
-          </Switch>
-          <Toaster />
-        </TooltipProvider>
-      </QueryClientProvider>
-    </ClerkProvider>
+    <Switch>
+      <Route path="/" component={HomeRedirect} />
+      <Route path="/sign-in" component={SignInPage} />
+      <ProtectedRoute path="/dashboard" component={Dashboard} />
+      <ProtectedRoute path="/licences" component={Licences} />
+      <ProtectedRoute path="/licences/:id" component={LicenceDetail} />
+      <Route component={NotFound} />
+    </Switch>
   );
 }
 
@@ -194,7 +109,14 @@ export default function App() {
   return (
     <ErrorBoundary>
       <WouterRouter base={basePath}>
-        <ClerkProviderWithRoutes />
+        <QueryClientProvider client={queryClient}>
+          <AdminAuthProvider>
+            <TooltipProvider>
+              <Routes />
+              <Toaster />
+            </TooltipProvider>
+          </AdminAuthProvider>
+        </QueryClientProvider>
       </WouterRouter>
     </ErrorBoundary>
   );

@@ -20,12 +20,8 @@ serve = "static"
 publicDir = "artifacts/quickque/dist/public"
 
 [[services.production.rewrites]]
-from = "/demo"
-to = "/demo/index.html"
-
-[[services.production.rewrites]]
-from = "/demo/*"
-to = "/demo/index.html"
+from = "/*"
+to = "/index.html"
 
 [services.env]
 PORT = "24952"
