@@ -15,25 +15,41 @@ export async function documentImportSmoke(page, baseURL) {
   const openReview = async () => {
     await page.getByRole('button', { name: 'Import Document', exact: true }).click();
     await page.locator('input[type=file][accept*=".docx"]').setInputFiles(fixture);
-    await page.getByRole('textbox', { name: 'Review and edit the extracted plain text' }).waitFor();
+    await page.getByRole('button', { name: 'Performance / scene', exact: false }).waitFor();
   };
   await page.goto(baseURL);
   await page.getByRole('button', { name: 'Import Document', exact: true }).waitFor();
   const original = await stored();
   await openReview();
-  assert.match(await page.locator('#import-text').inputValue(), /世界/);
+  const extractedText = await page.locator('#import-text').inputValue();
+  assert.match(extractedText, /世界/);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(await stored(), original, 'Review cancellation must not write anything');
+  await page.getByRole('button', { name: 'Import Document', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Paste script content' }).fill('Opening prose.\n\nSecond paragraph.');
+  await page.getByRole('button', { name: 'Review pasted content', exact: true }).click();
+  await page.getByRole('button', { name: 'Performance / scene', exact: false }).click();
+  const unresolvedSave = page.getByRole('button', { name: 'Save and continue to setup', exact: true });
+  assert.equal(await unresolvedSave.isDisabled(), true, 'Unresolved performance structure must not save');
+  await page.getByRole('button', { name: 'Split into paragraph turns', exact: true }).click();
+  await page.getByRole('button', { name: 'Add character', exact: true }).click();
+  for (const speaker of await page.getByRole('combobox', { name: /Speaker for turn/ }).all()) {
+    await speaker.selectOption({ label: 'Character 1' });
+  }
+  assert.equal(await unresolvedSave.isEnabled(), true, 'Manual turn assignments should resolve the review');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  assert.equal(await stored(), original, 'Manual review cancellation must not write anything');
   await openReview();
   await page.locator('#import-title').fill(title);
-  await page.locator('#import-text').fill(text);
-  await page.getByRole('button', { name: 'Save as Script', exact: true }).click();
+  await page.getByRole('button', { name: 'Presentation', exact: true }).click();
+  await page.getByRole('button', { name: 'Save presentation', exact: true }).click();
   await page.getByRole('dialog').waitFor({ state: 'hidden' });
   const imported = JSON.parse(await stored());
   const script = imported.scripts.find(item => item.id === imported.activeScriptId);
   assert.equal(script.title, title);
-  assert.equal(script.sections[0].content, text);
-  const edited = text + '\n\nEdited after import.';
+  assert.equal(script.sections[0].content, extractedText);
+  assert.equal(script.importSource.originalText, extractedText);
+  const edited = extractedText + '\n\nEdited after import.';
   await page.getByPlaceholder('Type your script here...').fill(edited);
   await page.getByRole('button', { name: 'Present', exact: true }).click();
   await page.waitForURL(/\/read\//);

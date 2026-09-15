@@ -18,7 +18,7 @@ import {
   PresentationPreferences,
 } from './types';
 import { generateId } from './utils';
-import { parseScriptMarkdown } from './script-markdown';
+import { validateImportReviewDraft, type ImportReviewDraft } from './document-import/review';
 import { pruneResumePositions } from './reader-resume-position';
 import {
   collectScriptIds,
@@ -100,7 +100,7 @@ type StoreContextType = {
   setSortMode: (mode: SortMode) => boolean;
   reorderScripts: (ids: string[]) => boolean;
   importScripts: (data: string) => boolean;
-  importDocument: (title: string, text: string, format?: 'plain' | 'markdown') => ImportDocumentResult;
+  importDocument: (draft: ImportReviewDraft) => ImportDocumentResult;
   exportScripts: (ids?: string[], format?: 'json' | 'txt') => string;
   recoveryData: string | null;
   recoveryRequired: boolean;
@@ -1047,10 +1047,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return committed.ok;
   }, [commitLibrary]);
 
-  const importDocument = useCallback((title: string, text: string, format: 'plain' | 'markdown' = 'plain'): ImportDocumentResult => {
+  const importDocument = useCallback((draft: ImportReviewDraft): ImportDocumentResult => {
+    const reviewError = validateImportReviewDraft(draft);
+    if (reviewError) return { ok: false, error: reviewError };
     const document = createDocumentScript(
-      title,
-      text,
+      draft.title,
+      draft.provenance.originalText,
       collectScriptIds(scriptsRef.current, trashRef.current),
       undefined,
       presentationDefaultsRef.current,
@@ -1059,14 +1061,56 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setError(document.error);
       return document;
     }
-    if (format === 'markdown') {
-      const parsed = parseScriptMarkdown(text, document.script);
-      if (!parsed.ok) {
-        setError(parsed.error);
-        return { ok: false, error: parsed.error };
-      }
-      document.script = { ...document.script, ...parsed.updates, updatedAt: Date.now() };
+    const usedIds = collectScriptIds(scriptsRef.current, trashRef.current);
+    usedIds.add(document.script.id);
+    for (const section of document.script.sections) usedIds.add(section.id);
+    const remap = new Map<string, string>();
+    const allocate = () => freshId(usedIds);
+    for (const character of draft.characters) {
+      const id = allocate();
+      if (!id) return { ok: false, error: 'Could not create unique character IDs.' };
+      remap.set(character.id, id);
     }
+    const sections = [];
+    for (const section of draft.sections) {
+      const id = allocate();
+      if (!id) return { ok: false, error: 'Could not create unique turn IDs.' };
+      const {
+        sourceCue: _sourceCue,
+        sourceCueHasInlineDialogue: _sourceCueHasInlineDialogue,
+        ...reviewedSection
+      } = section;
+      sections.push({
+        ...reviewedSection,
+        id,
+        ...(section.characterId !== undefined
+          ? { characterId: section.characterId ? remap.get(section.characterId) ?? null : null }
+          : {}),
+      });
+    }
+    document.script = {
+      ...document.script,
+      purpose: draft.purpose,
+      sections,
+      importSource: {
+        fileName: draft.provenance.fileName,
+        format: draft.provenance.format,
+        originalText: draft.provenance.originalText,
+        warnings: [...draft.provenance.warnings],
+      },
+      ...(draft.purpose === 'performance' ? {
+        actor: {
+          enabled: true,
+          myRoleIds: [],
+          characters: draft.characters.map(character => ({
+            ...character,
+            id: remap.get(character.id)!,
+            voice: { ...character.voice },
+          })),
+        },
+      } : {}),
+      updatedAt: Date.now(),
+    };
     const nextOrder = [
       document.script.id,
       ...customOrderRef.current.filter(id => id !== document.script.id),

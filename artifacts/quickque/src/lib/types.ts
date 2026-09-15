@@ -44,6 +44,14 @@ export type ScriptActor = ActorMode;
 
 export type ScriptPurpose = 'presentation' | 'performance';
 
+export type ScriptImportSource = {
+  fileName: string;
+  format: 'txt' | 'md' | 'docx' | 'rtf' | 'pdf' | 'paste';
+  /** Original local extraction, retained as a read-only reference. */
+  originalText: string;
+  warnings: string[];
+};
+
 export type Script = {
   /** Script identity is independent of whether partner audio is enabled. */
   purpose?: ScriptPurpose;
@@ -64,6 +72,7 @@ export type Script = {
    * recording bytes and conditioning data live in app-private desktop storage.
    */
   narratorVoice?: ActorVoice | null;
+  importSource?: ScriptImportSource;
 };
 
 export type Settings = {

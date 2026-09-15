@@ -277,6 +277,14 @@ export function cloneScriptData(script: Script): Script {
       ? cloneVoiceData(script.narratorVoice)
       : null;
   }
+  if (script.importSource) {
+    cloned.importSource = {
+      fileName: script.importSource.fileName,
+      format: script.importSource.format,
+      originalText: script.importSource.originalText,
+      warnings: [...script.importSource.warnings],
+    };
+  }
   return cloned;
 }
 

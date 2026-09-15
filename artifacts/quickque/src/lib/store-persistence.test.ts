@@ -255,6 +255,25 @@ test('document imports receive a copy of the supplied presentation defaults', ()
   assert.notEqual(result.script.presentation, defaults);
 });
 
+test('retained import source survives persistence as inert reference text', () => {
+  const storage = new MemoryStorage();
+  const result = createDocumentScript('Scene', 'Dialogue', new Set<string>());
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  result.script.importSource = {
+    fileName: 'scene.md',
+    format: 'md',
+    originalText: '**BREWSTER:** <script>literal</script>',
+    warnings: ['Review extraction.'],
+  };
+  const persisted = persistLibrary(storage, [result.script], result.script.id);
+  assert.equal(persisted.ok, true);
+  const loaded = loadLibrary(storage, []);
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) return;
+  assert.deepEqual(loaded.scripts[0].importSource, result.script.importSource);
+});
+
 test('document title and text validation enforces nonblank and size limits', () => {
   const ids = new Set<string>();
   assert.equal(createDocumentScript('   ', 'text', ids).ok, false);

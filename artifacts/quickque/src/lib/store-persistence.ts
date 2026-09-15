@@ -135,6 +135,15 @@ function isValidScriptFields(value: unknown): value is Omit<Script, 'presentatio
   if (value.narratorVoice !== undefined &&
     value.narratorVoice !== null &&
     !isValidActorVoice(value.narratorVoice)) return false;
+  if (value.importSource !== undefined) {
+    if (!isRecord(value.importSource) ||
+      !isBoundedString(value.importSource.fileName, MAX_TITLE_LENGTH) ||
+      !isBoundedString(value.importSource.originalText, MAX_DOCUMENT_TEXT_LENGTH) ||
+      !['txt', 'md', 'docx', 'rtf', 'pdf', 'paste'].includes(value.importSource.format as string) ||
+      !Array.isArray(value.importSource.warnings) ||
+      value.importSource.warnings.length > 100 ||
+      value.importSource.warnings.some(warning => !isBoundedString(warning, 2_000))) return false;
+  }
   if (!isValidTimestamp(value.createdAt) || !isValidTimestamp(value.updatedAt)) {
     return false;
   }
