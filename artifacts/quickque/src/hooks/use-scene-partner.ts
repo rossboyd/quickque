@@ -21,6 +21,8 @@ export type UseScenePartnerArgs = {
   /** Stable representation of voice/engine settings that changes speech output. */
   voiceSignature: string;
   beforePartnerSpeak?: () => Promise<void>;
+  startIndex?: number;
+  endIndexExclusive?: number;
 };
 
 export type ScenePartner = SceneState & {
@@ -60,7 +62,18 @@ export function useScenePartner(args: UseScenePartnerArgs): ScenePartner {
     turns: args.turns.map(turn => [turn.id, turn.content, turn.characterId ?? null]),
     myRoleIds: [...args.myRoleIds].sort(),
     voiceSignature: args.voiceSignature,
-  }), [licence.licensed, args.enabled, args.script?.id, args.turns, args.myRoleIds, args.voiceSignature]);
+    startIndex: args.startIndex ?? 0,
+    endIndexExclusive: args.endIndexExclusive ?? args.turns.length,
+  }), [
+    licence.licensed,
+    args.enabled,
+    args.script?.id,
+    args.turns,
+    args.myRoleIds,
+    args.voiceSignature,
+    args.startIndex,
+    args.endIndexExclusive,
+  ]);
 
   useEffect(() => {
     actionGeneration.current++;
@@ -96,6 +109,8 @@ export function useScenePartner(args: UseScenePartnerArgs): ScenePartner {
       speaker: speech,
       beforePartnerSpeak: () => beforeSpeakRef.current?.() ?? Promise.resolve(),
       onChange: setState,
+      startIndex: args.startIndex,
+      endIndexExclusive: args.endIndexExclusive,
     });
     lifecycleRef.current = lifecycle;
     setState(lifecycle.state);

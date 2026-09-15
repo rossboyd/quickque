@@ -71,6 +71,16 @@ export type PersonalNote = {
   updatedAt: number;
 };
 
+export type PracticeMode = 'read-through' | 'prompted' | 'off-book';
+
+/** Local rehearsal choices only. Source dialogue and writer directions never live here. */
+export type PracticePreferences = {
+  mode: PracticeMode;
+  startTurn: number;
+  endTurn: number;
+  difficultSectionIds: string[];
+};
+
 /** The source-authored baseline retained for an imported performance. */
 export type OriginalScriptBaseline = {
   title: string;
@@ -111,6 +121,8 @@ export type Script = {
   protection?: ScriptProtection;
   /** Personal annotations are separate from writer directions (`sections.notes`). */
   personalNotes?: PersonalNote[];
+  /** Device-local learning choices; safe to discard when turn IDs no longer exist. */
+  practice?: PracticePreferences;
 };
 
 export type Settings = {

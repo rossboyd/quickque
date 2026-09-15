@@ -294,3 +294,24 @@ test('paused navigation only changes the cue and does not restart speech', async
   assert.equal(scene.state.turnIndex, 1);
   assert.deepEqual(speaker.calls, ['Partner one']);
 });
+
+test('a bounded passage starts and completes at its selected turn limits', async () => {
+  const speaker = new DeferredSpeaker();
+  const scene = new SceneLifecycle({
+    turns,
+    myRoleIds: ['mine'],
+    voiceForCharacter: () => voice,
+    speaker,
+    startIndex: 1,
+    endIndexExclusive: 2,
+  });
+  assert.equal(scene.state.turnIndex, 1);
+  await scene.start();
+  assert.equal(scene.state.phase, 'waiting');
+  await scene.next();
+  assert.equal(scene.state.phase, 'completed');
+  assert.equal(scene.state.turnIndex, 2);
+  await scene.startOver();
+  assert.equal(scene.state.turnIndex, 1);
+  assert.deepEqual(speaker.calls, []);
+});

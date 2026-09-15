@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { getScriptPurpose, getSceneSetupIssues } from './script-purpose.ts';
-import { cloneScriptData } from './actor-model.ts';
+import { clonePortableScript, cloneScriptData } from './actor-model.ts';
 import { parseScriptsJson, parseImportJson, serializeScripts } from './library-data.ts';
 import { createLibraryEnvelope, parseLibraryData, persistLibrary, loadLibrary } from './store-persistence.ts';
 import { mergeImportedLibrary, deleteScriptsState, restoreScriptsState, type LibraryState } from './store-model.ts';
@@ -105,4 +105,22 @@ test('rehearsal accepts installed Chatterbox and blocks it until downloaded', ()
   script.actor!.characters[0].voice = { engine: 'turbo', voiceId: 'chatterbox-turbo:default-en', rate: 1 };
   assert.deepEqual(getSceneSetupIssues(script, new Set(['chatterbox-turbo:default-en'])), []);
   assert.equal(getSceneSetupIssues(script, new Set()).length, 1);
+});
+
+test('practice choices survive local cloning but stay out of portable sharing', () => {
+  const script = performance();
+  script.sections.push({ id: 'second', title: 'Second', content: 'Again.' });
+  script.practice = {
+    mode: 'off-book',
+    startTurn: 1,
+    endTurn: 9,
+    difficultSectionIds: ['second', 'missing'],
+  };
+  assert.deepEqual(cloneScriptData(script).practice, {
+    mode: 'off-book',
+    startTurn: 1,
+    endTurn: 1,
+    difficultSectionIds: ['second'],
+  });
+  assert.equal(clonePortableScript(script).practice, undefined);
 });

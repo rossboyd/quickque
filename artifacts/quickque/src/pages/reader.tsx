@@ -3,7 +3,7 @@ import { getCharacterColor } from '@/lib/actor-colors';
 import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import './reader-scene.css';
 import { useStore } from '@/lib/store';
-import type { PresentationPreferences, Settings } from '@/lib/types';
+import type { PracticeMode, PresentationPreferences, Settings } from '@/lib/types';
 import { useLocation, useParams } from 'wouter';
 import { 
   Play, Pause, Minus, Plus, ChevronLeft, ChevronRight, Droplets, Loader2, Smartphone,
@@ -100,7 +100,7 @@ export default function Reader() {
     updateScriptPresentation,
     resetScriptPresentation,
     updateScript,
-    updateSettings: persistAppSettings,
+    updateSettings: persistAppSettings, addPersonalNote, updatePractice,
   } = useStore();
   const workbenchDarkThemeRef = useRef(settings.darkTheme);
   workbenchDarkThemeRef.current = settings.darkTheme;
@@ -131,6 +131,14 @@ export default function Reader() {
   const [setupGate, setSetupGate] = useState<'checking' | 'blocked' | 'ready'>('checking');
   const [showWriterNotes, setShowWriterNotes] = useState(true);
   const [showPersonalNotes, setShowPersonalNotes] = useState(true);
+  const [practiceOpen, setPracticeOpen] = useState(false);
+  const [practiceActive, setPracticeActive] = useState(false);
+  const [practiceMode, setPracticeMode] = useState<PracticeMode>('read-through');
+  const [practiceStart, setPracticeStart] = useState(0);
+  const [practiceEnd, setPracticeEnd] = useState(0);
+  const [revealedTurnIds, setRevealedTurnIds] = useState<Set<string>>(new Set());
+  const [reflectionDraft, setReflectionDraft] = useState('');
+  const prePracticeFlowEnabledRef = useRef(true);
   const [timingMessage, setTimingMessage] = useState<string | null>(null);
   const [resumeChoice, setResumeChoice] = useState<ReaderResumePosition | null>(null);
   const resumePendingRef = useRef(true);
@@ -324,6 +332,19 @@ export default function Reader() {
     })(),
   })), [script?.sections, characterIds]);
   const sceneMyRoleIds = actor ? getHumanRoleIds(actor) : [];
+  const practiceLearnerRoleIds = actor?.roleAssignments
+    ? characters.filter(character => actor.roleAssignments?.[character.id] === 'my-role').map(character => character.id)
+    : actor?.myRoleIds ?? [];
+  const boundedPracticeEnd = Math.max(practiceStart, Math.min(practiceEnd, Math.max(0, sceneTurns.length - 1)));
+  useEffect(() => {
+    if (!script || !isPerformance) return;
+    const saved = script.practice;
+    setPracticeMode(saved?.mode ?? 'read-through');
+    setPracticeStart(Math.max(0, Math.min(saved?.startTurn ?? 0, Math.max(0, sceneTurns.length - 1))));
+    setPracticeEnd(Math.max(0, Math.min(saved?.endTurn ?? Math.min(4, sceneTurns.length - 1), Math.max(0, sceneTurns.length - 1))));
+    setPracticeActive(false);
+    setRevealedTurnIds(new Set());
+  }, [script?.id, isPerformance, sceneTurns.length]);
   const sceneHasHumanTurns = sceneTurns.some(turn =>
     Boolean(turn.characterId && sceneMyRoleIds.includes(turn.characterId)),
   );
@@ -360,7 +381,19 @@ export default function Reader() {
     voiceForCharacter,
     voiceSignature: sceneVoiceSignature,
     beforePartnerSpeak: () => stopFlowBeforePartnerRef.current(),
+    startIndex: practiceActive ? practiceStart : 0,
+    endIndexExclusive: practiceActive ? boundedPracticeEnd + 1 : sceneTurns.length,
   });
+  const savePractice = useCallback((mode: PracticeMode, start: number, end: number) => {
+    if (!script) return false;
+    const validIds = new Set(script.sections.map(section => section.id));
+    return updatePractice(script.id, {
+      mode,
+      startTurn: start,
+      endTurn: end,
+      difficultSectionIds: (script.practice?.difficultSectionIds ?? []).filter(id => validIds.has(id)),
+    });
+  }, [script, updatePractice]);
   const sceneFlowTokens = useMemo(
     () => tokenize(scene.currentTurn?.content ?? ''),
     [scene.currentTurn?.id, scene.currentTurn?.content],
@@ -432,6 +465,27 @@ export default function Reader() {
     } else if (readModeRef.current === 'manual') playback.activate();
     else flowRef.current.start();
   });
+  const beginPractice = useCallback(async () => {
+    const start = Math.min(practiceStart, boundedPracticeEnd);
+    playback.pause();
+    await sceneRef.current.reset();
+    await flowRef.current.stopAndWait().catch(() => {});
+    setPracticeStart(start);
+    setPracticeEnd(boundedPracticeEnd);
+    setPracticeActive(true);
+    setRevealedTurnIds(new Set());
+    prePracticeFlowEnabledRef.current = sceneFlowEnabled;
+    setSceneFlowEnabled(false);
+    savePractice(practiceMode, start, boundedPracticeEnd);
+    setPracticeOpen(false);
+  }, [practiceStart, boundedPracticeEnd, practiceMode, savePractice, playback, sceneFlowEnabled]);
+  const leavePractice = useCallback(() => {
+    setPracticeActive(false);
+    setRevealedTurnIds(new Set());
+    setSceneFlowEnabled(prePracticeFlowEnabledRef.current);
+    void sceneRef.current.reset();
+    void flowRef.current.stopAndWait().catch(() => {});
+  }, []);
   const isPlaying = !sceneEnabled && readMode === 'manual' && playbackState.phase === 'playing';
   const timerState = playbackState.timerState;
   const analyticsTimerRef = useRef(timerState);
@@ -1271,6 +1325,10 @@ export default function Reader() {
       playback.requestStart(presentationRef.current.countdownSeconds);
     }
   }, [pausePlayback, playback, script]);
+  const repeatPractice = useCallback(() => {
+    setRevealedTurnIds(new Set());
+    void startOver();
+  }, [startOver]);
 
   // This metadata lives outside the script/export envelope. Content changes
   // invalidate it; appearance changes deliberately do not.
@@ -1369,6 +1427,30 @@ export default function Reader() {
       progress: distance.total > 0 ? 1 - distance.remaining / distance.total : 0, timed: false };
   }, [playback, readingDistance, tokens.length, enrichedSections.length]);
 
+  const toggleDifficult = useCallback(() => {
+    if (!script || scene.turnIndex >= script.sections.length) return;
+    const sectionId = script.sections[scene.turnIndex].id;
+    const existing = script.practice?.difficultSectionIds ?? [];
+    const next = existing.includes(sectionId)
+      ? existing.filter(id => id !== sectionId)
+      : [...existing, sectionId];
+    updatePractice(script.id, {
+      mode: practiceMode,
+      startTurn: practiceStart,
+      endTurn: boundedPracticeEnd,
+      difficultSectionIds: next,
+    });
+  }, [script, scene.turnIndex, updatePractice, practiceMode, practiceStart, boundedPracticeEnd]);
+
+  const saveReflection = useCallback(() => {
+    if (!script || scene.turnIndex >= script.sections.length || !reflectionDraft.trim()) return;
+    if (addPersonalNote(script.id, script.sections[scene.turnIndex].id, reflectionDraft.trim())) {
+      setReflectionDraft('');
+      setShowPersonalNotes(true);
+      setTimingMessage('Private reflection saved on this device.');
+    }
+  }, [script, scene.turnIndex, reflectionDraft, addPersonalNote]);
+
   if (!script) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground px-4 text-center">
@@ -1452,6 +1534,16 @@ export default function Reader() {
           </div>
           
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+            {sceneEnabled && (
+              <button
+                type="button"
+                onClick={() => { pausePlayback(); setPracticeOpen(true); }}
+                className="present-glass-button flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium"
+                aria-label="Open guided practice"
+              >
+                Practice
+              </button>
+            )}
             {!sceneEnabled && (
               <Popover>
                 <PopoverTrigger asChild>
@@ -1647,6 +1739,73 @@ export default function Reader() {
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog open={practiceOpen} onOpenChange={setPracticeOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Guided practice</DialogTitle>
+            <DialogDescription>
+              Work on a short passage. You can pause, repeat, or use Next at any time. Voice Follow is optional and never judges your performance.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <fieldset className="grid gap-2">
+              <legend className="mb-1 text-sm font-semibold">Practice step</legend>
+              {([
+                ['read-through', 'Read through', 'Keep every line visible.'],
+                ['prompted', 'Practise with prompts', 'See a short opening-word hint on your turns.'],
+                ['off-book', 'Try without my lines', 'Hide only your dialogue until you reveal it.'],
+              ] as const).map(([value, label, detail]) => (
+                <label key={value} className="flex gap-3 rounded-lg border p-3">
+                  <input type="radio" name="practice-mode" value={value}
+                    checked={practiceMode === value} onChange={() => setPracticeMode(value)} />
+                  <span><strong className="block text-sm">{label}</strong><span className="text-xs text-muted-foreground">{detail}</span></span>
+                </label>
+              ))}
+            </fieldset>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-sm font-medium">From turn
+                <select className="mt-1 w-full rounded-md border bg-background p-2" value={practiceStart}
+                  onChange={event => setPracticeStart(Math.min(Number(event.target.value), boundedPracticeEnd))}>
+                  {script.sections.map((section, index) => <option key={section.id} value={index}>{index + 1}. {section.title || 'Untitled'}</option>)}
+                </select>
+              </label>
+              <label className="text-sm font-medium">To turn
+                <select className="mt-1 w-full rounded-md border bg-background p-2" value={boundedPracticeEnd}
+                  onChange={event => setPracticeEnd(Math.max(Number(event.target.value), practiceStart))}>
+                  {script.sections.map((section, index) => <option key={section.id} value={index}>{index + 1}. {section.title || 'Untitled'}</option>)}
+                </select>
+              </label>
+            </div>
+            {(script.practice?.difficultSectionIds ?? []).some(id => script.sections.some(section => section.id === id)) && (
+              <button type="button" className="text-sm font-semibold text-primary underline"
+                onClick={() => {
+                  const indices = (script.practice?.difficultSectionIds ?? []).map(id => script.sections.findIndex(section => section.id === id)).filter(index => index >= 0);
+                  setPracticeStart(Math.min(...indices)); setPracticeEnd(Math.max(...indices));
+                }}>
+                Select my difficult passages
+              </button>
+            )}
+            <div className="flex justify-between gap-3 border-t pt-4">
+              <button type="button" className="rounded-md border px-4 py-2" onClick={() => {
+                if (practiceActive) leavePractice();
+                setPracticeOpen(false);
+              }}>Return to normal rehearsal</button>
+              <button type="button" className="rounded-md bg-primary px-4 py-2 text-primary-foreground" onClick={() => void beginPractice()}>Start practice</button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {practiceActive && scene.phase === 'completed' && (
+        <div className="absolute inset-x-4 top-24 z-[55] mx-auto max-w-xl rounded-xl border bg-background/95 p-5 shadow-xl" role="status">
+          <h2 className="text-lg font-semibold">Passage complete</h2>
+          <p className="mt-1 text-sm text-muted-foreground">No score is recorded. Choose what would help next.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button className="rounded-md bg-primary px-4 py-2 text-primary-foreground" onClick={repeatPractice}>Repeat this passage</button>
+            <button className="rounded-md border px-4 py-2" onClick={() => setPracticeOpen(true)}>Choose another passage</button>
+            <button className="rounded-md border px-4 py-2" onClick={leavePractice}>Normal rehearsal</button>
+          </div>
+        </div>
+      )}
       {playbackState.phase === 'countdown' && (
         <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-5 bg-background/90" role="status" aria-live="polite">
           <p className="text-lg">Starting in</p>
@@ -1836,6 +1995,31 @@ export default function Reader() {
                     </aside>
                   );
                 })()}
+                {practiceActive && idx === scene.turnIndex && idx < script.sections.length && (
+                  <aside className="mb-4 rounded-lg border bg-background/90 p-3 text-sm" aria-label="Practice tools">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <strong>{practiceMode === 'read-through' ? 'Read through' : practiceMode === 'prompted' ? 'Prompted practice' : 'Off-book practice'}</strong>
+                      <button type="button" className="rounded-md border px-2 py-1"
+                        aria-pressed={(script.practice?.difficultSectionIds ?? []).includes(script.sections[idx].id)}
+                        onClick={toggleDifficult}>
+                        {(script.practice?.difficultSectionIds ?? []).includes(script.sections[idx].id) ? 'Difficult passage marked' : 'Mark as difficult'}
+                      </button>
+                      {practiceMode === 'off-book' && practiceLearnerRoleIds.includes(script.sections[idx].characterId ?? '') && (
+                        <button type="button" className="rounded-md border px-2 py-1"
+                          onClick={() => setRevealedTurnIds(current => new Set(current).add(script.sections[idx].id))}>
+                          Reveal my line
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <input value={reflectionDraft} onChange={event => setReflectionDraft(event.target.value)}
+                        maxLength={1000} className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2"
+                        aria-label="Private reflection" placeholder="Private note for next time" />
+                      <button type="button" className="rounded-md border px-3" onClick={saveReflection}>Save note</button>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">Notes stay local. Microphone audio and transcripts are not retained.</p>
+                  </aside>
+                )}
                 {sceneEnabled && idx === scene.turnIndex &&
                   (script.sections[idx]?.notes?.trim() ||
                     script.personalNotes?.some(note => note.sectionId === script.sections[idx].id)) && (
@@ -1901,17 +2085,33 @@ export default function Reader() {
                     ))}
                   </aside>
                 )}
-                <div 
+                <div
+                  aria-label={practiceActive && idx >= practiceStart && idx <= boundedPracticeEnd &&
+                    practiceMode === 'off-book' &&
+                    practiceLearnerRoleIds.includes(script.sections[idx]?.characterId ?? '') &&
+                    !revealedTurnIds.has(script.sections[idx]?.id)
+                    ? 'Your dialogue is hidden' : undefined}
                   className="whitespace-pre-wrap font-medium tracking-tight"
                 >
+                  {practiceActive && idx >= practiceStart && idx <= boundedPracticeEnd &&
+                    practiceMode === 'prompted' && idx === scene.turnIndex &&
+                    practiceLearnerRoleIds.includes(script.sections[idx]?.characterId ?? '') && (
+                    <p className="mb-3 text-sm text-muted-foreground" aria-label="Line hint">
+                      Hint: {script.sections[idx].content.trim().split(/\s+/).slice(0, 3).join(' ')}…
+                    </p>
+                  )}
                   {section.spans.map((span, i) => {
+                    const hideLearnerLine = practiceActive && idx >= practiceStart && idx <= boundedPracticeEnd &&
+                      (practiceMode === 'off-book' || practiceMode === 'prompted') &&
+                      practiceLearnerRoleIds.includes(script.sections[idx]?.characterId ?? '') &&
+                      !revealedTurnIds.has(script.sections[idx]?.id);
                      if (span.type === 'text') {
                        return (
                          <span
                            key={i}
                            data-reader-anchor={`${section.id}:${i}`}
                          >
-                           {span.text}
+                           {hideLearnerLine ? <span className="select-none rounded bg-muted px-1 text-transparent" aria-hidden="true">{span.text}</span> : span.text}
                          </span>
                        );
                     } else {
@@ -1958,7 +2158,7 @@ export default function Reader() {
                            ref={isActive ? activeTokenSpanRef : null}
                             data-spoken-word={isActive ? 'active' : isRead ? 'read' : undefined}
                         >
-                          {span.text}
+                           {hideLearnerLine ? <span className="select-none rounded bg-muted px-1 text-transparent" aria-hidden="true">{span.text}</span> : span.text}
                         </span>
                       );
                     }

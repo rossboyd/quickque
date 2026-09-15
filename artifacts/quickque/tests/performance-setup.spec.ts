@@ -8,9 +8,10 @@ test.use({
       (existsSync('/repl/tools/bin/chromium') ? '/repl/tools/bin/chromium' : undefined),
   },
 });
+const artifactPath = (process.env.QUICKQUE_ARTIFACT_PATH ?? '').replace(/\/$/, '');
 
 async function openLibrary(page: Page) {
-  await page.goto('/');
+  await page.goto(`${artifactPath}/`);
   await page.evaluate(() => {
     localStorage.clear();
     localStorage.setItem('quickque_profile', JSON.stringify({ name: 'Performance Tester', onboardingComplete: true }));
@@ -159,7 +160,7 @@ test('AI Partner speaking hands back to In Person and cues remain visible in com
     localStorage.setItem('quickque_scripts', JSON.stringify([script]));
     localStorage.setItem('quickque_active_script', script.id);
   });
-  await page.goto('/edit');
+  await page.goto(`${artifactPath}/edit`);
   await page.getByRole('button', { name: 'Rehearse', exact: true }).click();
   await expect(page.getByLabel('Speaking now', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Up next', { exact: true })).toHaveCount(0);
@@ -276,4 +277,69 @@ test('free Chatterbox voice can be assigned and persists without enabling browse
   await page.getByRole('button', { name: 'Edit New Character', exact: true }).click();
   await expect(page.getByRole('combobox', { name: 'Voice Engine', exact: true })).toHaveValue('turbo');
   await expect(page.getByRole('combobox', { name: 'Voice Selection', exact: true })).toHaveValue('chatterbox-turbo:default-en');
+});
+
+test('guided practice bounds a passage, hides only learner dialogue, and saves private review', async ({ page }) => {
+  await openLibrary(page);
+  await page.evaluate(() => {
+    const character = (id: string, name: string) => ({
+      id, name, age: '', gender: '', style: '',
+      voice: { engine: 'turbo', voiceId: '', rate: 1 },
+    });
+    const script = {
+      id: 'practice-fixture',
+      title: 'Practice fixture',
+      purpose: 'performance',
+      createdAt: 1,
+      updatedAt: 1,
+      actor: {
+        enabled: true,
+        characters: [character('learner', 'Learner'), character('friend', 'Friend')],
+        myRoleIds: ['learner', 'friend'],
+        roleAssignments: { learner: 'my-role', friend: 'another-person' },
+      },
+      sections: [
+        { id: 'turn-one', title: 'Cue', content: 'Are you ready?', characterId: 'friend', notes: 'Wait for the bell.', notesProvenance: 'writer' },
+        { id: 'turn-two', title: 'Answer', content: 'I have been ready all morning.', characterId: 'learner' },
+        { id: 'turn-three', title: 'Exit', content: 'Then let us go.', characterId: 'learner' },
+      ],
+    };
+    localStorage.setItem('quickque_scripts', JSON.stringify([script]));
+    localStorage.setItem('quickque_active_script', script.id);
+  });
+  await page.goto(`${artifactPath}/edit`);
+  await page.getByRole('button', { name: 'Rehearse', exact: true }).click();
+  const flowSetup = page.getByRole('heading', { name: 'Voice Follow setup', exact: true });
+  if (await flowSetup.isVisible()) await page.getByRole('button', { name: 'Cancel Setup' }).click();
+  await page.getByRole('button', { name: 'Open guided practice' }).click();
+  await page.getByLabel('Try without my lines').check();
+  await page.getByText('From turn').locator('select').selectOption('1');
+  await page.getByText('To turn').locator('select').selectOption('1');
+  await page.getByRole('button', { name: 'Start practice' }).click();
+  await page.getByRole('button', { name: 'Start or resume scene' }).click();
+  const hiddenLine = page.getByLabel('Your dialogue is hidden');
+  await expect(hiddenLine).toBeVisible();
+  await expect(hiddenLine.locator('[aria-hidden="true"].text-transparent')).toContainText('I have been ready all morning.');
+  await expect(page.getByText('Then let us go.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Reveal my line' }).click();
+  await expect(page.getByText('I have been ready all morning.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Mark as difficult' }).click();
+  await page.getByRole('textbox', { name: 'Private reflection' }).fill('Pause before the final phrase.');
+  await page.getByRole('button', { name: 'Save note' }).click();
+  await page.getByTitle('Next turn (Right Arrow)').click();
+  await expect(page.getByRole('heading', { name: 'Passage complete' })).toBeVisible();
+  await page.getByRole('button', { name: 'Repeat this passage' }).click();
+  await expect(page.getByLabel('Your dialogue is hidden')).toBeVisible();
+
+  const stored = await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('quickque_scripts')!);
+    return Array.isArray(raw) ? raw[0] : raw.scripts[0];
+  });
+  expect(stored.sections[0].notes).toBe('Wait for the bell.');
+  expect(stored.sections[1].content).toBe('I have been ready all morning.');
+  expect(stored.practice.difficultSectionIds).toEqual(['turn-two']);
+  expect(stored.personalNotes[0]).toMatchObject({
+    sectionId: 'turn-two',
+    content: 'Pause before the final phrase.',
+  });
 });

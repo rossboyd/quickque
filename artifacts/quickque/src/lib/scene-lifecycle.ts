@@ -55,6 +55,8 @@ export interface SceneLifecycleOptions {
   /** Used to wait for native microphone teardown before speaker playback. */
   beforePartnerSpeak?: () => Promise<void>;
   onChange?: (state: SceneState) => void;
+  startIndex?: number;
+  endIndexExclusive?: number;
 }
 
 function copyState(state: SceneState): SceneState {
@@ -82,6 +84,8 @@ export class SceneLifecycle {
   };
   private aborter: AbortController | null = null;
   private disposed = false;
+  private readonly startIndex: number;
+  private readonly endIndexExclusive: number;
 
   constructor(options: SceneLifecycleOptions) {
     this.turns = options.turns;
@@ -90,6 +94,15 @@ export class SceneLifecycle {
     this.speaker = options.speaker;
     this.beforePartnerSpeak = options.beforePartnerSpeak ?? (async () => {});
     this.onChange = options.onChange ?? (() => {});
+    this.startIndex = Math.max(0, Math.min(
+      Math.trunc(options.startIndex ?? 0),
+      this.turns.length,
+    ));
+    this.endIndexExclusive = Math.max(this.startIndex, Math.min(
+      Math.trunc(options.endIndexExclusive ?? this.turns.length),
+      this.turns.length,
+    ));
+    this.stateValue.turnIndex = this.startIndex;
   }
 
   get state(): SceneState {
@@ -127,11 +140,11 @@ export class SceneLifecycle {
   }
 
   goTo(index: number): Promise<void> {
-    return this.navigate(Math.max(0, Math.min(index, this.turns.length)));
+    return this.navigate(Math.max(this.startIndex, Math.min(index, this.endIndexExclusive)));
   }
 
   previous(): Promise<void> {
-    return this.navigate(Math.max(0, this.stateValue.turnIndex - 1));
+    return this.navigate(Math.max(this.startIndex, this.stateValue.turnIndex - 1));
   }
 
   replay(): Promise<void> {
@@ -145,8 +158,8 @@ export class SceneLifecycle {
   reset(): Promise<void> {
     if (this.disposed) return Promise.resolve();
     const generation = this.invalidateSpeech();
-    this.setState({ phase: 'idle', turnIndex: 0, generation, message: null, progress: null });
-    return this.stopSpeakerOrBlock(generation, 0).then(() => {});
+    this.setState({ phase: 'idle', turnIndex: this.startIndex, generation, message: null, progress: null });
+    return this.stopSpeakerOrBlock(generation, this.startIndex).then(() => {});
   }
 
   dispose(): Promise<void> {
@@ -180,8 +193,8 @@ export class SceneLifecycle {
     this.setState({ phase: 'preparing', turnIndex: index, generation, message: null, progress: null });
     if (!await this.stopSpeakerOrBlock(generation, index)) return;
 
-    if (index >= this.turns.length) {
-      this.setState({ phase: 'completed', turnIndex: this.turns.length, generation, message: null, progress: null });
+    if (index >= this.endIndexExclusive) {
+      this.setState({ phase: 'completed', turnIndex: this.endIndexExclusive, generation, message: null, progress: null });
       return;
     }
 

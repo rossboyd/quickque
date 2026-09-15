@@ -8,6 +8,7 @@ import {
   cloneActor,
   cloneScriptData,
   isValidActor,
+  isValidPracticePreferences,
   MAX_ACTOR_ID_LENGTH,
   MAX_SECTION_NOTES_LENGTH,
   normalizeActorSectionReferences,
@@ -110,6 +111,7 @@ export function isValidScript(value: unknown): value is Script {
     Array.isArray(value.sections) &&
     value.sections.every(isValidScriptSection) &&
     (value.actor === undefined || isValidActor(value.actor)) &&
+    (value.practice === undefined || isValidPracticePreferences(value.practice)) &&
     typeof value.createdAt === 'number' &&
     Number.isFinite(value.createdAt) &&
     typeof value.updatedAt === 'number' &&

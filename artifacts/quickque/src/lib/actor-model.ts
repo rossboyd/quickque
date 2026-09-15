@@ -1,4 +1,4 @@
-import type { ActorCharacter, ActorMode, ActorVoice, Script, ScriptSection } from './types.ts';
+import type { ActorCharacter, ActorMode, ActorVoice, PracticePreferences, Script, ScriptSection } from './types.ts';
 import { getScriptPurpose } from './script-purpose.ts';
 import { isCharacterColor } from './actor-colors.ts';
 import { generateId } from './utils.ts';
@@ -21,6 +21,7 @@ export const MAX_ACTOR_ROLES = 100;
 export const MAX_SECTION_NOTES_LENGTH = 500_000;
 export const MAX_PERSONAL_NOTE_LENGTH = 20_000;
 export const MAX_PERSONAL_NOTES = 2_000;
+export const MAX_PRACTICE_BOOKMARKS = 2_000;
 // Browser/macOS system speech exposes the useful, portable 0.5–2 range.
 export const MIN_ACTOR_VOICE_RATE = 0.5;
 export const MAX_ACTOR_VOICE_RATE = 2;
@@ -75,6 +76,30 @@ function isBoundedString(value: unknown, maximum: number, nonEmpty = false): val
 
 function isBoundedId(value: unknown): value is string {
   return isBoundedString(value, MAX_ACTOR_ID_LENGTH, true);
+}
+
+export function isValidPracticePreferences(value: unknown): value is PracticePreferences {
+  return isRecord(value) &&
+    (value.mode === 'read-through' || value.mode === 'prompted' || value.mode === 'off-book') &&
+    Number.isSafeInteger(value.startTurn) && Number(value.startTurn) >= 0 &&
+    Number.isSafeInteger(value.endTurn) && Number(value.endTurn) >= Number(value.startTurn) &&
+    Array.isArray(value.difficultSectionIds) &&
+    value.difficultSectionIds.length <= MAX_PRACTICE_BOOKMARKS &&
+    new Set(value.difficultSectionIds).size === value.difficultSectionIds.length &&
+    value.difficultSectionIds.every(isBoundedId);
+}
+
+function clonePractice(script: Script): PracticePreferences | undefined {
+  if (!script.practice || !isValidPracticePreferences(script.practice)) return undefined;
+  const finalIndex = Math.max(0, script.sections.length - 1);
+  const startTurn = Math.min(script.practice.startTurn, finalIndex);
+  return {
+    mode: script.practice.mode,
+    startTurn,
+    endTurn: Math.max(startTurn, Math.min(script.practice.endTurn, finalIndex)),
+    difficultSectionIds: script.practice.difficultSectionIds.filter(id =>
+      script.sections.some(section => section.id === id)),
+  };
 }
 
 export function isValidActorVoice(value: unknown): value is ActorVoice {
@@ -331,6 +356,7 @@ export function cloneScriptData(script: Script): Script {
   }
   if (script.protection) cloned.protection = cloneProtection(script);
   if (script.personalNotes) cloned.personalNotes = clonePersonalNotes(script);
+  if (script.practice) cloned.practice = clonePractice(script);
   return cloned;
 }
 
@@ -341,6 +367,8 @@ export function clonePortableScript(
 ): Script {
   const cloned = cloneScriptData(script);
   if (!includePersonalNotes) delete cloned.personalNotes;
+  // Practice choices and self-assessment bookmarks are device-local.
+  delete cloned.practice;
   return cloned;
 }
 

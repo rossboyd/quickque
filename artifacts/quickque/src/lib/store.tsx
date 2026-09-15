@@ -18,6 +18,7 @@ import {
   PresentationPreferences,
 } from './types';
 import type { PersonalNote, ScriptSection } from './types';
+import type { PracticePreferences } from './types';
 import { MAX_PERSONAL_NOTE_LENGTH, MAX_PERSONAL_NOTES } from './actor-model.ts';
 import { generateId } from './utils';
 import { validateImportReviewDraft, type ImportReviewDraft } from './document-import/review';
@@ -103,6 +104,7 @@ type StoreContextType = {
   addPersonalNote: (id: string, sectionId: string, content: string) => string | null;
   updatePersonalNote: (id: string, noteId: string, content: string) => boolean;
   deletePersonalNote: (id: string, noteId: string) => boolean;
+  updatePractice: (id: string, practice: PracticePreferences) => boolean;
   deleteScriptSection: (id: string, sectionId: string) => boolean;
   deleteScript: (id: string) => void;
   deleteScripts: (ids: string[]) => boolean;
@@ -1041,6 +1043,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }).ok;
   }, [commitLibrary]);
 
+  const updatePractice = useCallback((id: string, practice: PracticePreferences) => {
+    const current = scriptsRef.current.find(script => script.id === id);
+    if (!current || current.sections.length === 0) return false;
+    const finalIndex = current.sections.length - 1;
+    const startTurn = Math.max(0, Math.min(Math.trunc(practice.startTurn), finalIndex));
+    const validIds = new Set(current.sections.map(section => section.id));
+    const next: PracticePreferences = {
+      mode: practice.mode,
+      startTurn,
+      endTurn: Math.max(startTurn, Math.min(Math.trunc(practice.endTurn), finalIndex)),
+      difficultSectionIds: [...new Set(practice.difficultSectionIds)]
+        .filter(id => validIds.has(id))
+        .slice(0, 2_000),
+    };
+    return commitLibrary({
+      scripts: scriptsRef.current.map(script => script.id === id
+        ? { ...script, practice: next, updatedAt: Date.now() }
+        : script),
+      trash: trashRef.current,
+      customOrder: customOrderRef.current,
+      sortMode: sortModeRef.current,
+      activeScriptId: activeScriptIdRef.current,
+    }).ok;
+  }, [commitLibrary]);
+
   const deleteScriptSection = useCallback((id: string, sectionId: string) => {
     const current = scriptsRef.current.find(script => script.id === id);
     if (!current || current.protection?.state === 'protected' || current.sections.length <= 1) {
@@ -1602,6 +1629,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
        addPersonalNote,
        updatePersonalNote,
        deletePersonalNote,
+       updatePractice,
        deleteScriptSection,
       deleteScript,
       deleteScripts,
