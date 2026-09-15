@@ -63,9 +63,14 @@ test('home search, sorting, trash and direct rehearsal setup work', async ({ pag
   await page.getByRole('menuitem', { name: /Move to Trash/ }).click();
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect(page.getByRole('article', { name: 'All hands', exact: true })).toHaveCount(0);
-  await page.goto('/trash');
+  const navigation = page.getByRole('navigation', { name: 'Workspace navigation' });
+  await expect(navigation.getByRole('button', { name: /Trash/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open Trash, 1 deleted script', exact: true }).click();
+  await expect(page).toHaveURL(/\/trash$/);
   await expect(page.getByRole('heading', { name: 'Trash', exact: true })).toBeVisible();
   await expect(page.getByRole('article', { name: 'All hands', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to scripts', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
 });
 
 test('Your Voices is a first-class workspace destination', async ({ page }) => {
@@ -79,4 +84,19 @@ test('Your Voices is a first-class workspace destination', async ({ page }) => {
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Voices & audio' }).click();
   await expect(page.getByRole('button', { name: 'Open Your Voices', exact: true })).toBeVisible();
+});
+
+test('scripts can be pinned to a persistent top section', async ({ page }) => {
+  await seed(page);
+  const talk = page.getByRole('article', { name: 'All hands', exact: true });
+  await talk.getByRole('button', { name: 'Options for All hands', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Pin to top', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Pinned', exact: true })).toBeVisible();
+  await expect(page.getByRole('article').first()).toHaveAccessibleName('All hands');
+
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Pinned', exact: true })).toBeVisible();
+  await expect(page.getByRole('article').first()).toHaveAccessibleName('All hands');
+  await talk.getByRole('button', { name: 'Options for All hands', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'Unpin from top', exact: true })).toBeVisible();
 });

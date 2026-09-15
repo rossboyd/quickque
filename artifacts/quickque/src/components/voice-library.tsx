@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Mic, Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, Mic, Pencil, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { isDesktop } from '@/lib/desktop';
 import {
   createVoiceLibrary,
@@ -10,6 +10,7 @@ import {
   type VoiceRecording,
 } from '@/lib/voice-library';
 import { VoiceRecorder } from './voice-recorder';
+import voiceArtwork from '@assets/quickque-performance-artwork.webp';
 
 export function VoiceLibraryPanel({
   onVoicesChange,
@@ -171,15 +172,30 @@ export function VoiceLibraryPanel({
       )}
       {loading && <p role="status" className="text-sm text-muted-foreground" data-testid="status-voice-library-loading">Loading local voices…</p>}
       {!loading && voices.length === 0 && !recording && <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground" data-testid="empty-voice-library">No cloned voices yet. Record a short reference to create your first one.</p>}
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         {voices.map(voice => (
-          <div key={voice.id} data-testid={`card-cloned-voice-${voice.id}`} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{voice.name}</p>
-              <p className="text-xs text-muted-foreground">{voice.durationSeconds.toFixed(1)}s · revision {voice.revision}{voice.available ? '' : ' · recording unavailable'}</p>
-              <p className="mt-1 flex flex-wrap gap-1">{[voice.emotion, voice.gender, voice.ageRange].filter(Boolean).map(tag => <span key={tag} className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">{tag}</span>)}</p>
-              <button type="button" className="mt-1 text-xs text-primary" onClick={() => void verify(voice)}>Verify saved sample</button>
-              <div className="mt-3 grid grid-cols-1 gap-2 border-t border-border/60 pt-3 sm:grid-cols-3">
+          <article key={voice.id} data-testid={`card-cloned-voice-${voice.id}`} className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-xl hover:shadow-black/15">
+            <div className="relative h-44 overflow-hidden border-b border-border bg-black">
+              <img src={voiceArtwork} alt="" className="h-full w-full object-cover grayscale transition duration-500 ease-out group-hover:scale-[1.035]" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-black/10" />
+              <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-4">
+                <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] backdrop-blur-sm ${voice.available ? 'border-emerald-300/25 bg-emerald-950/45 text-emerald-200' : 'border-white/20 bg-black/45 text-white/65'}`}>
+                  <CheckCircle2 className="h-3 w-3" />
+                  {voice.available ? 'Ready' : 'Unavailable'}
+                </span>
+                <span className="rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-[10px] text-white/75 backdrop-blur-sm">{voice.durationSeconds.toFixed(1)}s · rev {voice.revision}</span>
+              </div>
+              <div className="absolute inset-x-0 bottom-0 p-4">
+                <div aria-hidden="true" className="mb-3 flex h-5 items-end gap-1 opacity-55">
+                  {[8, 15, 10, 19, 12, 17, 7, 14, 20, 11, 16, 9].map((height, index) => <i key={index} className="w-0.5 rounded-full bg-primary" style={{ height }} />)}
+                </div>
+                <h3 className="truncate text-xl font-semibold tracking-tight text-white drop-shadow-md">{voice.name}</h3>
+              </div>
+            </div>
+            <div className="flex flex-1 flex-col p-4">
+              <div className="flex min-h-6 flex-wrap gap-1.5">{[voice.emotion, voice.gender, voice.ageRange].filter(Boolean).map(tag => <span key={tag} className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">{tag}</span>)}</div>
+              <button type="button" className="mt-2 inline-flex w-fit items-center gap-1.5 text-xs text-primary hover:underline" onClick={() => void verify(voice)}><ShieldCheck className="h-3.5 w-3.5" /> Verify saved sample</button>
+              <div className="mt-4 grid grid-cols-1 gap-2 border-t border-border/60 pt-4 sm:grid-cols-3">
                 {([['emotion', 'Emotion note', 'e.g. grounded, bright'], ['gender', 'Gender note', 'optional'], ['ageRange', 'Age range note', 'e.g. 30s–40s']] as const).map(([key, label, placeholder]) => (
                   <label key={key} className="text-[11px] font-medium text-muted-foreground">{label}
                     <input data-testid={`input-${key}-${voice.id}`} value={draftFor(voice)[key]} onChange={event => setProfileDrafts(current => ({ ...current, [voice.id]: { ...draftFor(voice), [key]: event.target.value } }))} placeholder={placeholder} className="mt-1 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground" />
@@ -187,14 +203,14 @@ export function VoiceLibraryPanel({
                 ))}
                 <button type="button" data-testid={`button-save-profile-${voice.id}`} onClick={() => void saveProfile(voice)} disabled={profileSaving === voice.id} className="sm:col-span-3 justify-self-start rounded-md border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50">{profileSaving === voice.id ? 'Saving…' : 'Save profile notes'}</button>
               </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border/60 pt-4 sm:grid-cols-4">
+                <button type="button" data-testid={`button-preview-cloned-voice-${voice.id}`} onClick={() => void preview(voice)} disabled={previewing === voice.id} className="flex items-center justify-center gap-1.5 rounded-md border border-border px-2 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50" aria-label={`Preview ${voice.name}`}><Play className="h-3.5 w-3.5" />{previewing === voice.id ? 'Playing…' : 'Preview'}</button>
+                <button type="button" data-testid={`button-rerecord-cloned-voice-${voice.id}`} onClick={() => { setName(voice.name); setRerecordingVoiceId(voice.id); setReviewed(null); setConsent(false); setRecording(true); }} className="flex items-center justify-center gap-1.5 rounded-md border border-border px-2 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Re-record ${voice.name}`}><Mic className="h-3.5 w-3.5" />Re-record</button>
+                <button type="button" data-testid={`button-rename-cloned-voice-${voice.id}`} onClick={() => void rename(voice)} className="flex items-center justify-center gap-1.5 rounded-md border border-border px-2 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Rename ${voice.name}`}><Pencil className="h-3.5 w-3.5" />Rename</button>
+                <button type="button" data-testid={`button-delete-cloned-voice-${voice.id}`} onClick={() => void remove(voice)} className="flex items-center justify-center gap-1.5 rounded-md border border-border px-2 py-2 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete ${voice.name}`}><Trash2 className="h-3.5 w-3.5" />Delete</button>
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <button type="button" data-testid={`button-preview-cloned-voice-${voice.id}`} onClick={() => void preview(voice)} disabled={previewing === voice.id} className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Preview ${voice.name}`}><Play className="h-4 w-4" /></button>
-              <button type="button" data-testid={`button-rerecord-cloned-voice-${voice.id}`} onClick={() => { setName(voice.name); setRerecordingVoiceId(voice.id); setReviewed(null); setConsent(false); setRecording(true); }} className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Re-record ${voice.name}`}><Mic className="h-4 w-4" /></button>
-              <button type="button" data-testid={`button-rename-cloned-voice-${voice.id}`} onClick={() => void rename(voice)} className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Rename ${voice.name}`}><Pencil className="h-4 w-4" /></button>
-              <button type="button" data-testid={`button-delete-cloned-voice-${voice.id}`} onClick={() => void remove(voice)} className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete ${voice.name}`}><Trash2 className="h-4 w-4" /></button>
-            </div>
-          </div>
+          </article>
         ))}
       </div>
       {message && <p role="status" data-testid="status-voice-library" className="text-sm text-muted-foreground">{message}</p>}

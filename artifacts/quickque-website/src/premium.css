@@ -45,6 +45,11 @@
 .principles-strip > div { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-block: 25px; }
 .principles-strip span { display: flex; align-items: center; gap: 10px; color: #aaaaaa; font-size: 11px; }.use-cases-section { scroll-margin-top: 96px; }.use-case-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:18px; }.use-case-card { min-height: 345px; padding: 36px; border-radius: 12px; background: linear-gradient(145deg, #1c1c1c, #0d0d0d 65%); color: #f5f5f5; display: flex; flex-direction: column; border: 1px solid #ffffff20; box-shadow: 0 1px 0 #ffffff08 inset; }.use-case-card.rehearsing { background: linear-gradient(145deg, #1c1c1c, #0d0d0d 65%); color: #f5f5f5; }.use-case-card > span { font: 11px ui-monospace, monospace; letter-spacing: .1em; color: var(--brand-coral-soft); }.rehearsing > span { color: var(--brand-coral-soft); }.use-case-card h3 { font-size:clamp(27px,2.7vw,38px); line-height:1.12; letter-spacing:-.05em; margin:44px 0 15px; }.use-case-card p { font-size:15px; line-height:1.85; color: #e8e8e8; max-width:470px; }.rehearsing p { color: #aaa; }.use-case-card small { padding-top:24px; display:flex; align-items:center; gap:7px; margin-top:auto; font-size:10px; color: #e8e8e8; }.rehearsing small { color: #aaa; }
 .section-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 50px; margin-bottom: 55px; }
+.use-case-card { min-height: 520px; overflow: hidden; }
+.use-case-art { height: 205px; margin: 24px -14px 0; overflow: hidden; border: 1px solid #ffffff1c; border-radius: 8px; background: #080808; }
+.use-case-art img { width: 100%; height: 100%; display: block; object-fit: cover; filter: grayscale(1); transition: transform .5s ease, filter .5s ease; }
+.use-case-card:hover .use-case-art img { transform: scale(1.025); filter: grayscale(.72); }
+.use-case-card h3 { margin-top: 30px; }
 .section-heading > p { color: var(--muted); font-size: 14px; line-height: 1.9; padding-bottom: 5px; max-width: 310px; }
 .product-section { scroll-margin-top: 96px; padding-top: 20px; }
 .product-stage { position: relative; display: grid; place-items: center; padding: 60px 70px 68px; background: #101010; border: 1px solid #ffffff1c; border-radius: 12px; }

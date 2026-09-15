@@ -1,6 +1,6 @@
 import './workspace.css';
 import { createVoiceLibrary } from '@/lib/voice-library';
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { Fragment, useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocation } from 'wouter';
 import { calculateWordCount, estimateTime, formatTime, cn } from '@/lib/utils';
@@ -18,7 +18,7 @@ import {
   Trash2, Copy, FileText, 
   Trash, AlertTriangle, MonitorPlay,
   FileUp, ArrowUpDown, Edit2, Code, ArrowUp, ArrowDown, ChevronDown,
-  RotateCcw, X, Play, Home, PanelLeftClose, Mic
+  RotateCcw, X, Play, Home, PanelLeftClose, Mic, Volume2, Users, Pin
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -47,6 +47,8 @@ import { ScriptPurposeIcon } from '@/components/script-purpose-icon';
 import { useLicence } from '@/lib/licence';
 import { UPGRADE_EVENT } from '@/components/upgrade-dialog';
 import { VoiceLibraryPanel } from '@/components/voice-library';
+import { AUDIO_CHANGED, audioStatus } from '@/lib/script-audio';
+import { audioRequest } from '@/lib/script-audio-model';
 import presentationArtwork from '@assets/quickque-presentation-artwork.webp';
 import performanceArtwork from '@assets/quickque-performance-artwork.webp';
 
@@ -57,6 +59,19 @@ const SORT_LABELS: Record<SortMode, string> = {
   za: 'Title Z-A',
   custom: 'Custom Order'
 };
+
+const PINNED_SCRIPTS_KEY = 'quickque_pinned_scripts';
+
+function loadPinnedScriptIds(): string[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(PINNED_SCRIPTS_KEY) ?? '[]');
+    return Array.isArray(value)
+      ? [...new Set(value.filter((id): id is string => typeof id === 'string'))]
+      : [];
+  } catch {
+    return [];
+  }
+}
 
 function VoiceLibraryPage() {
   return (
@@ -95,6 +110,8 @@ export default function Library() {
   const [libraryVisible, setLibraryVisible] = useState(() => localStorage.getItem('quickque-library-visible') !== 'false');
   const [showCreate, setShowCreate] = useState(false);
   const [creatingSample, setCreatingSample] = useState(false);
+  const [audioReady, setAudioReady] = useState<Record<string, boolean>>({});
+  const [pinnedIds, setPinnedIds] = useState<string[]>(loadPinnedScriptIds);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [droppedError, setDroppedError] = useState<string | null>(null);
@@ -192,8 +209,64 @@ export default function Library() {
       viewMode === 'library' ? customOrder : []
     );
   }, [scripts, trash, search, sortMode, customOrder, viewMode]);
+  const pinnedItems = useMemo(
+    () => viewMode === 'library' ? visibleItems.filter(script => pinnedIds.includes(script.id)) : [],
+    [pinnedIds, viewMode, visibleItems],
+  );
+  const workspaceItems = useMemo(
+    () => viewMode === 'library'
+      ? [...pinnedItems, ...visibleItems.filter(script => !pinnedIds.includes(script.id))]
+      : visibleItems,
+    [pinnedIds, pinnedItems, viewMode, visibleItems],
+  );
+
+  useEffect(() => {
+    setPinnedIds(current => {
+      const existing = new Set(scripts.map(script => script.id));
+      const next = current.filter(id => existing.has(id));
+      if (next.length === current.length) return current;
+      localStorage.setItem(PINNED_SCRIPTS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [scripts]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      if (!isDesktop()) {
+        if (!cancelled) setAudioReady({});
+        return;
+      }
+      const statuses = await Promise.all(scripts.map(async script => {
+        try {
+          const request = await audioRequest(script);
+          const ready = request.entries.length > 0 && (await audioStatus(request)).status === 'ready';
+          return [script.id, ready] as const;
+        } catch {
+          return [script.id, false] as const;
+        }
+      }));
+      if (!cancelled) setAudioReady(Object.fromEntries(statuses));
+    };
+    void refresh();
+    window.addEventListener(AUDIO_CHANGED, refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AUDIO_CHANGED, refresh);
+    };
+  }, [scripts]);
 
   const handleCreate = () => setShowCreate(true);
+
+  const togglePin = (scriptId: string) => {
+    setPinnedIds(current => {
+      const next = current.includes(scriptId)
+        ? current.filter(id => id !== scriptId)
+        : [...current, scriptId];
+      localStorage.setItem(PINNED_SCRIPTS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
 
   const createWithPurpose = (purpose: 'presentation' | 'performance') => {
     setViewMode('library');
@@ -297,6 +370,8 @@ export default function Library() {
                       isActive={isActive}
                       scriptTitle={script.title || 'Untitled Script'}
                       onRename={() => setEditingId(script.id)}
+                      pinned={pinnedIds.includes(script.id)}
+                      onTogglePin={() => togglePin(script.id)}
                       onDuplicate={() => handleDuplicate(script.id)}
                       onDelete={() => setConfirmAction({ type: 'trash', ids: [script.id] })}
                       onRestore={() => setConfirmAction({ type: 'restore', ids: [script.id] })}
@@ -441,18 +516,6 @@ export default function Library() {
             >
               <Mic className="h-4 w-4" />
               Your Voices
-            </button>
-            <button
-              className={cn(
-                "flex items-center justify-center gap-2 text-sm px-2 py-2 rounded-md transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                viewMode === 'trash' ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:text-foreground"
-              )}
-              aria-current={viewMode === 'trash' ? 'page' : undefined}
-              onClick={() => { setViewMode('trash'); setSearch(''); setLocation('/trash'); }}
-            >
-              <Trash2 className="h-4 w-4" />
-              Trash
-              <span className="text-xs opacity-60">{trash.length}</span>
             </button>
           </nav>
 
@@ -692,15 +755,19 @@ export default function Library() {
           <div className="mx-auto max-w-6xl space-y-8">
             <header className="flex flex-wrap items-start justify-between gap-4">
               <div><p className="mb-1 text-xs text-muted-foreground">Quickque workspace</p><h1 className="text-2xl font-semibold tracking-tight">{viewMode === 'trash' ? 'Trash' : 'Your scripts'}</h1><p className="mt-2 text-sm text-muted-foreground">{viewMode === 'trash' ? 'Restore scripts or permanently remove them.' : 'Pick a script to edit, present or rehearse.'}</p></div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button type="button" onClick={() => setIsImportOpen(true)} aria-label="Import Document" className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">Import document</button>
-                <button type="button" onClick={handleCreate} className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"><Plus className="h-4 w-4" />New script</button>
-              </div>
+              {viewMode === 'trash' ? (
+                <button type="button" onClick={() => { setSearch(''); setLocation('/'); }} className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">Back to scripts</button>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => { setSearch(''); setLocation('/trash'); }} aria-label={`Open Trash, ${trash.length} deleted ${trash.length === 1 ? 'script' : 'scripts'}`} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"><Trash2 className="h-4 w-4" />Trash {trash.length > 0 && <span className="rounded-full bg-muted px-1.5 text-xs">{trash.length}</span>}</button>
+                  <button type="button" onClick={() => setIsImportOpen(true)} aria-label="Import Document" className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">Import document</button>
+                  <button type="button" onClick={handleCreate} className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"><Plus className="h-4 w-4" />New script</button>
+                </div>
+              )}
             </header>
             <div className="flex flex-wrap gap-3 md:hidden">
               <button type="button" onClick={() => setLocation('/')} className={cn("text-sm", viewMode === 'library' ? "text-primary font-medium" : "text-muted-foreground")}>Workspace</button>
               <button type="button" onClick={() => setLocation('/voices')} className={cn("text-sm", location === '/voices' ? "text-primary font-medium" : "text-muted-foreground")}>Your Voices</button>
-              <button type="button" onClick={() => setLocation('/trash')} className={cn("text-sm", viewMode === 'trash' ? "text-primary font-medium" : "text-muted-foreground")}>Trash ({trash.length})</button>
               <SettingsDialog />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -710,11 +777,19 @@ export default function Library() {
             </div>
             {visibleItems.length === 0 ? <div className="rounded-lg border border-dashed border-border py-16 text-center"><FileText className="mx-auto mb-4 h-8 w-8 text-muted-foreground" /><p className="font-medium">{search ? 'No scripts found' : viewMode === 'trash' ? 'Trash is empty' : 'A fresh workspace'}</p><p className="mt-2 text-sm text-muted-foreground">{search ? 'Try a different search.' : viewMode === 'trash' ? 'Deleted scripts will appear here.' : 'Create a script or import a document to begin.'}</p></div> :
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {visibleItems.map((script, idx) => {
+              {viewMode === 'library' && pinnedItems.length > 0 && <div className="col-span-full flex items-center gap-2 border-b border-border pb-3">
+                <Pin className="h-4 w-4 text-primary" />
+                <h2 className="font-semibold">Pinned</h2>
+                <span className="text-xs text-muted-foreground">{pinnedItems.length}</span>
+              </div>}
+              {workspaceItems.map((script, idx) => {
                 const performance = getScriptPurpose(script) === 'performance';
                 const words = script.sections.reduce((sum, section) => sum + calculateWordCount(section.content), 0);
                 const artwork = performance ? performanceArtwork : presentationArtwork;
-                return <article key={script.id} aria-label={script.title || 'Untitled Script'} data-testid={`card-script-${script.id}`} className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-xl hover:shadow-black/15">
+                const startsUnpinnedSection = viewMode === 'library' && pinnedItems.length > 0 && idx === pinnedItems.length;
+                return <Fragment key={script.id}>
+                  {startsUnpinnedSection && <div className="col-span-full border-b border-border pb-3"><h2 className="font-semibold">All scripts</h2></div>}
+                  <article aria-label={script.title || 'Untitled Script'} data-testid={`card-script-${script.id}`} className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-xl hover:shadow-black/15">
                   <div className="relative h-44 overflow-hidden border-b border-border bg-black">
                     <img src={artwork} alt="" className="h-full w-full object-cover grayscale transition duration-500 ease-out group-hover:scale-[1.035]" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-black/5" />
@@ -723,6 +798,9 @@ export default function Library() {
                         <ScriptPurposeIcon purpose={performance ? 'performance' : 'presentation'} className="h-3 w-3" />
                         {performance ? 'Performance' : 'Presentation'}
                       </span>
+                      <div className="rounded-md bg-black/30 text-white/90 backdrop-blur-sm">
+                        {scriptMenu(script, visibleItems.findIndex(item => item.id === script.id))}
+                      </div>
                     </div>
                     {editingId !== script.id && (
                       <div className="absolute inset-x-0 bottom-0 p-4">
@@ -735,21 +813,26 @@ export default function Library() {
                     )}
                   </div>
                   <div className="flex-1 space-y-3 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      {editingId === script.id ? <input autoFocus aria-label="Rename script" data-testid={`input-rename-script-${script.id}`} maxLength={200} defaultValue={script.title} className="min-w-0 flex-1 rounded border border-border bg-transparent px-2 py-1" onBlur={event => { const title = event.target.value.trim(); if (title) updateScript(script.id, { title }); setEditingId(null); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') setEditingId(null); }} /> : <span className="pt-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{performance ? 'Stage script' : 'Speaking script'}</span>}
-                      {scriptMenu(script, idx)}
+                    {editingId === script.id && <input autoFocus aria-label="Rename script" data-testid={`input-rename-script-${script.id}`} maxLength={200} defaultValue={script.title} className="w-full min-w-0 rounded border border-border bg-transparent px-2 py-1" onBlur={event => { const title = event.target.value.trim(); if (title) updateScript(script.id, { title }); setEditingId(null); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') setEditingId(null); }} />}
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span data-testid={`status-audio-${script.id}`} className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium", audioReady[script.id] ? "bg-emerald-500/12 text-emerald-400" : "bg-muted text-muted-foreground")}>
+                        <Volume2 className="h-3.5 w-3.5" />
+                        {audioReady[script.id] ? 'Audio ready' : 'No audio'}
+                      </span>
+                      {performance && <span data-testid={`text-speakers-${script.id}`} className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 font-medium text-muted-foreground">
+                        <Users className="h-3.5 w-3.5" />
+                        {script.actor?.characters.length ?? 0} {(script.actor?.characters.length ?? 0) === 1 ? 'speaker' : 'speakers'}
+                      </span>}
+                      <span className="text-muted-foreground">{words} words · {formatTime(estimateTime(words))}</span>
                     </div>
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <ScriptPurposeIcon purpose={performance ? 'performance' : 'presentation'} />
-                      <span>{performance ? 'Performance' : 'Presentation'} · {words} words · {formatTime(estimateTime(words))}</span>
-                    </p>
                     <p className="text-xs text-muted-foreground">Updated {new Date(script.updatedAt).toLocaleDateString()}</p>
                   </div>
                   {viewMode === 'library' && <div className="grid grid-cols-2 gap-2 px-4 pb-4">
                     <button type="button" aria-label={`Edit ${script.title || 'Untitled Script'}`} onClick={() => handleOpenScript(script.id)} className="flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"><Edit2 className="h-3.5 w-3.5" />Edit</button>
                     <button type="button" disabled={checkingScript !== null} aria-label={`${performance ? 'Rehearse' : 'Present'} ${script.title || 'Untitled Script'}`} onClick={() => void playFromHome(script)} className="flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"><Play className="h-3.5 w-3.5" />{checkingScript === script.id ? 'Checking…' : performance ? 'Rehearse' : 'Present'}</button>
                   </div>}
-                </article>;
+                  </article>
+                </Fragment>;
               })}
             </div>}
           </div>
@@ -850,9 +933,11 @@ type ScriptMenuProps = {
   viewMode: 'library' | 'trash';
   isActive: boolean;
   scriptTitle: string;
+  pinned: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onRename: () => void;
+  onTogglePin: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onRestore: () => void;
@@ -866,7 +951,7 @@ type ScriptMenuProps = {
 function ScriptMenu({ 
   viewMode, isActive, scriptTitle, onRename, onDuplicate, onDelete, 
   onRestore, onPermanentDelete, onExportJSON, onExportTXT,
-  canMoveUp, canMoveDown, onMoveUp, onMoveDown
+  pinned, onTogglePin, canMoveUp, canMoveDown, onMoveUp, onMoveDown
 }: ScriptMenuProps) {
   const renameAfterClose = useRef(false);
   return (
@@ -893,6 +978,9 @@ function ScriptMenu({
       }}>
         {viewMode === 'library' ? (
           <>
+            <DropdownMenuItem onClick={onTogglePin}>
+              <Pin className="w-4 h-4 mr-2" /> {pinned ? 'Unpin from top' : 'Pin to top'}
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => { renameAfterClose.current = true; }}>
               <Edit2 className="w-4 h-4 mr-2" /> Rename
             </DropdownMenuItem>
