@@ -246,7 +246,7 @@ export function SettingsDialog() {
             <p className="text-sm text-muted-foreground">
               Full backups include scripts, private personal notes, Trash, custom order and sorting preference. Single-script exports omit personal notes. Backups do not include app settings, voice recordings, models or generated audio.
               Import Backup adds scripts and Trash without replacing existing items or changing your current sort.
-              For TXT, PDF, DOCX or RTF files, use Import Document in the library.
+              For TXT, PDF, DOCX or RTF files, choose New script, then Import document.
             </p>
             
             <div className="flex flex-col sm:flex-row items-stretch justify-between gap-3">

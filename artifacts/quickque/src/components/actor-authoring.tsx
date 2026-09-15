@@ -25,6 +25,8 @@ export function ActorAuthoringPanel({
   onChange,
   onClose,
   onRehearse,
+  readyToRehearse,
+  onFinishSetup,
   sections,
   onDeleteCharacter,
 }: {
@@ -32,6 +34,8 @@ export function ActorAuthoringPanel({
   onChange: (actor: ScriptActor) => void;
   onClose: () => void;
   onRehearse: () => void;
+  readyToRehearse: boolean;
+  onFinishSetup: () => void;
   sections: ScriptSection[];
   onDeleteCharacter: (oldId: string, newId: string | null) => void;
 }) {
@@ -659,12 +663,13 @@ export function ActorAuthoringPanel({
         <button
           onClick={() => {
             handleClose();
-            onRehearse();
+            if (readyToRehearse) onRehearse();
+            else onFinishSetup();
           }}
           className="w-full h-11 bg-primary text-primary-foreground rounded-lg font-medium shadow-sm hover:bg-primary/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
-          <Play className="w-4 h-4 fill-current" />
-          Start Rehearsal
+          {readyToRehearse ? <Play className="w-4 h-4 fill-current" /> : <Check className="w-4 h-4" />}
+          {readyToRehearse ? 'Start Rehearsal' : 'Finish setup'}
         </button>
       </div>
 

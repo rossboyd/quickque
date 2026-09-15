@@ -13,19 +13,21 @@ export async function documentImportSmoke(page, baseURL) {
   const text = '  Hello — 世界\n\nSecond paragraph.\n<script>literal, not code</script>  ';
   const stored = () => page.evaluate(() => localStorage.getItem('quickque_scripts'));
   const openReview = async () => {
-    await page.getByRole('button', { name: 'Import Document', exact: true }).click();
+    await page.getByRole('button', { name: 'New script', exact: true }).click();
+    await page.getByRole('button', { name: 'Import document', exact: true }).click();
     await page.locator('input[type=file][accept*=".docx"]').setInputFiles(fixture);
     await page.getByRole('button', { name: 'Performance / scene', exact: false }).waitFor();
   };
   await page.goto(baseURL);
-  await page.getByRole('button', { name: 'Import Document', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'New script', exact: true }).waitFor();
   const original = await stored();
   await openReview();
   const extractedText = await page.locator('#import-text').inputValue();
   assert.match(extractedText, /世界/);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(await stored(), original, 'Review cancellation must not write anything');
-  await page.getByRole('button', { name: 'Import Document', exact: true }).click();
+  await page.getByRole('button', { name: 'New script', exact: true }).click();
+  await page.getByRole('button', { name: 'Import document', exact: true }).click();
   await page.getByRole('textbox', { name: 'Paste script content' }).fill('Opening prose.\n\nSecond paragraph.');
   await page.getByRole('button', { name: 'Review pasted content', exact: true }).click();
   await page.getByRole('button', { name: 'Performance / scene', exact: false }).click();
@@ -54,7 +56,7 @@ export async function documentImportSmoke(page, baseURL) {
   await page.getByRole('button', { name: 'Present', exact: true }).click();
   await page.waitForURL(/\/read\//);
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Import Document', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'New script', exact: true }).waitFor();
   await page.reload();
   await page.getByPlaceholder('Script Title').waitFor();
   assert.equal(await page.getByPlaceholder('Script Title').inputValue(), title);

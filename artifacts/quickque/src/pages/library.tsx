@@ -50,7 +50,7 @@ import { UPGRADE_EVENT } from '@/components/upgrade-dialog';
 import { VoiceLibraryPanel } from '@/components/voice-library';
 import { AUDIO_CHANGED, currentAudioReadiness } from '@/lib/script-audio';
 import { audioRequest } from '@/lib/script-audio-model';
-import { checkScriptReadiness, hasUnfinishedSetup } from '@/lib/script-readiness';
+import { checkScriptReadiness, getScriptReadiness, hasUnfinishedSetup } from '@/lib/script-readiness';
 import presentationArtwork from '@assets/quickque-presentation-artwork.webp';
 import performanceArtwork from '@assets/quickque-performance-artwork.webp';
 
@@ -114,6 +114,7 @@ export default function Library() {
   const [showCreate, setShowCreate] = useState(false);
   const [creatingSample, setCreatingSample] = useState(false);
   const [audioReady, setAudioReady] = useState<Record<string, boolean>>({});
+  const [scriptReady, setScriptReady] = useState<Record<string, boolean>>({});
   const [pinnedIds, setPinnedIds] = useState<string[]>(loadPinnedScriptIds);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
@@ -245,20 +246,27 @@ export default function Library() {
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
-      if (!isDesktop()) {
-        if (!cancelled) setAudioReady({});
-        return;
-      }
+      if (!cancelled) setScriptReady({});
+      const voices = await voiceLibrary.list().catch(() => []);
+      const availableVoices = voices.map(voice => ({ referenceId: voice.referenceId, revision: voice.revision }));
       const statuses = await Promise.all(scripts.map(async script => {
+        let ready = false;
         try {
-          const request = await audioRequest(script);
-           const ready = request.entries.length > 0 && (await currentAudioReadiness(request)).status === 'ready';
-          return [script.id, ready] as const;
-        } catch {
-          return [script.id, false] as const;
-        }
+          if (isDesktop()) {
+            const request = await audioRequest(script);
+            ready = request.entries.length > 0 && (await currentAudioReadiness(request)).status === 'ready';
+          }
+        } catch { /* readiness remains false */ }
+        return {
+          id: script.id,
+          audio: ready,
+          setup: getScriptReadiness(script, { availableVoices, audioReady: ready }).ready,
+        };
       }));
-      if (!cancelled) setAudioReady(Object.fromEntries(statuses));
+      if (!cancelled) {
+        setAudioReady(Object.fromEntries(statuses.map(status => [status.id, status.audio])));
+        setScriptReady(Object.fromEntries(statuses.map(status => [status.id, status.setup])));
+      }
     };
     void refresh();
     window.addEventListener(AUDIO_CHANGED, refresh);
@@ -266,9 +274,29 @@ export default function Library() {
       cancelled = true;
       window.removeEventListener(AUDIO_CHANGED, refresh);
     };
-  }, [scripts]);
+  }, [scripts, voiceLibrary]);
+
+  const scriptAction = (script: Script) => {
+    const performance = getScriptPurpose(script) === 'performance';
+    if (performance && scriptReady[script.id] !== true) {
+      return {
+        label: 'Finish setup',
+        ariaLabel: `Finish setup ${script.title || 'Untitled Script'}`,
+        onClick: () => setSetupScriptId(script.id),
+      };
+    }
+    return {
+      label: performance ? 'Rehearse' : 'Present',
+      ariaLabel: `${performance ? 'Rehearse' : 'Present'} ${script.title || 'Untitled Script'}`,
+      onClick: () => void playFromHome(script),
+    };
+  };
 
   const handleCreate = () => setShowCreate(true);
+  const handleImportFromCreate = () => {
+    setShowCreate(false);
+    setIsImportOpen(true);
+  };
 
   const togglePin = (scriptId: string) => {
     setPinnedIds(current => {
@@ -534,15 +562,6 @@ export default function Library() {
             </button>
             <button
               type="button"
-              onClick={() => setIsImportOpen(true)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Import Document"
-              title="Import document"
-            >
-              <FileUp className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
               onClick={handleCreate}
               className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
               aria-label="New script"
@@ -759,9 +778,23 @@ export default function Library() {
         <Dialog open={showCreate} onOpenChange={open => { if (!creatingSample) setShowCreate(open); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>What are you preparing?</DialogTitle>
-            <DialogDescription>Choose your script type. You can change it in the editor anytime.</DialogDescription>
+            <DialogTitle>Start a new script</DialogTitle>
+            <DialogDescription>Create one from scratch, import a document, or try the sample scene.</DialogDescription>
           </DialogHeader>
+          <button
+            type="button"
+            aria-label="Import document"
+            disabled={creatingSample}
+            onClick={handleImportFromCreate}
+            className="flex items-start gap-4 rounded-xl border border-primary/35 bg-primary/5 p-5 text-left hover:border-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+          >
+            <FileUp className="mt-0.5 h-6 w-6 shrink-0 text-primary" />
+            <span>
+              <span className="block font-semibold">Import document</span>
+              <span className="mt-1 block text-sm text-muted-foreground">Bring in a PDF, Word, RTF, text or Quickque Markdown file, then review it before saving.</span>
+            </span>
+          </button>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Or create from scratch</div>
           <div className="grid gap-3 sm:grid-cols-2">
             <button disabled={creatingSample} onClick={() => createWithPurpose('presentation')} className="rounded-xl border border-border p-5 text-left hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
               <MonitorPlay className="mb-3 h-6 w-6 text-primary" />
@@ -827,7 +860,6 @@ export default function Library() {
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   <button type="button" onClick={() => { setSearch(''); setLocation('/trash'); }} aria-label={`Open Trash, ${trash.length} deleted ${trash.length === 1 ? 'script' : 'scripts'}`} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"><Trash2 className="h-4 w-4" />Trash {trash.length > 0 && <span className="rounded-full bg-muted px-1.5 text-xs">{trash.length}</span>}</button>
-                  <button type="button" onClick={() => setIsImportOpen(true)} aria-label="Import Document" className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">Import document</button>
                   <button type="button" onClick={handleCreate} className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"><Plus className="h-4 w-4" />New script</button>
                 </div>
               )}
@@ -842,7 +874,7 @@ export default function Library() {
               {viewMode === 'library' && <select aria-label="Sort scripts" value={sortMode} onChange={event => setSortMode(event.target.value as SortMode)} className="rounded-md border border-border bg-card px-3 py-2 text-sm">{Object.entries(SORT_LABELS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>}
               <span className="text-xs text-muted-foreground">{visibleItems.length} {visibleItems.length === 1 ? 'script' : 'scripts'}</span>
             </div>
-            {visibleItems.length === 0 ? <div className="rounded-lg border border-dashed border-border py-16 text-center"><FileText className="mx-auto mb-4 h-8 w-8 text-muted-foreground" /><p className="font-medium">{search ? 'No scripts found' : viewMode === 'trash' ? 'Trash is empty' : 'A fresh workspace'}</p><p className="mt-2 text-sm text-muted-foreground">{search ? 'Try a different search.' : viewMode === 'trash' ? 'Deleted scripts will appear here.' : 'Create a script or import a document to begin.'}</p></div> :
+            {visibleItems.length === 0 ? <div className="rounded-lg border border-dashed border-border py-16 text-center"><FileText className="mx-auto mb-4 h-8 w-8 text-muted-foreground" /><p className="font-medium">{search ? 'No scripts found' : viewMode === 'trash' ? 'Trash is empty' : 'A fresh workspace'}</p><p className="mt-2 text-sm text-muted-foreground">{search ? 'Try a different search.' : viewMode === 'trash' ? 'Deleted scripts will appear here.' : 'Choose New script to create one or import a document.'}</p></div> :
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {viewMode === 'library' && pinnedItems.length > 0 && <div className="col-span-full flex items-center gap-2 border-b border-border pb-3">
                 <Pin className="h-4 w-4 text-primary" />
@@ -852,6 +884,7 @@ export default function Library() {
               {workspaceItems.map((script, idx) => {
                 const performance = getScriptPurpose(script) === 'performance';
                 const unfinishedSetup = performance && hasUnfinishedSetup(script);
+                const action = scriptAction(script);
                 const words = script.sections.reduce((sum, section) => sum + calculateWordCount(section.content), 0);
                 const artwork = performance ? performanceArtwork : presentationArtwork;
                 const startsUnpinnedSection = viewMode === 'library' && pinnedItems.length > 0 && idx === pinnedItems.length;
@@ -898,7 +931,7 @@ export default function Library() {
                   </div>
                   {viewMode === 'library' && <div className="grid grid-cols-2 gap-2 px-4 pb-4">
                     <button type="button" aria-label={`Edit ${script.title || 'Untitled Script'}`} onClick={() => handleOpenScript(script.id)} className="flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"><Edit2 className="h-3.5 w-3.5" />Edit</button>
-                    <button type="button" disabled={checkingScript !== null} aria-label={`${performance ? 'Rehearse' : 'Present'} ${script.title || 'Untitled Script'}`} onClick={() => void playFromHome(script)} className="flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"><Play className="h-3.5 w-3.5" />{checkingScript === script.id ? 'Checking…' : performance ? 'Rehearse' : 'Present'}</button>
+                    <button type="button" disabled={checkingScript !== null} aria-label={action.ariaLabel} onClick={action.onClick} className="flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">{performance && scriptReady[script.id] !== true ? <Users className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}{action.label}</button>
                   </div>}
                   </article>
                 </Fragment>;

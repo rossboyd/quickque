@@ -21,8 +21,10 @@ async function openLibrary(page: Page) {
 
 async function createPerformance(page: Page) {
   await page.getByRole('button', { name: 'New script', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'What are you preparing?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Start a new script' })).toBeVisible();
   await page.getByRole('button', { name: 'Performance / Self-tape' }).click();
+  await expect(page.getByRole('heading', { name: /Set up Untitled Performance/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Save and leave', exact: true }).click();
   await expect(page.getByRole('combobox', { name: 'Script type' })).toHaveValue('performance');
   await page.getByRole('textbox', { name: 'Script Title', exact: true }).fill('Audition rehearsal');
 }
@@ -32,14 +34,15 @@ for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     await openLibrary(page);
     await createPerformance(page);
-    await expect(page.getByRole('button', { name: 'Rehearse', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Finish setup', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Rehearse', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add Turn', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Scene Partner setup', exact: true }).click();
     await page.getByRole('switch', { name: 'Partner audio' }).click();
     await page.getByRole('button', { name: 'Close scene partner cast' }).click();
     await page.reload();
     await expect(page.getByRole('combobox', { name: 'Script type' })).toHaveValue('performance');
-    await expect(page.getByRole('button', { name: 'Rehearse', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Finish setup', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Scene Partner setup', exact: true }).click();
     await expect(page.getByRole('switch', { name: 'Partner audio' })).toHaveAttribute('aria-checked', 'false');
     await page.getByRole('button', { name: 'Close scene partner cast' }).click();
@@ -47,8 +50,8 @@ for (const width of [390, 1280]) {
     await expect(page.getByRole('button', { name: 'Present', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add Section', exact: true })).toBeVisible();
     await page.getByRole('combobox', { name: 'Script type' }).selectOption('performance');
-    await expect(page.getByRole('button', { name: 'Rehearse', exact: true })).toBeVisible();
-    const action = await page.getByRole('button', { name: 'Rehearse', exact: true }).boundingBox();
+    await expect(page.getByRole('button', { name: 'Finish setup', exact: true })).toBeVisible();
+    const action = await page.getByRole('button', { name: 'Finish setup', exact: true }).boundingBox();
     expect(action!.x).toBeGreaterThanOrEqual(0);
     expect(action!.x + action!.width).toBeLessThanOrEqual(width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -58,11 +61,11 @@ for (const width of [390, 1280]) {
 test('incomplete performance blocks rehearsal with actionable setup links', async ({ page }) => {
   await openLibrary(page);
   await createPerformance(page);
-  await page.getByRole('button', { name: 'Rehearse', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Finish setting up your performance' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Rehearse', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Finish setup', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Set up Audition rehearsal' })).toBeVisible();
   await expect(page).not.toHaveURL(/\/read\//);
-  await page.getByRole('button', { name: /Add your cast in Scene Partner setup/ }).click();
-  await expect(page.getByRole('button', { name: 'Add Character', exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('Add a title and at least one line before continuing.');
 });
 
 for (const width of [390, 1280]) {

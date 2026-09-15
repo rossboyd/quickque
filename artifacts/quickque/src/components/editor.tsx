@@ -70,6 +70,7 @@ export function Editor({
   const draggedSectionRef = useRef<string | null>(null);
   const sectionDropTargetRef = useRef<{ id: string; edge: 'before' | 'after' } | null>(null);
   const [checkingVoices, setCheckingVoices] = useState(false);
+  const [runtimeReady, setRuntimeReady] = useState<boolean | null>(isPerformance ? null : true);
   const [preflightIssues, setPreflightIssues] = useState<SceneSetupIssue[] | null>(null);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const voiceLibrary = useMemo(() => createVoiceLibrary(), []);
@@ -79,6 +80,33 @@ export function Editor({
     currentScript.current = script;
     return () => { currentScript.current = null; };
   }, [script]);
+  useEffect(() => {
+    if (!isPerformance) {
+      setRuntimeReady(true);
+      return;
+    }
+    let cancelled = false;
+    setRuntimeReady(null);
+    void checkScriptReadiness(script, {
+      listLocalVoices: async () => {
+        const voices = await voiceLibrary.list();
+        return voices.map(voice => ({ referenceId: voice.referenceId, revision: voice.revision }));
+      },
+      checkPreparedAudio: async () => {
+        try {
+          const request = await audioRequest(script);
+          return (await currentAudioReadiness(request)).status === 'ready';
+        } catch {
+          return false;
+        }
+      },
+    }).then(result => {
+      if (!cancelled) setRuntimeReady(result.ready);
+    }).catch(() => {
+      if (!cancelled) setRuntimeReady(false);
+    });
+    return () => { cancelled = true; };
+  }, [isPerformance, script, voiceLibrary]);
   const startReader = async () => {
     if (!isPerformance || !script.actor?.enabled) { onPresent(); return; }
     setCheckingVoices(true);
@@ -306,13 +334,18 @@ export function Editor({
                 <Users className="w-4 h-4" />
                 <span className="hidden sm:inline">Scene Partner</span>
               </button>}
-              <button 
-                onClick={startReader}
-                disabled={checkingVoices}
+              <button
+                onClick={isPerformance && runtimeReady !== true ? () => setShowSetupWizard(true) : startReader}
+                disabled={checkingVoices || (isPerformance && runtimeReady === null)}
+                aria-label={isPerformance ? runtimeReady === true ? 'Rehearse' : 'Finish setup' : 'Present'}
                 className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
               >
-                <Play className="w-4 h-4 md:w-5 md:h-5 fill-current" />
-                {checkingVoices ? 'Checking voices…' : isPerformance ? 'Rehearse' : 'Present'}
+                {isPerformance && runtimeReady !== true ? <Users className="w-4 h-4 md:w-5 md:h-5" /> : <Play className="w-4 h-4 md:w-5 md:h-5 fill-current" />}
+                {checkingVoices
+                  ? 'Checking setup…'
+                  : isPerformance
+                    ? runtimeReady ? 'Rehearse' : 'Finish setup'
+                    : 'Present'}
               </button>
             </div>
           </div>
@@ -598,6 +631,8 @@ export function Editor({
           onChange={handleActorChange}
           onClose={() => setShowActorPanel(false)}
           onRehearse={() => void startReader()}
+          readyToRehearse={runtimeReady === true}
+          onFinishSetup={() => setShowSetupWizard(true)}
           sections={script.sections}
           onDeleteCharacter={handleDeleteCharacter}
         />

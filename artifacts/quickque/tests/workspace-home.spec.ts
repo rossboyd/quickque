@@ -53,9 +53,11 @@ test('home search, sorting, trash and direct rehearsal setup work', async ({ pag
   await page.getByRole('textbox', { name: 'Search scripts', exact: true }).fill('');
   await page.getByRole('combobox', { name: 'Sort scripts', exact: true }).selectOption('az');
   await expect(page.getByRole('article').first()).toHaveAccessibleName('All hands');
-  await page.getByRole('button', { name: 'Rehearse Audition', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Finish setting up your performance' })).toBeVisible();
-  await page.getByRole('button', { name: 'Edit script setup', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Rehearse Audition', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Finish setup Audition', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Set up Audition' })).toBeVisible();
+  await page.getByRole('button', { name: 'Save and leave', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit Audition', exact: true }).click();
   await expect(page).toHaveURL(/\/edit$/);
   await expect(page.getByRole('textbox', { name: 'Script Title', exact: true })).toHaveValue('Audition');
   await page.goto('/');
@@ -130,8 +132,11 @@ test('editor sidebar uses compact actions and expands search on demand', async (
   await seed(page);
   await page.getByRole('article', { name: 'All hands', exact: true }).getByRole('button', { name: 'Edit All hands', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Search scripts input', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Import Document', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'New script', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Import Document', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'New script', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Import document', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Search scripts', exact: true }).click();
   const search = page.getByRole('textbox', { name: 'Search scripts input', exact: true });
   await expect(search).toBeFocused();
