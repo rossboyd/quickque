@@ -1,0 +1,53 @@
+# Setup Flow and Error Clarity
+
+- Import flow surfaces “7 setup issues, review setup” with no clear explanation
+  - Message is small, red, and easy to miss
+  - Needs to prompt character setup immediately on import
+- “Rehearse” button visible before setup is complete
+  - Users will click Rehearse, hit errors, and only then discover setup is incomplete
+  - Block rehearsal until setup is done
+- Scene Partner panel auto-creates 5 characters, but “Start Rehearsal” shows before voices are assigned
+  - Need a guided flow: add voice per character before rehearsal is unlocked
+
+# Script Locking
+
+- Imported scripts must be locked: text and writer’s notes cannot be edited
+  - Accidental edits to a script are a serious problem for actors learning lines
+  - Edit mode should be explicit and opt-in
+- Users can add their own personal notes alongside the writer’s notes
+  - Personal notes layer on top; writer’s notes stay untouched
+- Presentations are different: text is editable, notes are less relevant
+
+# Character Voice Assignment and Inference
+
+- On import, app should infer required voice characteristics from script notes
+  - e.g., if notes say “angry male,” check voice library and flag if no match exists
+  - Suggest what voices need to be created
+- Voice assignment UI is unclear: “Choose a voice” label not prominent enough
+- Angry voice was pre-selected for Brewster but wasn’t obvious to the user
+
+# Voice Creation UX
+
+- 10-second recording window is too short; 12 seconds minimum needed
+- No countdown before recording starts: caught the user off guard
+  - Add a 3-2-1 countdown
+- After saving, app should auto-suggest notes for the voice sample (user approves rather than types manually)
+- Voice name field not clear enough after saving
+
+# Audio Generation and Loading States
+
+- Progress bar appears but has no animation for ~30 seconds: looks like a crash
+  - Add a loading animation immediately when generation starts
+  - “Creating rehearsal audio” text and countdown bar are good once they appear, just delayed
+- Need more visual theater in the UI during audio generation (spinner, animated dots, color change)
+- “Continued” parsed as a separate character instead of a continuation of an existing one
+  - Script import needs to deduplicate actor names with “continued” suffixes
+
+# Next Steps
+
+- **Block rehearsal until all characters have voices assigned**
+- **Lock imported script text and writer's notes from editing**
+- **Add voice inference on script import**
+- **Fix voice creation flow: add countdown, extend to 12s, auto-suggest notes after save**
+- **Add immediate loading animation to audio generation**
+- **Fix "Continued" parsing in script import**
