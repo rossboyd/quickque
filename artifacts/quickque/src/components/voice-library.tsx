@@ -15,9 +15,13 @@ import voiceArtwork from '@assets/quickque-performance-artwork.webp';
 export function VoiceLibraryPanel({
   onVoicesChange,
   referencedVoiceIds = [],
+  recordingContext,
+  onVoiceCreated,
 }: {
   onVoicesChange?: (voices: ClonedVoice[]) => void;
   referencedVoiceIds?: string[];
+  recordingContext?: { characterName: string; emotion?: string; gender?: string; ageRange?: string };
+  onVoiceCreated?: (voice: ClonedVoice) => void;
 }) {
   const library = useMemo(() => createVoiceLibrary(), []);
   const [voices, setVoices] = useState<ClonedVoice[]>([]);
@@ -34,6 +38,9 @@ export function VoiceLibraryPanel({
   const [rerecordingVoiceId, setRerecordingVoiceId] = useState<string | null>(null);
   const [profileDrafts, setProfileDrafts] = useState<Record<string, { emotion: string; gender: string; ageRange: string }>>({});
   const [profileSaving, setProfileSaving] = useState<string | null>(null);
+  const [suggestionsApproved, setSuggestionsApproved] = useState(false);
+  const [suggestionsSkipped, setSuggestionsSkipped] = useState(false);
+  const [suggestionDraft, setSuggestionDraft] = useState({ emotion: '', gender: '', ageRange: '' });
 
   const load = useCallback(async () => {
     if (!isDesktop()) return;
@@ -68,18 +75,35 @@ export function VoiceLibraryPanel({
     }
     setSaving(true);
     try {
+      let saved: ClonedVoice;
+      let profileNotesSaved = true;
       if (rerecordingVoiceId) {
-        await library.rerecord(rerecordingVoiceId, reviewing, true);
+        saved = await library.rerecord(rerecordingVoiceId, reviewing, true);
+        if (saved.name !== name.trim()) saved = await library.rename(saved.id, name.trim());
       } else {
-        await library.create({ name: name.trim(), recording: reviewing, consentConfirmed: true });
+        saved = await library.create({ name: name.trim(), recording: reviewing, consentConfirmed: true });
+        if (suggestionsApproved && recordingContext) {
+          try {
+            saved = await library.updateProfile(saved.id, {
+              emotion: suggestionDraft.emotion,
+              gender: suggestionDraft.gender,
+              ageRange: suggestionDraft.ageRange,
+            });
+          } catch {
+            profileNotesSaved = false;
+          }
+        }
       }
       setName('');
       setConsent(false);
       setReviewed(null);
       setRecording(false);
       setRerecordingVoiceId(null);
-      setMessage('Voice saved locally on this Mac.');
       await load();
+      onVoiceCreated?.(saved);
+      setMessage(profileNotesSaved
+        ? (recordingContext ? `Voice saved locally. ${saved.name} is proposed for ${recordingContext.characterName}; use Preview beside the character to listen before rehearsal.` : 'Voice saved locally on this Mac.')
+        : `Voice audio was saved and proposed for ${recordingContext?.characterName ?? 'this character'}, but its optional profile notes could not be saved. You can add them from Your Voices.`);
     } catch (error) {
       setMessage(String(error));
     } finally {
@@ -137,12 +161,15 @@ export function VoiceLibraryPanel({
           <h3 className="font-semibold">My cloned voices</h3>
           <p className="mt-1 text-sm text-muted-foreground">Voice samples and conditioning data stay in this Mac’s app storage. Script JSON and backups contain only voice IDs and revisions.</p>
         </div>
-        {!recording && <button type="button" data-testid="button-add-cloned-voice" onClick={() => { setMessage(null); setReviewed(null); setConsent(false); setRerecordingVoiceId(null); setRecording(true); }} className="flex shrink-0 items-center gap-1 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" /> New voice</button>}
+        {!recording && <button type="button" data-testid="button-add-cloned-voice" onClick={() => {
+          setMessage(null); setReviewed(null); setConsent(false); setRerecordingVoiceId(null);
+          setSuggestionsApproved(false); setSuggestionsSkipped(false);
+          setSuggestionDraft({ emotion: recordingContext?.emotion ?? '', gender: recordingContext?.gender ?? '', ageRange: recordingContext?.ageRange ?? '' });
+          setRecording(true);
+        }} className="flex shrink-0 items-center gap-1 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" /> New voice</button>}
       </div>
       {recording && (
         <div className="space-y-3">
-          <label className="block text-sm font-medium" htmlFor="voice-name-input">{rerecordingVoiceId ? 'Record a replacement reference' : 'Voice name'}</label>
-          <input id="voice-name-input" data-testid="input-voice-name" value={name} maxLength={80} onChange={event => setName(event.target.value)} placeholder="My rehearsal voice" className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
           <VoiceRecorder
             library={library}
             onReviewed={result => {
@@ -156,17 +183,38 @@ export function VoiceLibraryPanel({
             }}
             onConsentChange={setConsent}
           />
-          <p className="text-xs text-muted-foreground">After reviewing, confirm permission above. Saving is enabled once a complete sample and a name are provided.</p>
           {reviewed && (
-            <button
+            <div className="space-y-3 rounded-lg border border-border p-4">
+              <label className="block text-base font-semibold" htmlFor="voice-name-input">Name this voice <span className="text-destructive">*</span></label>
+              <input id="voice-name-input" autoFocus data-testid="input-voice-name" value={name} maxLength={80} onChange={event => setName(event.target.value)} placeholder="e.g. Brewster rehearsal voice" className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
+              {!rerecordingVoiceId && recordingContext && (
+                <div className="space-y-2 rounded-md bg-muted/40 p-3 text-xs">
+                  <strong>Suggested profile notes — from {recordingContext.characterName}’s character setup</strong>
+                  <p className="text-muted-foreground">These are copied from explicit setup fields, not inferred from the recording.</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {([['emotion', 'Style / emotion'], ['gender', 'Gender'], ['ageRange', 'Age']] as const).map(([key, label]) => (
+                      <label key={key}>{label}
+                        <input value={suggestionDraft[key]} maxLength={40} onChange={event => setSuggestionDraft(current => ({ ...current, [key]: event.target.value }))} className="mt-1 w-full rounded border border-border bg-background px-2 py-1" />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { setSuggestionsApproved(true); setSuggestionsSkipped(false); }} className="rounded border px-2 py-1">Approve suggestions</button>
+                    <button type="button" onClick={() => { setSuggestionsSkipped(true); setSuggestionsApproved(false); }} className="rounded border px-2 py-1">Skip</button>
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">Confirm permission above, enter a required name, and approve or skip any labelled suggestions.</p>
+              <button
               type="button"
               data-testid="button-save-cloned-voice"
               onClick={() => void saveRecording(reviewed)}
-              disabled={saving || !consent}
+              disabled={saving || !consent || !!validateVoiceName(name) || (!!recordingContext && !rerecordingVoiceId && !suggestionsApproved && !suggestionsSkipped)}
               className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50"
             >
               {saving ? 'Saving…' : 'Save voice locally'}
-            </button>
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -205,7 +253,7 @@ export function VoiceLibraryPanel({
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border/60 pt-4 sm:grid-cols-4">
                 <button type="button" data-testid={`button-preview-cloned-voice-${voice.id}`} onClick={() => void preview(voice)} disabled={previewing === voice.id} className="flex items-center justify-center gap-1.5 rounded-md border border-border px-2 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50" aria-label={`Preview ${voice.name}`}><Play className="h-3.5 w-3.5" />{previewing === voice.id ? 'Playing…' : 'Preview'}</button>
-                <button type="button" data-testid={`button-rerecord-cloned-voice-${voice.id}`} onClick={() => { setName(voice.name); setRerecordingVoiceId(voice.id); setReviewed(null); setConsent(false); setRecording(true); }} className="flex items-center justify-center gap-1.5 rounded-md border border-border px-2 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Re-record ${voice.name}`}><Mic className="h-3.5 w-3.5" />Re-record</button>
+                <button type="button" data-testid={`button-rerecord-cloned-voice-${voice.id}`} onClick={() => { setName(voice.name); setRerecordingVoiceId(voice.id); setReviewed(null); setConsent(false); setSuggestionsApproved(false); setSuggestionsSkipped(true); setRecording(true); }} className="flex items-center justify-center gap-1.5 rounded-md border border-border px-2 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Re-record ${voice.name}`}><Mic className="h-3.5 w-3.5" />Re-record</button>
                 <button type="button" data-testid={`button-rename-cloned-voice-${voice.id}`} onClick={() => void rename(voice)} className="flex items-center justify-center gap-1.5 rounded-md border border-border px-2 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Rename ${voice.name}`}><Pencil className="h-3.5 w-3.5" />Rename</button>
                 <button type="button" data-testid={`button-delete-cloned-voice-${voice.id}`} onClick={() => void remove(voice)} className="flex items-center justify-center gap-1.5 rounded-md border border-border px-2 py-2 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete ${voice.name}`}><Trash2 className="h-3.5 w-3.5" />Delete</button>
               </div>

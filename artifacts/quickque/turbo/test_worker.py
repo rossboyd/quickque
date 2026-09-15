@@ -89,6 +89,23 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaises(worker.SpeechFailure):
             worker.validate_request(request, voices)
 
+    def test_local_voice_accepts_legacy_and_new_duration_bounds(self):
+        voices = self.root / 'voices'
+        for index, seconds in enumerate((5, 10, 12, 15, 20)):
+            voice_id = format(index + 1, 'x') * 32
+            folder = voices / voice_id
+            folder.mkdir(parents=True)
+            recording = folder / 'reference.wav'
+            with wave.open(str(recording), 'wb') as output:
+                output.setnchannels(1); output.setsampwidth(2); output.setframerate(16000)
+                output.writeframes(b'\0\0' * (16000 * seconds))
+            (folder / 'metadata.json').write_text(json.dumps({
+                'id': voice_id, 'revision': 1, 'consentConfirmed': True,
+                'recordingSha256': worker.sha256(recording),
+            }))
+            request = {'text': 'Hello.', 'voiceId': worker.LOCAL_VOICE_PREFIX + voice_id, 'voiceRevision': 1, 'rate': 1}
+            self.assertEqual(worker.local_voice_reference(request, voices), recording)
+
     def test_local_voice_symlink_and_missing_consent_are_rejected(self):
         voices = self.root / 'voices'
         voice_id = 'b' * 32

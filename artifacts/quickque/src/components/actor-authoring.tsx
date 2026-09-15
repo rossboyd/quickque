@@ -497,6 +497,16 @@ export function ActorAuthoringPanel({
                                     .map(character => character.voice.voiceId)
                                     .filter(Boolean)}
                                   onVoicesChange={setVoices}
+                                   recordingContext={{
+                                     characterName: char.name,
+                                     emotion: char.style,
+                                     gender: char.gender,
+                                     ageRange: char.age,
+                                   }}
+                                   onVoiceCreated={voice => {
+                                     setVoices(current => current.some(item => item.id === voice.id) ? current : [...current, voice]);
+                                     handleUpdateChar(char.id, { voice: { engine: 'turbo', voiceId: voice.referenceId, voiceRevision: voice.revision, rate: 1 } });
+                                   }}
                                 />
                               </div>
                             </details>

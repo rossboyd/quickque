@@ -13,7 +13,7 @@ import {
 } from './voice-library.ts';
 import { migrateLegacyVoice, MISSING_CLONED_VOICE_PREFIX } from './actor-model.ts';
 
-test('recording validation requires a complete 5–10 second sample', () => {
+test('new recording validation requires a complete 12–20 second sample', () => {
   const sample = (durationSeconds: number, complete = true) => ({
     wavData: new Uint8Array(),
     durationSeconds,
@@ -21,9 +21,12 @@ test('recording validation requires a complete 5–10 second sample', () => {
     levelPeak: .5,
     complete,
   });
-  assert.match(validateRecording(sample(2))!, /longer than/);
+  assert.match(validateRecording(sample(11.9))!, /at least/);
   assert.match(validateRecording(sample(MIN_REFERENCE_SECONDS, false))!, /finish/);
+  assert.equal(validateRecording(sample(12)), null);
+  assert.equal(validateRecording(sample(15)), null);
   assert.equal(validateRecording(sample(MAX_REFERENCE_SECONDS)), null);
+  assert.ok(validateRecording(sample(20.1)));
 });
 
 test('voice names are bounded and trimmed', () => {
@@ -137,9 +140,9 @@ test('library captures mono PCM, tears down tracks, then calls native create wit
   const session = await library.startRecording();
   assert.ok(session.stop);
   assert.equal(resumed, 1);
-  // A six-second 48 kHz chunk is valid mono PCM input.
+  // A fifteen-second 48 kHz chunk is valid mono PCM input.
   assert.ok(process);
-  const chunk = new Float32Array(48_000 * 6).fill(.25);
+  const chunk = new Float32Array(48_000 * 15).fill(.25);
   process!.onaudioprocess!({ inputBuffer: { getChannelData: () => chunk } });
   const result = await session.stop();
   assert.equal(result.sampleRate, 48_000);
@@ -157,6 +160,22 @@ test('library captures mono PCM, tears down tracks, then calls native create wit
       error instanceof VoiceLibraryError &&
       error.code === 'VOICE_LIBRARY_DESKTOP_REQUIRED',
   );
+});
+
+test('microphone preparation releases permission stream without beginning capture', async () => {
+  let stopped = 0;
+  let contexts = 0;
+  const library = createVoiceLibrary({
+    isDesktop: () => true,
+    mediaDevices: { getUserMedia: async () => ({ getTracks: () => [{ stop: () => { stopped++; } }] } as unknown as MediaStream) },
+    audioContextFactory: () => {
+      contexts++;
+      throw new Error('capture must not begin');
+    },
+  });
+  await library.requestMicrophonePermission();
+  assert.equal(stopped, 1);
+  assert.equal(contexts, 0);
 });
 
 test('legacy system assignments become explicit missing local references', () => {
@@ -194,7 +213,7 @@ test('saved WAV inspection rejects silence and truncation and reports audio prop
   assert.equal(inspectVoiceWav(sampleWav()).durationSeconds, 6);
   assert.throws(() => inspectVoiceWav(sampleWav(0)), /VOICE_RECORDING_SILENT/);
   assert.throws(() => inspectVoiceWav(sampleWav().subarray(0, 100)), /VOICE_RECORDING_INVALID/);
-  assert.match(validateRecording({ wavData: sampleWav(), durationSeconds: 5, sampleRate: 16000, levelPeak: .5, complete: true })!, /longer than/);
+  assert.match(validateRecording({ wavData: sampleWav(), durationSeconds: 11.9, sampleRate: 16000, levelPeak: .5, complete: true })!, /at least/);
 });
 
 test('saved voice verification reads back disk bytes and preserves integrity failures', async () => {

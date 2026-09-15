@@ -24,8 +24,9 @@ pub const LOCAL_VOICE_PREFIX: &str = "chatterbox-local:";
 const MAX_NAME_BYTES: usize = 80;
 const MAX_PROFILE_CHARS: usize = 40;
 const MAX_RECORDING_BYTES: u64 = 64 * 1024 * 1024;
-const MIN_SECONDS: f64 = 5.0;
-const MAX_SECONDS: f64 = 10.0;
+const LEGACY_MIN_SECONDS: f64 = 5.0;
+const NEW_MIN_SECONDS: f64 = 12.0;
+const MAX_SECONDS: f64 = 20.0;
 static NEXT_RECORDING_TOKEN: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,6 +161,14 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 /// Return sample rate and PCM bytes.  The worker accepts only this simple
 /// format, which also makes duration and integrity checks deterministic.
 pub fn pcm_data(bytes: &[u8]) -> Result<(u32, &[u8]), String> {
+    pcm_data_with_minimum(bytes, LEGACY_MIN_SECONDS)
+}
+
+fn new_pcm_data(bytes: &[u8]) -> Result<(u32, &[u8]), String> {
+    pcm_data_with_minimum(bytes, NEW_MIN_SECONDS)
+}
+
+fn pcm_data_with_minimum(bytes: &[u8], minimum: f64) -> Result<(u32, &[u8]), String> {
     if bytes.len() < 12 || &bytes[..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
         return Err("VOICE_RECORDING_INVALID: Record a PCM WAV sample.".into());
     }
@@ -209,9 +218,9 @@ pub fn pcm_data(bytes: &[u8]) -> Result<(u32, &[u8]), String> {
         .filter(|data| !data.is_empty() && data.len() % 2 == 0)
         .ok_or("VOICE_RECORDING_INVALID: The recording has no audio data.")?;
     let duration = data.len() as f64 / (rate as f64 * 2.0);
-    if !(MIN_SECONDS..=MAX_SECONDS).contains(&duration) {
+    if !(minimum..=MAX_SECONDS).contains(&duration) {
         return Err(
-            "VOICE_RECORDING_DURATION: Record a clean sample between 5 and 10 seconds.".into(),
+            format!("VOICE_RECORDING_DURATION: Record a clean sample between {minimum:.0} and {MAX_SECONDS:.0} seconds."),
         );
     }
     Ok((rate, data))
@@ -278,7 +287,7 @@ fn write_voice(
     if bytes.len() as u64 > MAX_RECORDING_BYTES {
         return Err("VOICE_RECORDING_TOO_LARGE: The voice recording is too large.".into());
     }
-    let (sample_rate, pcm) = pcm_data(bytes)?;
+    let (sample_rate, pcm) = new_pcm_data(bytes)?;
     let duration_seconds = pcm.len() as f64 / (sample_rate as f64 * 2.0);
     let stamp = now();
     let mut seed = Vec::with_capacity(bytes.len() + display_name.len() + 16);
@@ -396,10 +405,6 @@ pub fn voice_library_rename(
     let folder = folder(&app, &voice_id)?;
     let mut voice = metadata(&folder.join("metadata.json"))?;
     voice.name = name.trim().to_owned();
-    voice.revision = voice
-        .revision
-        .checked_add(1)
-        .ok_or("VOICE_METADATA_INVALID: Voice revision exhausted.")?;
     voice.updated_at = now();
     atomic_write(
         &folder.join("metadata.json"),
@@ -456,7 +461,7 @@ pub fn voice_library_rerecord(
     }
     let folder = folder(&app, &voice_id)?;
     let mut voice = metadata(&folder.join("metadata.json"))?;
-    let (sample_rate, pcm) = pcm_data(&recording)?;
+    let (sample_rate, pcm) = new_pcm_data(&recording)?;
     let duration_seconds = pcm.len() as f64 / (sample_rate as f64 * 2.0);
     let recording_path = folder.join("reference.wav");
     atomic_write(&recording_path, &recording)?;
@@ -525,7 +530,7 @@ pub fn voice_recording_begin(
         consent_confirmed,
         buffer: Vec::new(),
     });
-    Ok(json!({"token": token, "minimumSeconds": MIN_SECONDS, "maximumSeconds": MAX_SECONDS}))
+    Ok(json!({"token": token, "minimumSeconds": NEW_MIN_SECONDS, "maximumSeconds": MAX_SECONDS}))
 }
 
 #[tauri::command]
@@ -627,7 +632,12 @@ mod tests {
     fn recording_bounds_and_format_are_enforced() {
         assert!(pcm_data(&wav(4.99, 16_000)).is_err());
         assert!(pcm_data(&wav(5.0, 16_000)).is_ok());
-        assert!(pcm_data(&wav(10.01, 16_000)).is_err());
+        assert!(pcm_data(&wav(10.01, 16_000)).is_ok());
+        assert!(pcm_data(&wav(20.01, 16_000)).is_err());
+        assert!(new_pcm_data(&wav(11.9, 16_000)).is_err());
+        assert!(new_pcm_data(&wav(12.0, 16_000)).is_ok());
+        assert!(new_pcm_data(&wav(15.0, 16_000)).is_ok());
+        assert!(new_pcm_data(&wav(20.0, 16_000)).is_ok());
     }
 
     #[test]

@@ -3,9 +3,11 @@ import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { isDesktop as defaultIsDesktop } from './desktop.ts';
 
 export const VOICE_RECORDING_PROMPT =
-  "Are we actually ready to begin? Because bright voices bring beautiful melodies, while deep ones carry warmth and exact emotion. I'll just pause here... and we can quickly start.";
-export const MIN_REFERENCE_SECONDS = 5;
-export const MAX_REFERENCE_SECONDS = 10;
+  "Are we ready to begin? I’ll speak clearly and naturally, leaving a little space between thoughts. Bright voices can carry beautiful melodies, while deeper notes bring warmth and detail. This is my rehearsal voice, steady and expressive, ready to help bring the scene to life.";
+export const LEGACY_MIN_REFERENCE_SECONDS = 5;
+export const MIN_REFERENCE_SECONDS = 12;
+export const TARGET_REFERENCE_SECONDS = 15;
+export const MAX_REFERENCE_SECONDS = 20;
 export const MAX_VOICE_NAME_LENGTH = 80;
 export const MAX_VOICE_PROFILE_LENGTH = 40;
 export const LOCAL_VOICE_PREFIX = 'chatterbox-local:';
@@ -44,6 +46,7 @@ export type VoiceRecordingSession = {
   stop(): Promise<VoiceRecording>;
   cancel(): Promise<void>;
   currentLevel(): number;
+  currentFailure(): string | null;
 };
 
 export type VoiceProfile = {
@@ -53,7 +56,7 @@ export type VoiceProfile = {
 };
 
 type MediaStreamLike = {
-  getTracks(): Array<{ stop(): void }>;
+  getTracks(): Array<{ stop(): void; addEventListener?(type: 'ended', listener: () => void): void }>;
 };
 type AudioNodeLike = {
   connect(node: AudioNodeLike): void;
@@ -136,8 +139,8 @@ export function validateVoiceProfile(profile: VoiceProfile): string | null {
 export function validateRecording(recording: VoiceRecording): string | null {
   if (!recording.complete) return 'The recording did not finish. Please try again.';
   if (recording.sampleRate < 16_000 || recording.sampleRate > 48_000) return 'The microphone sample rate must be between 16 and 48 kHz.';
-  if (!Number.isFinite(recording.durationSeconds) || recording.durationSeconds <= MIN_REFERENCE_SECONDS || recording.durationSeconds > MAX_REFERENCE_SECONDS) {
-    return `Record a clean sample longer than ${MIN_REFERENCE_SECONDS} seconds and up to ${MAX_REFERENCE_SECONDS} seconds.`;
+  if (!Number.isFinite(recording.durationSeconds) || recording.durationSeconds < MIN_REFERENCE_SECONDS || recording.durationSeconds > MAX_REFERENCE_SECONDS) {
+    return `Record at least ${MIN_REFERENCE_SECONDS} seconds and no more than ${MAX_REFERENCE_SECONDS} seconds.`;
   }
   if (!Number.isFinite(recording.levelPeak) || recording.levelPeak < 0.001) return 'The sample is silent or too quiet. Check your microphone and record again.';
   return null;
@@ -165,8 +168,8 @@ export function inspectVoiceWav(bytes: Uint8Array) {
   let levelPeak = 0;
   for (let i = 0; i < pcm.length; i += 2) levelPeak = Math.max(levelPeak, Math.abs(data.getInt16(i, true)) / 32768);
   const durationSeconds = pcm.length / (sampleRate * 2);
-  // Five-second legacy recordings can still be listened to and replaced.
-  if (durationSeconds < MIN_REFERENCE_SECONDS || durationSeconds > MAX_REFERENCE_SECONDS) throw invalid();
+  // Existing five-to-ten-second recordings remain playable and assignable.
+  if (durationSeconds < LEGACY_MIN_REFERENCE_SECONDS || durationSeconds > MAX_REFERENCE_SECONDS) throw invalid();
   if (levelPeak < 0.001) throw new VoiceLibraryError('VOICE_RECORDING_SILENT', 'The saved sample is silent or too quiet. Record a new sample with the correct microphone.');
   return { durationSeconds, sampleRate, levelPeak, bytes: bytes.length };
 }
@@ -233,8 +236,7 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
       };
       const failure = () => finish(new VoiceLibraryError('VOICE_PREVIEW_FAILED', 'Could not play the sample. Check your audio output, then retry.'));
       const active = { stop: () => { recordFlowDebug('voice_preview_stopped'); finish(); } };
-      // A reference is at most ten seconds; a stalled load/play must terminate visibly.
-      const deadline = setTimeout(failure, 20000);
+      const deadline = setTimeout(failure, 30000);
       playing = active;
       audio.onended = () => { recordFlowDebug('voice_preview_ready'); finish(); };
       audio.onerror = failure;
@@ -253,6 +255,18 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
   };
   return {
     list: async () => (await call<VoiceMetadata[]>('voice_library_list')).map(normaliseVoice),
+    requestMicrophonePermission: async () => {
+      requireDesktop();
+      if (!mediaDevices?.getUserMedia) throw new VoiceLibraryError('VOICE_MICROPHONE_UNAVAILABLE', 'Microphone recording is available only in the Quickque Mac app.');
+      let permissionStream: MediaStream | null = null;
+      try {
+        permissionStream = await mediaDevices.getUserMedia({ audio: true });
+      } catch {
+        throw new VoiceLibraryError('VOICE_MICROPHONE_PERMISSION', 'Allow microphone access in System Settings, then try again.');
+      } finally {
+        permissionStream?.getTracks().forEach(track => track.stop());
+      }
+    },
     startRecording: async (): Promise<VoiceRecordingSession> => {
       requireDesktop();
       recordFlowDebug('voice_record_begin');
@@ -267,6 +281,7 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
       let sampleRate = 48_000;
       let capturedFrames = 0;
       let settled = false;
+      let interrupted: string | null = null;
       const teardown = async () => {
         if (processor) { processor.onaudioprocess = null; processor.disconnect(); }
         source?.disconnect(); stream?.getTracks().forEach(track => track.stop());
@@ -275,6 +290,10 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
       };
       try {
         stream = await mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+        stream.getTracks().forEach(track => track.addEventListener?.('ended', () => {
+          interrupted = 'The microphone became unavailable. Check System Settings or reconnect the device, then try again.';
+          void teardown();
+        }));
         context = contextFactory();
         sampleRate = context.sampleRate;
         if (context.sampleRate < 16_000 || context.sampleRate > 48_000) throw new VoiceLibraryError('VOICE_SAMPLE_RATE_UNSUPPORTED', 'This microphone uses an unsupported sample rate.');
@@ -301,6 +320,7 @@ export function createVoiceLibrary(dependencies: VoiceLibraryDependencies = {}) 
       }
       return {
         currentLevel: () => level,
+        currentFailure: () => interrupted,
         stop: async () => {
           if (settled) throw new VoiceLibraryError('VOICE_RECORDING_NOT_ACTIVE', 'This recording has already ended.');
           settled = true; await teardown();

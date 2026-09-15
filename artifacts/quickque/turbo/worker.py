@@ -157,9 +157,10 @@ def local_voice_reference(request, voices_dir):
         if sha256(reference) != details.get('recordingSha256'):
             raise ValueError()
         duration = wav_duration(reference)
-        if duration is not None and duration <= 5:
-            raise SpeechFailure('SCENE_SPEECH_VOICE_REFERENCE_SHORT', 'This voice sample is too short for Chatterbox Turbo. Record a new sample lasting 6–10 seconds.')
-        if duration is None or duration > 10:
+        # Legacy 5–10 second references stay usable; new references are 12–20 seconds.
+        if duration is not None and duration < 5:
+            raise SpeechFailure('SCENE_SPEECH_VOICE_REFERENCE_SHORT', 'This voice sample is too short for Chatterbox Turbo. Record a new sample lasting 12–20 seconds.')
+        if duration is None or duration > 20:
             raise ValueError()
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         raise SpeechFailure('SCENE_SPEECH_VOICE_INTEGRITY', 'The selected cloned voice is damaged or incomplete. Re-record it.')

@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Mic, RotateCcw, Square, Volume2, X } from 'lucide-react';
 import {
+  MIN_REFERENCE_SECONDS,
   MAX_REFERENCE_SECONDS,
+  TARGET_REFERENCE_SECONDS,
   VOICE_RECORDING_PROMPT,
   type VoiceLibrary,
   type VoiceRecording,
   validateRecording,
 } from '@/lib/voice-library';
 
-type RecorderState = 'idle' | 'recording' | 'review';
+type RecorderState = 'prepare' | 'ready' | 'countdown' | 'recording' | 'review';
 
 export function VoiceRecorder({
   library,
@@ -21,7 +23,7 @@ export function VoiceRecorder({
   onConsentChange?: (confirmed: boolean) => void;
   onCancel?: () => void;
 }) {
-  const [state, setState] = useState<RecorderState>('idle');
+  const [state, setState] = useState<RecorderState>('prepare');
   const [session, setSession] = useState<Awaited<ReturnType<VoiceLibrary['startRecording']>> | null>(null);
   const [recording, setRecording] = useState<VoiceRecording | null>(null);
   const [seconds, setSeconds] = useState(0);
@@ -30,9 +32,11 @@ export function VoiceRecorder({
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [countdown, setCountdown] = useState(3);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionRef = useRef<Awaited<ReturnType<VoiceLibrary['startRecording']>> | null>(null);
+  const countdownGeneration = useRef(0);
   const startedAt = useRef(0);
   const mounted = useRef(true);
 
@@ -47,13 +51,35 @@ export function VoiceRecorder({
     mounted.current = true;
     return () => {
       mounted.current = false;
+      countdownGeneration.current++;
       clearTimers();
       if (sessionRef.current) void sessionRef.current.cancel().catch(() => {});
       void library.stopPreview().catch(() => {});
     };
   }, [library]);
 
+  const prepare = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await library.requestMicrophonePermission();
+      if (mounted.current) setState('ready');
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const begin = async () => {
+    const generation = ++countdownGeneration.current;
+    setState('countdown');
+    for (const value of [3, 2, 1]) {
+      if (!mounted.current || generation !== countdownGeneration.current) return;
+      setCountdown(value);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    if (!mounted.current || generation !== countdownGeneration.current) return;
     setBusy(true);
     setMessage(null);
     onReviewed?.(null);
@@ -67,12 +93,22 @@ export function VoiceRecorder({
       startedAt.current = performance.now();
       setState('recording');
       timer.current = setInterval(() => {
+        const failure = next.currentFailure();
+        if (failure) {
+          clearTimers();
+          sessionRef.current = null;
+          setSession(null);
+          setMessage(failure);
+          setState('ready');
+          return;
+        }
         setSeconds((performance.now() - startedAt.current) / 1000);
         setLevel(next.currentLevel());
       }, 100);
       stopTimer.current = setTimeout(() => { void finish(next); }, MAX_REFERENCE_SECONDS * 1000);
     } catch (error) {
       setMessage(String(error));
+      setState('ready');
     } finally {
       setBusy(false);
     }
@@ -93,7 +129,7 @@ export function VoiceRecorder({
       if (validation) setMessage(validation);
     } catch (error) {
       setMessage(String(error));
-      setState('idle');
+      setState('ready');
       setSession(null);
     } finally {
       setBusy(false);
@@ -101,6 +137,7 @@ export function VoiceRecorder({
   };
 
   const retry = async () => {
+    countdownGeneration.current++;
     await library.stopPreview();
     if (sessionRef.current) await sessionRef.current.cancel().catch(() => {});
     setRecording(null);
@@ -110,16 +147,17 @@ export function VoiceRecorder({
     setConsent(false);
     onConsentChange?.(false);
     setMessage(null);
-    setState('idle');
+    setState('ready');
   };
 
   const cancel = async () => {
+    countdownGeneration.current++;
     clearTimers();
     if (session) await session.cancel().catch(() => {});
     setSession(null);
     sessionRef.current = null;
     setRecording(null);
-    setState('idle');
+    setState('prepare');
     onCancel?.();
   };
 
@@ -128,19 +166,35 @@ export function VoiceRecorder({
       <div>
         <h3 className="font-semibold">Record a voice reference</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          You have {MAX_REFERENCE_SECONDS} seconds. Perform the script with the emotion and expression you want your AI voice to use.
-          Keep the room quiet and speak at your usual distance.
+          Record only yourself or someone who has given permission. The reference stays on this Mac. Aim for {TARGET_REFERENCE_SECONDS} seconds; new samples must be {MIN_REFERENCE_SECONDS}–{MAX_REFERENCE_SECONDS} seconds.
         </p>
       </div>
       <blockquote className="rounded-lg bg-muted/50 p-3 text-sm leading-relaxed" data-testid="text-voice-recording-prompt">
         “{VOICE_RECORDING_PROMPT}”
       </blockquote>
+      {state === 'prepare' && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">First, Quickque will ask for microphone access. Recording will not start after permission is granted.</p>
+          <button type="button" data-testid="button-prepare-voice-recording" onClick={() => void prepare()} disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
+            <Mic className="h-4 w-4" /> {busy ? 'Checking microphone…' : 'Allow microphone and prepare'}
+          </button>
+        </div>
+      )}
+      {state === 'countdown' && (
+        <div role="status" aria-live="assertive" data-testid="status-voice-countdown" className="rounded-lg border border-primary/30 bg-primary/10 p-6 text-center">
+          <p className="text-sm text-muted-foreground">Recording begins in</p>
+          <strong className="text-5xl text-primary">{countdown}</strong>
+        </div>
+      )}
       {state === 'recording' && (
         <div className="space-y-3" data-testid="status-voice-recording">
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-2 text-destructive"><Mic className="h-4 w-4 animate-pulse" /> Recording</span>
-            <span>{Math.min(seconds, MAX_REFERENCE_SECONDS)} / {MAX_REFERENCE_SECONDS}s</span>
+            <span>{Math.min(seconds, MAX_REFERENCE_SECONDS).toFixed(1)} / {MAX_REFERENCE_SECONDS}s</span>
           </div>
+          <p role="status" className={`text-xs ${seconds >= MIN_REFERENCE_SECONDS ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+            {seconds >= MIN_REFERENCE_SECONDS ? 'Minimum reached. Stop when ready.' : `${Math.max(0, MIN_REFERENCE_SECONDS - seconds).toFixed(1)} seconds until the minimum.`}
+          </p>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div className="h-full bg-primary transition-all" style={{ width: `${Math.min(100, seconds / MAX_REFERENCE_SECONDS * 100)}%` }} />
           </div>
@@ -156,7 +210,7 @@ export function VoiceRecorder({
               />
             </div>
           </div>
-          <button type="button" data-testid="button-stop-voice-recording" onClick={() => void finish()} disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground disabled:opacity-50">
+          <button type="button" data-testid="button-stop-voice-recording" onClick={() => void finish()} disabled={busy || seconds < MIN_REFERENCE_SECONDS} className="flex w-full items-center justify-center gap-2 rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground disabled:opacity-50">
             <Square className="h-4 w-4 fill-current" /> Stop and review
           </button>
         </div>
@@ -189,9 +243,9 @@ export function VoiceRecorder({
           )}
         </div>
       )}
-      {state === 'idle' && (
+      {state === 'ready' && (
         <button type="button" data-testid="button-start-voice-recording" onClick={() => void begin()} disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
-          <Mic className="h-4 w-4" /> Start recording
+          <Mic className="h-4 w-4" /> Record with 3-2-1 countdown
         </button>
       )}
       {message && <p role="alert" data-testid="status-voice-recorder-error" className="text-sm text-destructive">{message}</p>}
