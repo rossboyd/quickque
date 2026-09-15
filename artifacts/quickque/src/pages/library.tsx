@@ -47,6 +47,8 @@ import { ScriptPurposeIcon } from '@/components/script-purpose-icon';
 import { useLicence } from '@/lib/licence';
 import { UPGRADE_EVENT } from '@/components/upgrade-dialog';
 import { VoiceLibraryPanel } from '@/components/voice-library';
+import presentationArtwork from '@assets/quickque-presentation-artwork.webp';
+import performanceArtwork from '@assets/quickque-performance-artwork.webp';
 
 const SORT_LABELS: Record<SortMode, string> = {
   newest: 'Newest First',
@@ -711,12 +713,30 @@ export default function Library() {
               {visibleItems.map((script, idx) => {
                 const performance = getScriptPurpose(script) === 'performance';
                 const words = script.sections.reduce((sum, section) => sum + calculateWordCount(section.content), 0);
-                const preview = script.sections.map(section => section.content).filter(Boolean).slice(0, 3).join(' ');
-                return <article key={script.id} aria-label={script.title || 'Untitled Script'} className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
-                  <div className="h-36 overflow-hidden border-b border-border bg-muted/45 p-5"><p className="line-clamp-4 text-sm leading-7 text-muted-foreground">{preview.slice(0, 700) || 'Your next script starts here.'}</p></div>
+                const artwork = performance ? performanceArtwork : presentationArtwork;
+                return <article key={script.id} aria-label={script.title || 'Untitled Script'} data-testid={`card-script-${script.id}`} className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-xl hover:shadow-black/15">
+                  <div className="relative h-44 overflow-hidden border-b border-border bg-black">
+                    <img src={artwork} alt="" className="h-full w-full object-cover grayscale transition duration-500 ease-out group-hover:scale-[1.035]" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-black/5" />
+                    <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-4">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/85 backdrop-blur-sm">
+                        <ScriptPurposeIcon purpose={performance ? 'performance' : 'presentation'} className="h-3 w-3" />
+                        {performance ? 'Performance' : 'Presentation'}
+                      </span>
+                    </div>
+                    {editingId !== script.id && (
+                      <div className="absolute inset-x-0 bottom-0 p-4">
+                        <h2>
+                          <button type="button" data-testid={`button-open-script-${script.id}`} className="line-clamp-2 max-w-[90%] text-left text-xl font-semibold leading-tight tracking-tight text-white drop-shadow-md hover:text-primary focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" onClick={() => viewMode === 'library' && handleOpenScript(script.id)}>
+                            {script.title || 'Untitled Script'}
+                          </button>
+                        </h2>
+                      </div>
+                    )}
+                  </div>
                   <div className="flex-1 space-y-3 p-4">
                     <div className="flex items-start justify-between gap-2">
-                      {editingId === script.id ? <input autoFocus aria-label="Rename script" maxLength={200} defaultValue={script.title} className="min-w-0 flex-1 rounded border border-border bg-transparent px-2 py-1" onBlur={event => { const title = event.target.value.trim(); if (title) updateScript(script.id, { title }); setEditingId(null); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') setEditingId(null); }} /> : <h2 className="min-w-0 pt-1 font-semibold"><button type="button" className="line-clamp-2 text-left hover:text-primary focus-visible:outline-primary" onClick={() => viewMode === 'library' && handleOpenScript(script.id)}>{script.title || 'Untitled Script'}</button></h2>}
+                      {editingId === script.id ? <input autoFocus aria-label="Rename script" data-testid={`input-rename-script-${script.id}`} maxLength={200} defaultValue={script.title} className="min-w-0 flex-1 rounded border border-border bg-transparent px-2 py-1" onBlur={event => { const title = event.target.value.trim(); if (title) updateScript(script.id, { title }); setEditingId(null); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') setEditingId(null); }} /> : <span className="pt-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{performance ? 'Stage script' : 'Speaking script'}</span>}
                       {scriptMenu(script, idx)}
                     </div>
                     <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
