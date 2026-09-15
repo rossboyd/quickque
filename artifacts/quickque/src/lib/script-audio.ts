@@ -18,15 +18,30 @@ export type AudioJob = {
   running: boolean;
   error?: string;
   startedAt: number;
-  stage: 'starting' | 'model_load' | 'voice_prepare' | 'generation' | 'ready' | 'failed';
+  stage: 'queued' | 'checking' | 'model_load' | 'voice_prepare' | 'generation' | 'saving' | 'cancelled' | 'ready' | 'failed';
   completed: number;
   total: number;
   completedWork: number;
   totalWork: number;
   progressStartedAt?: number;
   progressSamples?: { completedWork: number; at: number }[];
+  cancelRequested?: boolean;
+  nativeGenerationId: number;
 };
 export const audioJobs = new Map<string, AudioJob>();
+let audioGenerationSequence = 0;
+
+export type CurrentAudioReadiness =
+  | { status: 'empty'; revision: string }
+  | { status: 'ready'; revision: string; audio: AudioStatus }
+  | { status: 'missing'; revision: string; audio: AudioStatus };
+
+export async function currentAudioReadiness(request: AudioRequest): Promise<CurrentAudioReadiness> {
+  if (!request.entries.length) return { status: 'empty', revision: request.revision };
+  const audio = await audioStatus(request);
+  const status = audio.status === 'ready' && audio.revision === request.revision ? 'ready' : 'missing';
+  return { status, revision: request.revision, audio: { ...audio, status } };
+}
 
 export async function audioEntitlement(): Promise<{ paid: boolean; available?: boolean; reason?: string }> {
   if (!isDesktop()) return { paid: false, available: false, reason: 'AI audio is available in the Quickque Mac app.' };
@@ -43,16 +58,19 @@ export async function generateAudio(request: AudioRequest): Promise<AudioStatus>
     revision: request.revision,
     running: true,
     startedAt: Date.now(),
-    stage: 'starting',
+    stage: 'queued',
     completed: 0,
     total: request.entries.length,
     completedWork: 0,
     totalWork,
+    nativeGenerationId: ++audioGenerationSequence,
   };
   const publish = () => window.dispatchEvent(new Event(AUDIO_JOB_CHANGED));
   audioJobs.set(request.scriptId, job);
   window.dispatchEvent(new Event(AUDIO_JOB_CHANGED));
   try {
+    job.stage = 'checking';
+    publish();
     try {
       listeners.push(await listen<{ scriptId: string; revision: string; stage: string }>('script-audio-diagnostic', ({ payload }) => {
         if (payload.scriptId !== request.scriptId || payload.revision !== request.revision) return;
@@ -78,15 +96,23 @@ export async function generateAudio(request: AudioRequest): Promise<AudioStatus>
         publish();
       }));
     } catch { recordFlowDebug('audio_listener_failed'); }
-    const result = await invoke<AudioStatus>('script_audio_generate', { request });
+    if (job.cancelRequested) throw new Error('SCRIPT_AUDIO_CANCELLED: Audio generation cancelled.');
+    const result = await invoke<AudioStatus>('script_audio_generate', { request, generationId: job.nativeGenerationId });
+    job.stage = 'saving';
+    publish();
+    const saved = await currentAudioReadiness(request);
+    if (saved.status !== 'ready') {
+      throw new Error('SCRIPT_AUDIO_SAVE_FAILED: Audio generation finished, but the saved audio could not be verified. Try preparing it again.');
+    }
     recordFlowDebug('audio_generate_ready');
     recordAnonymousAnalytics({ event: 'voice_used', voiceMode: 'chatterbox' });
-    Object.assign(job, { running: false, stage: 'ready', completed: job.total, completedWork: job.totalWork });
-    return result;
+    Object.assign(job, { running: false, stage: 'ready', completed: job.total, completedWork: job.totalWork, error: undefined });
+    return saved.audio;
   } catch (error) {
     recordFlowDebug('audio_generate_failed');
     recordAudioFailure(error);
-    Object.assign(job, { running: false, stage: 'failed', error: String(error) });
+    const cancelled = /^SCRIPT_AUDIO_CANCELLED:/.test(String(error));
+    Object.assign(job, { running: false, stage: cancelled ? 'cancelled' : 'failed', error: String(error) });
     throw error;
   } finally {
     listeners.forEach(remove => remove());
@@ -96,7 +122,15 @@ export async function generateAudio(request: AudioRequest): Promise<AudioStatus>
 }
 export async function cancelAudioGeneration() {
   recordFlowDebug('audio_cancel_begin');
-  try { await invoke<void>('script_audio_cancel'); recordFlowDebug('audio_cancel_ready'); }
+  for (const job of audioJobs.values()) {
+    if (job.running) {
+      job.cancelRequested = true;
+      job.stage = 'cancelled';
+    }
+  }
+  window.dispatchEvent(new Event(AUDIO_JOB_CHANGED));
+  const generationId = [...audioJobs.values()].find(job => job.running)?.nativeGenerationId;
+  try { await invoke<void>('script_audio_cancel', { generationId }); recordFlowDebug('audio_cancel_ready'); }
   catch (error) { recordFlowDebug('audio_cancel_failed'); recordAudioFailure(error); throw error; }
 }
 export async function exportAudio(request: AudioRequest) {
@@ -120,6 +154,18 @@ export class PreparedScriptAudio {
   prepare(): Promise<void> {
     return this.loading ??= this.load();
   }
+  get durationSeconds() {
+    return this.request.entries.reduce((sum, entry) => sum + this.durationFor(entry.text, {
+      engine: 'turbo',
+      voiceId: entry.voiceId,
+      rate: entry.rate,
+      voiceRevision: entry.voiceRevision,
+    }), 0);
+  }
+  durationFor(text: string, voice: SceneVoice) {
+    const duration = this.buffers.get(audioEntryIdentity(text, voice.voiceId, voice.rate, voice.voiceRevision))?.duration;
+    return duration && Number.isFinite(duration) ? duration : 0;
+  }
   private async load() {
     if (!this.request.entries.length) return;
     const access = await audioEntitlement();
@@ -141,7 +187,13 @@ export class PreparedScriptAudio {
       this.buffers.set(audioEntryIdentity(entry.text, entry.voiceId, entry.rate, entry.voiceRevision), buffer);
     }
   }
-  async speak(text: string, voice: SceneVoice, signal: AbortSignal, onProgress?: (progress: SceneSpeechProgress) => void): Promise<void> {
+  async speak(
+    text: string,
+    voice: SceneVoice,
+    signal: AbortSignal,
+    onProgress?: (progress: SceneSpeechProgress) => void,
+    onPlaybackProgress?: (elapsedSeconds: number, durationSeconds: number) => void,
+  ): Promise<void> {
     if (signal.aborted || this.disposed) throw new Error('Audio playback cancelled.');
     await this.prepare();
     if (signal.aborted || this.disposed) throw new Error('Audio playback cancelled.');
@@ -173,6 +225,7 @@ export class PreparedScriptAudio {
         source.disconnect();
         if (this.active?.stop === abort) this.active = null;
         const elapsed = this.context!.currentTime - startedAt;
+        onPlaybackProgress?.(Math.min(buffer.duration, Math.max(0, elapsed)), buffer.duration);
         if (!licensed) this.trial.consume(cancelled ? Math.max(0, elapsed) : Math.min(buffer.duration, remaining));
         if (cancelled) reject(new Error('Audio playback cancelled.'));
         else if (limited) reject(audioTrialEnded());
@@ -186,6 +239,7 @@ export class PreparedScriptAudio {
       const report = () => {
         if (done || signal.aborted) return;
         const elapsed = Math.max(0, this.context!.currentTime - startedAt);
+        onPlaybackProgress?.(Math.min(buffer.duration, elapsed), buffer.duration);
         const fraction = buffer.duration > 0 ? Math.min(0.999999, elapsed / buffer.duration) : 0;
         const token = tokens[Math.min(tokens.length - 1, Math.floor(fraction * tokens.length))];
         if (token) onProgress?.({ charStart: token.start, charEnd: token.end });

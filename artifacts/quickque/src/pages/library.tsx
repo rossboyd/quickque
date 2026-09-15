@@ -47,7 +47,7 @@ import { ScriptPurposeIcon } from '@/components/script-purpose-icon';
 import { useLicence } from '@/lib/licence';
 import { UPGRADE_EVENT } from '@/components/upgrade-dialog';
 import { VoiceLibraryPanel } from '@/components/voice-library';
-import { AUDIO_CHANGED, audioStatus } from '@/lib/script-audio';
+import { AUDIO_CHANGED, currentAudioReadiness } from '@/lib/script-audio';
 import { audioRequest } from '@/lib/script-audio-model';
 import presentationArtwork from '@assets/quickque-presentation-artwork.webp';
 import performanceArtwork from '@assets/quickque-performance-artwork.webp';
@@ -241,7 +241,7 @@ export default function Library() {
       const statuses = await Promise.all(scripts.map(async script => {
         try {
           const request = await audioRequest(script);
-          const ready = request.entries.length > 0 && (await audioStatus(request)).status === 'ready';
+           const ready = request.entries.length > 0 && (await currentAudioReadiness(request)).status === 'ready';
           return [script.id, ready] as const;
         } catch {
           return [script.id, false] as const;

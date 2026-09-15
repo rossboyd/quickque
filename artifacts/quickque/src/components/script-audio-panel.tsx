@@ -9,7 +9,22 @@ import { AUDIO_CHANGED, AUDIO_JOB_CHANGED, audioJobs, audioEntitlement, audioSta
 import { isDesktop } from '@/lib/desktop';
 import { createVoiceLibrary, type ClonedVoice } from '@/lib/voice-library';
 import { useStore } from '@/lib/store';
-import { Download, Headphones, MoreHorizontal, Pause, Play, RefreshCw, Sparkles, Trash2, Volume2 } from 'lucide-react';
+import { Download, Headphones, MoreHorizontal, Play, RefreshCw, Sparkles, Square, Trash2, Volume2 } from 'lucide-react';
+import { ChatterboxSetup } from './chatterbox-setup';
+
+const needsChatterboxSetup = (error: unknown) => /SCENE_SPEECH_TURBO_(UNAVAILABLE|OFFLINE|MODEL_LOAD)/.test(String(error));
+function audioFailureMessage(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error);
+  const code = /^([A-Z_]+):/.exec(raw)?.[1];
+  if (code === 'SCRIPT_AUDIO_CANCELLED') return 'Audio preparation was cancelled. Your script and voice assignments were not changed.';
+  if (code === 'SCENE_SPEECH_TURBO_UNAVAILABLE' || code === 'SCENE_SPEECH_TURBO_OFFLINE' || code === 'SCENE_SPEECH_TURBO_MODEL_LOAD') {
+    return 'Chatterbox is not ready. Open Chatterbox setup, complete or retry the local model download, then prepare audio again.';
+  }
+  if (code === 'SCRIPT_AUDIO_STALE') return 'This script or one of its voices changed. Prepare audio again for the current version.';
+  if (/disk|space|write|save/i.test(raw)) return 'Quickque could not save the audio. Check available storage and folder access, then try again.';
+  if (/read|decode|WAV|saved audio/i.test(raw)) return 'Quickque could not read the saved audio. Prepare it again; your script and voice assignments are unchanged.';
+  return raw.replace(/^[A-Z_]+:\s*/, '') || 'Audio preparation failed. Try again or open troubleshooting details.';
+}
 
 function remainingTime(job: AudioJob | null, now: number) {
   if (!job || job.stage !== 'generation' || job.completed <= 0 || job.completed >= job.total) return null;
@@ -36,6 +51,8 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
   const licence = useLicence();
   const [paid, setPaid] = useState(false);
   const [message, setMessage] = useState('Checking saved audio…');
+  const [error, setError] = useState<string | null>(null);
+  const [showSetup, setShowSetup] = useState(false);
   const [ready, setReady] = useState(false);
   const [operation, setOperation] = useState<'generate' | 'listen' | 'export' | 'delete' | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -50,6 +67,7 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
   const operationId = useRef(0);
   const revisionRef = useRef('');
   const [playing, setPlaying] = useState(false);
+  const [playback, setPlayback] = useState({ elapsed: 0, duration: 0 });
   const [voices, setVoices] = useState<ClonedVoice[]>([]);
   const voiceLibrary = useRef(createVoiceLibrary());
   const player = useRef<PreparedScriptAudio | null>(null);
@@ -71,9 +89,13 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
     setOperation(null);
     operationId.current++;
     setPlaying(false);
+    setPlayback({ elapsed: 0, duration: 0 });
+    setError(null);
+    setShowSetup(false);
     let refreshId = 0;
     const refresh = async () => {
       const id = ++refreshId;
+      setMessage('Checking saved audio for this version…');
       try {
         const access = await audioEntitlement();
         if (!live || id !== refreshId) return;
@@ -93,9 +115,23 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
         const job = audioJobs.get(script.id);
         if (job?.revision === request.revision && job.running) { setGenerating(true); setMessage('Generating audio on this Mac…'); return; }
         setGenerating(false);
-        if (job?.revision === request.revision && job.error) { setMessage(job.error); return; }
+        if (job?.revision === request.revision && job.error) {
+          const failure = audioFailureMessage(job.error);
+          setMessage(failure);
+          setError(failure);
+          setShowSetup(needsChatterboxSetup(job.error));
+          return;
+        }
+        setError(null);
         setMessage(status.status === 'ready' ? 'Audio saved on this Mac. Ready to listen.' : 'No matching audio saved. Generate audio for this version.');
-      } catch (error) { if (live && id === refreshId) setMessage(String(error)); }
+      } catch (error) {
+        if (live && id === refreshId) {
+          const failure = audioFailureMessage(error);
+          setMessage(failure);
+          setError(failure);
+          setShowSetup(needsChatterboxSetup(error));
+        }
+      }
     };
     void refresh();
     window.addEventListener(AUDIO_CHANGED, refresh);
@@ -103,6 +139,12 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
       const next = audioJobs.get(script.id);
       if (!live || next?.revision !== revisionRef.current) return;
       setJob({ ...next }); setGenerating(next.running); setNow(Date.now());
+      if (next.stage === 'failed' || next.stage === 'cancelled') {
+        const failure = audioFailureMessage(next.error ?? 'Audio preparation stopped.');
+        setMessage(failure);
+        setError(next.stage === 'failed' ? failure : null);
+        setShowSetup(needsChatterboxSetup(next.error));
+      }
     };
     window.addEventListener(AUDIO_JOB_CHANGED, updateJob);
     return () => {
@@ -121,16 +163,46 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
     const id = ++operationId.current;
     const valid = () => current.current === expected && operationId.current === id;
     setOperation(kind);
-    try { await action(valid); } catch (error) { if (valid()) setMessage(String(error)); }
+    setError(null);
+    try { await action(valid); } catch (caught) {
+      if (kind === 'listen' && /Audio playback cancelled/.test(String(caught))) {
+        if (valid()) {
+          setMessage('Playback stopped. Play starts again from the beginning.');
+          setPlayback({ elapsed: 0, duration: player.current?.durationSeconds ?? 0 });
+        }
+        return;
+      }
+      const error = caught;
+      if (valid()) {
+        const failure = audioFailureMessage(error);
+        setMessage(failure);
+        setError(failure);
+        setShowSetup(needsChatterboxSetup(error));
+      }
+    }
     finally { if (valid()) setOperation(null); }
   };
   const generate = () => run('generate', async valid => {
-    setMessage('Generating audio on this Mac…');
+    setMessage('Queued on this Mac…');
     const request = await audioRequest(script);
     if (!valid()) return;
     revisionRef.current = request.revision;
     await generateAudio(request);
   });
+  const stopGeneration = async () => {
+    operationId.current++;
+    setOperation(null);
+    setMessage('Stopping audio preparation…');
+    try {
+      await cancelAudioGeneration();
+      setGenerating(false);
+      setMessage('Audio preparation was cancelled. Your script and voice assignments were not changed.');
+    } catch (caught) {
+      const failure = audioFailureMessage(caught);
+      setError(failure);
+      setMessage(failure);
+    }
+  };
   const play = () => run('listen', async valid => {
     const request = await audioRequest(script);
     if (!valid()) return;
@@ -143,12 +215,27 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
     try {
       await prepared.prepare();
       if (!valid()) return;
+      setPlayback({ elapsed: 0, duration: prepared.durationSeconds });
       setMessage('Playing saved audio…');
-       for (const entry of request.entries) await prepared.speak(entry.text, { engine: 'turbo', voiceId: entry.voiceId || DEFAULT_AUDIO_VOICE, rate: entry.rate, voiceRevision: entry.voiceRevision }, controller.signal);
+      let elapsedBefore = 0;
+      for (const entry of request.entries) {
+        const voice = { engine: 'turbo' as const, voiceId: entry.voiceId || DEFAULT_AUDIO_VOICE, rate: entry.rate, voiceRevision: entry.voiceRevision };
+        await prepared.speak(
+          entry.text,
+          voice,
+          controller.signal,
+          undefined,
+          (elapsed, duration) => setPlayback({ elapsed: elapsedBefore + elapsed, duration: prepared.durationSeconds }),
+        );
+        elapsedBefore += prepared.durationFor(entry.text, voice);
+      }
       if (valid()) setMessage('Finished listening.');
     } finally {
       await prepared.dispose();
-      if (valid()) setPlaying(false);
+      if (valid()) {
+        setPlaying(false);
+        if (controller.signal.aborted) setPlayback({ elapsed: 0, duration: prepared.durationSeconds });
+      }
     }
   });
   const estimate = remainingTime(job, now);
@@ -156,6 +243,9 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
   const totalWork = job?.totalWork ?? total;
   const completedWork = job?.completedWork ?? 0;
   const progress = totalWork ? Math.round((completedWork / totalWork) * 100) : 0;
+  const quiet = Boolean(job?.running && now - job.startedAt >= 20_000 && (!job.progressSamples?.length || now - (job.progressSamples.at(-1)?.at ?? job.startedAt) >= 20_000));
+  const playbackPercent = playback.duration > 0 ? Math.min(100, (playback.elapsed / playback.duration) * 100) : 0;
+  const formatClock = (seconds: number) => `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
   const button = 'rounded-xl border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40';
   return <section aria-labelledby={`script-audio-title-${script.id}`} className="space-y-4">
     <div className="flex items-center justify-between gap-4">
@@ -188,13 +278,13 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
       {(generating || operation === 'generate') ? <div className="space-y-3 rounded-2xl border border-border bg-muted/60 p-4" role="status" data-testid="audio-generation-progress">
          <div className="flex items-start justify-between gap-3">
            <span>
-             <span className="block font-medium">{job?.stage === 'model_load' ? 'Getting ready…' : job?.stage === 'voice_prepare' ? 'Preparing the voice…' : job?.stage === 'generation' ? 'Creating your rehearsal audio…' : 'Getting ready…'}</span>
-             <span className="mt-1 block text-xs text-muted-foreground">{job?.stage === 'generation' ? (estimate ? friendlyTime(estimate) : 'Working out the time remaining…') : 'The first time may take a little longer.'}</span>
+              <span className="block font-medium">{quiet ? 'Still preparing…' : !job || job.stage === 'queued' ? 'Queued…' : job.stage === 'checking' ? 'Checking audio setup…' : job.stage === 'model_load' ? 'Loading Chatterbox…' : job.stage === 'voice_prepare' ? 'Preparing the voice…' : job.stage === 'generation' ? 'Creating your rehearsal audio…' : job.stage === 'saving' ? 'Saving and checking audio…' : 'Getting ready…'}</span>
+              <span className="mt-1 block text-xs text-muted-foreground">{quiet ? 'No new progress signal has arrived yet. Quickque is still waiting for the local job; you can stop it or open diagnostics.' : job?.stage === 'generation' ? (estimate ? friendlyTime(estimate) : 'Working out the time remaining…') : 'Time remaining is not available for this stage.'}</span>
            </span>
            {job?.stage === 'generation' && <span className="shrink-0 text-sm font-medium">{progress}%</span>}
         </div>
-         <progress aria-label="Audio generation progress" className="h-2 w-full overflow-hidden rounded-full accent-primary" max={totalWork || 1} value={job?.stage === 'generation' ? completedWork : undefined} />
-         <button type="button" className="text-xs text-muted-foreground underline-offset-4 hover:underline" onClick={() => { void cancelAudioGeneration().catch(error => setMessage(String(error))); }}>Stop</button>
+          <progress aria-label="Audio generation progress" className="h-2 w-full overflow-hidden rounded-full accent-primary motion-reduce:animate-none" max={totalWork || 1} value={job?.stage === 'generation' ? completedWork : undefined} />
+          <button type="button" className="text-xs text-muted-foreground underline-offset-4 hover:underline" onClick={() => void stopGeneration()}>Stop</button>
       </div> : ready ? <div data-testid="audio-ready-player" className="overflow-hidden rounded-2xl bg-[#18181b] text-white shadow-lg shadow-black/10">
         <div className="flex items-center gap-3 p-3 sm:p-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/55 shadow-inner">
@@ -207,14 +297,15 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform hover:scale-105 disabled:opacity-40"
             aria-label={playing ? 'Stop saved audio' : 'Play saved audio'}
           >
-            {playing ? <Pause className="h-4 w-4 fill-current" /> : <Play className="ml-0.5 h-4 w-4 fill-current" />}
+             {playing ? <Square className="h-4 w-4 fill-current" /> : <Play className="ml-0.5 h-4 w-4 fill-current" />}
           </button>
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{script.title}</p>
-            <p role="status" className="mt-0.5 truncate text-xs text-white/60">{playing ? 'Playing saved audio…' : `${total} saved ${total === 1 ? 'passage' : 'passages'} · On this Mac`}</p>
-            <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/15">
-              <div className={`h-full rounded-full bg-white transition-all ${playing ? 'w-2/3 animate-pulse' : 'w-0'}`} />
+             <p role="status" className="mt-0.5 truncate text-xs text-white/60">{playing ? `Playing · ${formatClock(playback.elapsed)} / ${formatClock(playback.duration)}` : `${total} saved ${total === 1 ? 'passage' : 'passages'} · On this Mac`}</p>
+             <div role="progressbar" aria-label="Saved audio playback progress" aria-valuemin={0} aria-valuemax={playback.duration || 0} aria-valuenow={playback.elapsed} className="mt-2 h-1 overflow-hidden rounded-full bg-white/15">
+               <div className="h-full rounded-full bg-white motion-reduce:transition-none" style={{ width: `${playbackPercent}%` }} />
             </div>
+             {playing && <p className="mt-1 text-[10px] text-white/50">Stop returns playback to the beginning.</p>}
           </div>
           <button
             type="button"
@@ -240,6 +331,11 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
           Prepare audio
         </button>
       </div>}
+       {error && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+         <p>{error}</p>
+         <button type="button" className="mt-2 underline underline-offset-4" disabled={busy} onClick={generate}>Try preparing again</button>
+       </div>}
+       {showSetup && <div className="rounded-xl border border-border p-3"><ChatterboxSetup compact onReady={() => setShowSetup(false)} /></div>}
       <details className="rounded-xl border border-border px-3 py-2.5">
           <summary className="flex cursor-pointer list-none items-center gap-2 text-xs text-muted-foreground">
             <MoreHorizontal className="h-4 w-4" />

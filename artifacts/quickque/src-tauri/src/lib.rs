@@ -1346,7 +1346,7 @@ pub fn run() {
             let state = handle.state::<AppState>();
             state.flow.shutdown();
             let _ = state.scene_speech.stop();
-            let _ = script_audio::cancel(&handle.state::<script_audio::AudioState>());
+            let _ = script_audio::cancel(&handle.state::<script_audio::AudioState>(), None);
             let _ = turbo::cancel(&handle.state::<turbo::InstallState>());
             state.remote.stop();
         }

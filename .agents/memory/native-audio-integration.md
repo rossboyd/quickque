@@ -96,3 +96,14 @@ unit tests pass with directly injected rejecting callbacks.
 **How to apply:** Exercise the real command executor together with turn-taking
 in tests. Preserve rejection even when stale/unmounted UI ignores the error;
 only explicitly fire-and-forget callers may suppress it.
+
+Cancellation that can race native startup must carry a monotonic operation ID
+across the frontend/native boundary. Native state must retain cancellation for
+an ID that has not started yet, and a stale ID must never stop the active job.
+
+**Why:** A global cancelled boolean can be cleared by a later-starting command,
+while an unscoped child kill can let a delayed cancellation stop the next job.
+
+**How to apply:** Match cancellation to the active operation ID, latch
+pre-start cancellation by ID, and return without touching the child when the
+requested ID is not active. Test both cancel-before-start and stale-cancel cases.

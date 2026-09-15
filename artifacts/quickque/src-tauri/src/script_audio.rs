@@ -2,6 +2,7 @@
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::HashSet,
     fs,
     io::{BufRead, BufReader, Read, Write},
     path::PathBuf,
@@ -18,6 +19,26 @@ pub struct Job {
     child: Option<Child>,
     running: bool,
     cancelled: bool,
+    active_generation: Option<u64>,
+    cancelled_generations: HashSet<u64>,
+}
+impl Job {
+    fn request_cancel(&mut self, generation_id: Option<u64>) -> bool {
+        match generation_id {
+            Some(id) if self.active_generation == Some(id) => {
+                self.cancelled = true;
+                true
+            }
+            Some(id) => {
+                self.cancelled_generations.insert(id);
+                false
+            }
+            None => {
+                self.cancelled = true;
+                true
+            }
+        }
+    }
 }
 
 pub(crate) fn paid() -> bool {
@@ -152,6 +173,7 @@ pub async fn script_audio_generate(
     app: AppHandle,
     state: tauri::State<'_, AudioState>,
     request: Value,
+    generation_id: u64,
 ) -> Result<Value, String> {
     validate(&request)?;
     let shared = Arc::clone(&state.0);
@@ -162,8 +184,12 @@ pub async fn script_audio_generate(
         if job.running {
             return Err("SCRIPT_AUDIO_BUSY: Audio generation is already running.".into());
         }
+        if job.cancelled_generations.remove(&generation_id) {
+            return Err("SCRIPT_AUDIO_CANCELLED: Audio generation cancelled.".into());
+        }
         job.running = true;
         job.cancelled = false;
+        job.active_generation = Some(generation_id);
     }
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| {
@@ -257,18 +283,21 @@ pub async fn script_audio_generate(
                 let _ = child.wait();
             }
             job.running = false;
+            job.active_generation = None;
         }
         result
     })
     .await
     .map_err(|_| "Audio generation task failed.".to_string())?
 }
-pub fn cancel(state: &AudioState) -> Result<(), String> {
+pub fn cancel(state: &AudioState, generation_id: Option<u64>) -> Result<(), String> {
     let mut job = state
         .0
         .lock()
         .map_err(|_| "Audio generation state unavailable.")?;
-    job.cancelled = true;
+    if !job.request_cancel(generation_id) {
+        return Ok(());
+    }
     if let Some(child) = job.child.as_mut() {
         if child
             .try_wait()
@@ -286,8 +315,11 @@ pub fn cancel(state: &AudioState) -> Result<(), String> {
     Ok(())
 }
 #[tauri::command]
-pub fn script_audio_cancel(state: tauri::State<'_, AudioState>) -> Result<(), String> {
-    cancel(&state)
+pub fn script_audio_cancel(
+    state: tauri::State<'_, AudioState>,
+    generation_id: Option<u64>,
+) -> Result<(), String> {
+    cancel(&state, generation_id)
 }
 fn manifest(app: &AppHandle, script_id: &str, revision: &str) -> Result<Value, String> {
     identifier(revision)?;
@@ -583,6 +615,19 @@ mod tests {
             assert!(identifier(id).is_err());
         }
         assert!(identifier("script_123-abc").is_ok());
+    }
+    #[test]
+    fn stale_cancel_does_not_target_the_active_generation() {
+        let mut job = Job {
+            running: true,
+            active_generation: Some(2),
+            ..Job::default()
+        };
+        assert!(!job.request_cancel(Some(1)));
+        assert!(!job.cancelled);
+        assert!(job.cancelled_generations.contains(&1));
+        assert!(job.request_cancel(Some(2)));
+        assert!(job.cancelled);
     }
     #[test]
     fn pcm_parser_handles_padding_and_rejects_unsupported_channels() {
