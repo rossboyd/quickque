@@ -7,7 +7,7 @@ import { calculateWordCount, estimateTime, formatTime, cn } from '@/lib/utils';
 import { SettingsDialog } from '@/components/settings-dialog';
 import { DocumentImportDialog } from '@/components/document-import-dialog';
 import { getVisibleScripts, downloadFile } from '@/lib/library-management';
-import { getScriptPurpose, getPerformanceSummary, getSceneSetupIssues } from '@/lib/script-purpose';
+import { getScriptPurpose, getPerformanceSummary } from '@/lib/script-purpose';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { SortMode, Script } from '@/lib/types';
 import { Editor } from '@/components/editor';
@@ -42,6 +42,7 @@ import {
 import { tokenize } from '@/lib/flow/tokenize';
 import { useLocalFlow } from '@/hooks/use-local-flow';
 import { FlowSetupWizard } from '@/components/flow-setup-wizard';
+import { ScriptSetupWizard } from '@/components/script-setup-wizard';
 import { isDesktop } from '@/lib/desktop';
 import { ScriptPurposeIcon } from '@/components/script-purpose-icon';
 import { useLicence } from '@/lib/licence';
@@ -49,6 +50,7 @@ import { UPGRADE_EVENT } from '@/components/upgrade-dialog';
 import { VoiceLibraryPanel } from '@/components/voice-library';
 import { AUDIO_CHANGED, currentAudioReadiness } from '@/lib/script-audio';
 import { audioRequest } from '@/lib/script-audio-model';
+import { checkScriptReadiness, hasUnfinishedSetup } from '@/lib/script-readiness';
 import presentationArtwork from '@assets/quickque-presentation-artwork.webp';
 import performanceArtwork from '@assets/quickque-performance-artwork.webp';
 
@@ -119,6 +121,8 @@ export default function Library() {
   const [location, setLocation] = useLocation();
   const isHome = location !== '/edit';
   const [showWizard, setShowWizard] = useState(false);
+  const [setupScriptId, setSetupScriptId] = useState<string | null>(null);
+  const [setupAfterImport, setSetupAfterImport] = useState(false);
   const voiceLibrary = useMemo(() => createVoiceLibrary(), []);
 
   useEffect(() => {
@@ -159,6 +163,13 @@ export default function Library() {
   useEffect(() => {
     localStorage.setItem('quickque-library-visible', String(libraryVisible));
   }, [libraryVisible]);
+  useEffect(() => {
+    if (!setupAfterImport || !activeScriptId) return;
+    const imported = scripts.find(script => script.id === activeScriptId);
+    if (!imported) return;
+    setSetupAfterImport(false);
+    setSetupScriptId(imported.id);
+  }, [activeScriptId, scripts, setupAfterImport]);
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -274,7 +285,10 @@ export default function Library() {
     const res = createScript(purpose);
     if (res) setShowCreate(false);
     setSearch('');
-    if (res) setIsMobileEditorOpen(true);
+    if (res) {
+      setIsMobileEditorOpen(true);
+      setSetupScriptId(res);
+    }
   };
 
   const createSample = async () => {
@@ -291,6 +305,7 @@ export default function Library() {
         setSearch('');
         setShowCreate(false);
         setIsMobileEditorOpen(true);
+        setSetupScriptId(id);
       }
     } finally { setCreatingSample(false); }
   };
@@ -309,14 +324,22 @@ export default function Library() {
     const generation = ++playGeneration.current;
     setCheckingScript(script.id);
     try {
-      let issues = getSceneSetupIssues(script);
-      const needsVoices = script.actor?.enabled && script.sections.some(section => section.characterId && !script.actor!.myRoleIds.includes(section.characterId));
-      if (!issues.length && getScriptPurpose(script) === 'performance' && needsVoices) {
-        const voices = (await voiceLibrary.list()).map(voice => voice.referenceId);
-        issues = getSceneSetupIssues(script, new Set(voices));
-      }
+      const readiness = await checkScriptReadiness(script, {
+        listLocalVoices: async () => {
+          const voices = await voiceLibrary.list();
+          return voices.map(voice => ({ referenceId: voice.referenceId, revision: voice.revision }));
+        },
+        checkPreparedAudio: async () => {
+          try {
+            const request = await audioRequest(script);
+            return (await currentAudioReadiness(request)).status === 'ready';
+          } catch {
+            return false;
+          }
+        },
+      });
       if (generation !== playGeneration.current || latestScripts.current.find(item => item.id === script.id) !== script) return;
-      if (issues.length) { setHomeIssues({ script, messages: issues.map(issue => issue.message) }); return; }
+      if (!readiness.ready) { setSetupScriptId(script.id); return; }
       setActiveScriptId(script.id);
       setLocation(`/read/${script.id}`);
     } catch {
@@ -329,6 +352,8 @@ export default function Library() {
       setLocation(`/read/${activeScriptId}`);
     }
   };
+
+  const setupScript = setupScriptId ? scripts.find(item => item.id === setupScriptId) ?? null : null;
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
     setDraggedId(id);
@@ -438,6 +463,24 @@ export default function Library() {
             localStorage.setItem('quickque-first-launch-seen', 'true');
             setShowWizard(false);
             setupFlow.stop();
+          }}
+        />
+      )}
+      {setupScript && (
+        <ScriptSetupWizard
+          script={setupScript}
+          onChange={updates => updateScript(setupScript.id, updates)}
+          onClose={() => setSetupScriptId(null)}
+          onOpenCastSetup={() => {
+            const id = setupScript.id;
+            setSetupScriptId(null);
+            setActiveScriptId(id);
+            setLocation('/edit');
+          }}
+          onReady={() => {
+            setSetupScriptId(null);
+            setActiveScriptId(setupScript.id);
+            setLocation(`/read/${setupScript.id}`);
           }}
         />
       )}
@@ -613,7 +656,7 @@ export default function Library() {
           ) : (
             visibleItems.map((script, idx) => {
               const isPerformance = getScriptPurpose(script) === 'performance';
-              const setupIssues = isPerformance ? getSceneSetupIssues(script) : [];
+              const unfinishedSetup = isPerformance && hasUnfinishedSetup(script);
               const totalWords = script.sections.reduce((acc, sec) => acc + calculateWordCount(sec.content), 0);
               const timeSec = estimateTime(totalWords);
               const isActive = script.id === activeScriptId;
@@ -745,6 +788,7 @@ export default function Library() {
             setViewMode('library');
             setSearch('');
             setIsMobileEditorOpen(true);
+            setSetupAfterImport(true);
           }}
           externalFile={droppedFile}
           externalError={droppedError}
@@ -807,6 +851,7 @@ export default function Library() {
               </div>}
               {workspaceItems.map((script, idx) => {
                 const performance = getScriptPurpose(script) === 'performance';
+                const unfinishedSetup = performance && hasUnfinishedSetup(script);
                 const words = script.sections.reduce((sum, section) => sum + calculateWordCount(section.content), 0);
                 const artwork = performance ? performanceArtwork : presentationArtwork;
                 const startsUnpinnedSection = viewMode === 'library' && pinnedItems.length > 0 && idx === pinnedItems.length;
@@ -846,6 +891,7 @@ export default function Library() {
                         <Users className="h-3.5 w-3.5" />
                         {script.actor?.characters.length ?? 0} {(script.actor?.characters.length ?? 0) === 1 ? 'speaker' : 'speakers'}
                       </span>}
+                      {performance && unfinishedSetup && <span data-testid={`status-setup-${script.id}`} className="rounded-full bg-amber-500/15 px-2.5 py-1 font-medium text-amber-700 dark:text-amber-300">Setup in progress</span>}
                       <span className="text-muted-foreground">{words} words · {formatTime(estimateTime(words))}</span>
                     </div>
                     <p className="text-xs text-muted-foreground">Updated {new Date(script.updatedAt).toLocaleDateString()}</p>

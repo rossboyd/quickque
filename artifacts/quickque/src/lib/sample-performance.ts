@@ -33,7 +33,15 @@ export function createMatildaSample(voices: LocalVoice[] = [], now = Date.now(),
   ];
   return {
     id: idFactory(), title: 'Matilda · Classroom sample', purpose: 'performance', createdAt: now, updatedAt: now,
-    actor: { enabled: true, characters, myRoleIds: [characters[0].id] },
+    actor: {
+      enabled: true,
+      characters,
+      myRoleIds: [characters[0].id],
+      roleAssignments: Object.fromEntries(characters.map((character, index) => [
+        character.id,
+        index === 0 ? 'my-role' : 'computer-partner',
+      ])),
+    },
     sections: turns.map((turn, index) => ({
       id: idFactory(), title: `${index + 1}. ${turn.who}`, content: turn.content,
       characterId: characters.find(character => character.name === turn.who)!.id,

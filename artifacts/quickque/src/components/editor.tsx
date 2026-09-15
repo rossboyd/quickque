@@ -12,6 +12,10 @@ import { getScriptPurpose, getSceneSetupIssues, getPerformanceSummary, type Scen
 import { createVoiceLibrary } from '@/lib/voice-library';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ActorAuthoringPanel, ScriptActor } from './actor-authoring';
+import { ScriptSetupWizard } from './script-setup-wizard';
+import { checkScriptReadiness, getScriptReadiness } from '@/lib/script-readiness';
+import { audioRequest } from '@/lib/script-audio-model';
+import { currentAudioReadiness } from '@/lib/script-audio';
 
 export type ActorScriptSection = ScriptSection & {
   characterId?: string | null;
@@ -67,6 +71,7 @@ export function Editor({
   const sectionDropTargetRef = useRef<{ id: string; edge: 'before' | 'after' } | null>(null);
   const [checkingVoices, setCheckingVoices] = useState(false);
   const [preflightIssues, setPreflightIssues] = useState<SceneSetupIssue[] | null>(null);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
   const voiceLibrary = useMemo(() => createVoiceLibrary(), []);
   const currentScript = useRef<ActorScript | null>(script);
   currentScript.current = script;
@@ -76,23 +81,35 @@ export function Editor({
   }, [script]);
   const startReader = async () => {
     if (!isPerformance || !script.actor?.enabled) { onPresent(); return; }
-    const issues = getSceneSetupIssues(script);
-    if (issues.length) { setPreflightIssues(issues); return; }
-    // A silent all-roles rehearsal does not need a speech engine.
-    const partnerTurns = script.sections.some(s => s.characterId && !script.actor!.myRoleIds.includes(s.characterId));
-    if (!partnerTurns) { onPresent(); return; }
     setCheckingVoices(true);
     try {
-      const voices = await voiceLibrary.list();
+      const readiness = await checkScriptReadiness(script, {
+        listLocalVoices: async () => {
+          const voices = await voiceLibrary.list();
+          return voices.map(voice => ({ referenceId: voice.referenceId, revision: voice.revision }));
+        },
+        checkPreparedAudio: async () => {
+          try {
+            const request = await audioRequest(script);
+            return (await currentAudioReadiness(request)).status === 'ready';
+          } catch {
+            return false;
+          }
+        },
+      });
       if (currentScript.current !== script) return;
-      const checked = getSceneSetupIssues(script, new Set(voices.map(v => v.referenceId)));
-      if (checked.length) setPreflightIssues(checked);
-      else onPresent();
+      if (!readiness.ready) setShowSetupWizard(true);
+      else {
+        const sceneIssues = getSceneSetupIssues(script);
+        if (sceneIssues.length) setPreflightIssues(sceneIssues);
+        else onPresent();
+      }
     } catch {
-      if (currentScript.current === script) setPreflightIssues([{ message: 'Could not check local voices. Open Scene Partner setup to refresh voices, then try Rehearse again.' }]);
+      if (currentScript.current === script) setShowSetupWizard(true);
     } finally { setCheckingVoices(false); }
   };
   const setupIssues = getSceneSetupIssues(script);
+  const readiness = isPerformance ? getScriptReadiness(script) : null;
   const totalWords = script.sections.reduce((acc, sec) => acc + calculateWordCount(sec.content), 0);
   const timeSec = estimateTime(totalWords);
   const [showActorPanel, setShowActorPanel] = useState(false);
@@ -234,6 +251,11 @@ export function Editor({
         ...script.actor,
         characters: script.actor.characters.filter(character => character.id !== oldId),
         myRoleIds: script.actor.myRoleIds.filter(id => id !== oldId),
+        ...(script.actor.roleAssignments ? {
+          roleAssignments: Object.fromEntries(
+            Object.entries(script.actor.roleAssignments).filter(([id]) => id !== oldId),
+          ),
+        } : {}),
       },
       sections: script.sections.map((s) => 
         s.characterId === oldId ? { ...s, characterId: newId } : s
@@ -331,8 +353,9 @@ export function Editor({
             {isPerformance && <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
               <p>{getPerformanceSummary(script)}</p>
               <div className="flex items-center gap-3">
-                <span role="status">{!isActorEnabled ? 'Partner audio off' : setupIssues.length ? `${setupIssues.length} setup ${setupIssues.length === 1 ? 'issue' : 'issues'}` : 'Ready to rehearse'}</span>
-                {isActorEnabled && setupIssues.length > 0 && <button onClick={() => setPreflightIssues(setupIssues)} className="font-medium text-primary hover:underline">Review setup</button>}
+                 <span role="status">{!isActorEnabled ? 'Partner audio off' : readiness && !readiness.ready ? `${readiness.issues.length} setup ${readiness.issues.length === 1 ? 'issue' : 'issues'}` : setupIssues.length ? `${setupIssues.length} setup ${setupIssues.length === 1 ? 'issue' : 'issues'}` : 'Ready to rehearse'}</span>
+                 {isActorEnabled && readiness && !readiness.ready && <button onClick={() => setShowSetupWizard(true)} className="font-medium text-primary hover:underline">Complete setup</button>}
+                 {isActorEnabled && readiness?.ready && setupIssues.length > 0 && <button onClick={() => setPreflightIssues(setupIssues)} className="font-medium text-primary hover:underline">Review setup</button>}
               </div>
             </div>}
             <ScriptAudioPanel key={script.id} script={script} />
@@ -454,7 +477,7 @@ export function Editor({
                         >
                           <option value="">Unassigned</option>
                           {script.actor?.characters.map((char) => (
-                            <option key={char.id} value={char.id}>{char.name} · {script.actor?.myRoleIds.includes(char.id) ? 'In Person' : 'AI Partner'}</option>
+                           <option key={char.id} value={char.id}>{char.name} · {script.actor?.roleAssignments?.[char.id] === 'another-person' ? 'Another person' : script.actor?.roleAssignments?.[char.id] === 'computer-partner' ? 'Computer partner' : script.actor?.myRoleIds.includes(char.id) ? 'In Person' : 'Needs confirmation'}</option>
                           ))}
                         </select>
                       </div>
@@ -577,6 +600,15 @@ export function Editor({
           onRehearse={() => void startReader()}
           sections={script.sections}
           onDeleteCharacter={handleDeleteCharacter}
+        />
+      )}
+      {showSetupWizard && (
+        <ScriptSetupWizard
+          script={script}
+          onChange={onChange}
+          onClose={() => setShowSetupWizard(false)}
+          onOpenCastSetup={() => setShowActorPanel(true)}
+          onReady={() => { setShowSetupWizard(false); onPresent(); }}
         />
       )}
     </div>

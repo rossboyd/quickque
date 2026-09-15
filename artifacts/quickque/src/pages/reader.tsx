@@ -60,6 +60,11 @@ import {
   QUICKQUE_READER_THEME_ATTRIBUTE,
 } from '@/lib/settings-persistence';
 import { recordAnonymousAnalytics } from '@/lib/anonymous-analytics';
+import { audioRequest } from '@/lib/script-audio-model';
+import { currentAudioReadiness } from '@/lib/script-audio';
+import { ScriptSetupWizard } from '@/components/script-setup-wizard';
+import { checkScriptReadiness, getHumanRoleIds, getScriptReadiness } from '@/lib/script-readiness';
+import { createVoiceLibrary } from '@/lib/voice-library';
 
 type ReaderPositionSnapshot = {
   anchorId: string;
@@ -94,6 +99,7 @@ export default function Reader() {
     presentationDefaults,
     updateScriptPresentation,
     resetScriptPresentation,
+    updateScript,
     updateSettings: persistAppSettings,
   } = useStore();
   const workbenchDarkThemeRef = useRef(settings.darkTheme);
@@ -122,6 +128,7 @@ export default function Reader() {
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
+  const [setupGate, setSetupGate] = useState<'checking' | 'blocked' | 'ready'>('checking');
   const [showWriterNotes, setShowWriterNotes] = useState(true);
   const [showPersonalNotes, setShowPersonalNotes] = useState(true);
   const [timingMessage, setTimingMessage] = useState<string | null>(null);
@@ -267,13 +274,45 @@ export default function Reader() {
   // tokenisation and Flow lifecycle.
   const actor = script?.actor;
   const isPerformance = script ? getScriptPurpose(script) === 'performance' : false;
+  const setupVoiceLibrary = useMemo(() => createVoiceLibrary(), []);
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      if (!script || !isPerformance) {
+        setSetupGate('ready');
+        return;
+      }
+      setSetupGate('checking');
+      try {
+        const readiness = await checkScriptReadiness(script, {
+          listLocalVoices: async () => {
+            const voices = await setupVoiceLibrary.list();
+            return voices.map(voice => ({ referenceId: voice.referenceId, revision: voice.revision }));
+          },
+          checkPreparedAudio: async () => {
+            try {
+              const request = await audioRequest(script);
+              return (await currentAudioReadiness(request)).status === 'ready';
+            } catch {
+              return false;
+            }
+          },
+        });
+        if (!cancelled) setSetupGate(readiness.ready ? 'ready' : 'blocked');
+      } catch {
+        if (!cancelled) setSetupGate('blocked');
+      }
+    };
+    void check();
+    return () => { cancelled = true; };
+  }, [script, isPerformance, setupVoiceLibrary]);
   const [freeManual, setFreeManual] = useState(false);
   useEffect(() => {
     const continueFree = () => { setFreeManual(true); setReadMode('manual'); };
     window.addEventListener('quickque:continue-free', continueFree);
     return () => window.removeEventListener('quickque:continue-free', continueFree);
   }, []);
-  const sceneEnabled = isPerformance && actor?.enabled === true && !freeManual;
+  const sceneEnabled = isPerformance && setupGate === 'ready' && actor?.enabled === true && !freeManual;
   const characters = actor?.characters ?? [];
   const characterIds = useMemo(() => new Set(characters.map(character => character.id)), [characters]);
   const sceneTurns = useMemo(() => (script?.sections ?? []).map(section => ({
@@ -284,7 +323,14 @@ export default function Reader() {
       return characterId && characterIds.has(characterId) ? characterId : null;
     })(),
   })), [script?.sections, characterIds]);
-  const sceneMyRoleIds = actor?.myRoleIds ?? [];
+  const sceneMyRoleIds = actor ? getHumanRoleIds(actor) : [];
+  const sceneHasHumanTurns = sceneTurns.some(turn =>
+    Boolean(turn.characterId && sceneMyRoleIds.includes(turn.characterId)),
+  );
+  const roleLabel = (characterId: string) =>
+    actor?.roleAssignments?.[characterId] === 'another-person'
+      ? 'Another person'
+      : sceneMyRoleIds.includes(characterId) ? 'In Person' : 'AI Partner';
   const voiceForCharacter = useCallback((characterId: string): SceneVoice | null => {
     const saved = characters.find(character => character.id === characterId)?.voice;
     return saved?.voiceId && saved.engine === 'turbo'
@@ -322,10 +368,21 @@ export default function Reader() {
   const flow = useLocalFlow({
     tokens: sceneEnabled ? sceneFlowTokens : tokens,
     enabled: sceneEnabled
-      ? sceneFlowEnabled && scene.phase === 'waiting'
+      ? sceneFlowEnabled && (scene.phase === 'waiting' || showWizard)
       : readMode === "flow",
     sceneCompletion: sceneEnabled,
   });
+  const voiceFollowSelected = sceneEnabled
+    ? sceneFlowEnabled && sceneHasHumanTurns
+    : readMode === 'flow';
+  const microphoneReady = ['ready', 'listening', 'paused', 'silence-stopped', 'stopped'].includes(flow.status);
+  const voiceFollowReadiness = script
+    ? getScriptReadiness(script, {
+      mode: sceneEnabled ? 'partner-audio' : 'practice-without-partner-audio',
+      voiceFollowSelected,
+      microphoneReady: !voiceFollowSelected || microphoneReady,
+    })
+    : null;
   stopFlowBeforePartnerRef.current = async () => {
     // `flow_command` reaps the helper before its promise resolves. Awaiting
     // this bridge acknowledgement is required before system speech handoff.
@@ -341,15 +398,15 @@ export default function Reader() {
   presentationRef.current = presentation;
 
   useEffect(() => {
-    if (readMode === 'flow' && !sceneEnabled) {
+    if (voiceFollowSelected) {
       const isSetupDone = localStorage.getItem('quickque-flow-setup-done') === 'true';
-      if (!isSetupDone) {
+      if (!isSetupDone || ['unsupported', 'needs-model', 'error'].includes(flow.status)) {
         setShowWizard(true);
       }
     } else {
       setShowWizard(false);
     }
-  }, [readMode, sceneEnabled]);
+  }, [voiceFollowSelected, flow.status]);
 
   const readingDistance = useCallback(() => {
     const container = containerRef.current;
@@ -1327,6 +1384,23 @@ export default function Reader() {
     );
   }
 
+  if (isPerformance && setupGate !== 'ready') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+        {setupGate === 'checking' ? (
+          <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Checking rehearsal setup…</div>
+        ) : (
+          <ScriptSetupWizard
+            script={script}
+            onChange={updates => updateScript(script.id, updates)}
+            onClose={exitReader}
+            onReady={() => setSetupGate('ready')}
+          />
+        )}
+      </div>
+    );
+  }
+
   const readerSurface = getReaderSurfacePresentation(
     settings.compactMode,
     presentation.backgroundOpacity,
@@ -1378,14 +1452,6 @@ export default function Reader() {
           </div>
           
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-            <div className="flex items-center gap-1" aria-label="Reader note controls">
-              <button type="button" onClick={() => setShowWriterNotes(value => !value)} className="present-glass-button rounded-full px-2.5 py-1.5 text-xs font-medium" aria-pressed={showWriterNotes}>
-                Writer notes {showWriterNotes ? 'on' : 'off'}
-              </button>
-              <button type="button" onClick={() => setShowPersonalNotes(value => !value)} className="present-glass-button rounded-full px-2.5 py-1.5 text-xs font-medium" aria-pressed={showPersonalNotes}>
-                Personal notes {showPersonalNotes ? 'on' : 'off'}
-              </button>
-            </div>
             {!sceneEnabled && (
               <Popover>
                 <PopoverTrigger asChild>
@@ -1682,7 +1748,7 @@ export default function Reader() {
                 >
                   {characters.find(character => character.id === script.sections[idx]?.characterId)?.name ?? 'Unassigned'}
                   {' · '}{script.sections[idx]?.characterId && characterIds.has(script.sections[idx].characterId!)
-                    ? sceneMyRoleIds.includes(script.sections[idx].characterId!) ? 'In Person' : 'AI Partner'
+                    ? roleLabel(script.sections[idx].characterId!)
                     : 'Assign a character'}
                 </p>}
                 {enrichedSections.length > 1 && (
@@ -1708,7 +1774,7 @@ export default function Reader() {
                   const mine = !!character && effectiveSceneMyRoleIds.includes(character.id);
                   const ownership = !character
                     ? 'Unassigned turn'
-                    : sceneMyRoleIds.includes(character.id) ? 'In Person · Your turn' : sceneSilentManual ? 'AI Partner · Silent cues' : scene.phase === 'speaking' ? 'AI Partner · Speaking' : 'AI Partner · Ready';
+                    : roleLabel(character.id) === 'Another person' ? 'Another person · Human turn' : roleLabel(character.id) === 'In Person' ? 'In Person · Your turn' : sceneSilentManual ? 'AI Partner · Silent cues' : scene.phase === 'speaking' ? 'AI Partner · Speaking' : 'AI Partner · Ready';
                   return (
                     <aside
                       className="mb-4 rounded-lg border border-border border-l-4 bg-background text-foreground px-4 py-3 shadow-sm"
@@ -1770,13 +1836,22 @@ export default function Reader() {
                     </aside>
                   );
                 })()}
-                {sceneEnabled && idx === scene.turnIndex && (script.sections[idx]?.notes?.trim() || script.personalNotes?.some(note => note.sectionId === script.sections[idx].id)) && (
+                {sceneEnabled && idx === scene.turnIndex &&
+                  (script.sections[idx]?.notes?.trim() ||
+                    script.personalNotes?.some(note => note.sectionId === script.sections[idx].id)) && (
                   <aside className="scene-notes-rail" aria-label="Performance notes">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Rehearsal notes</p>
-                      <div className="flex gap-3 text-xs font-medium text-primary">
-                        {script.sections[idx]?.notes?.trim() && <button type="button" className="hover:underline" onClick={() => setShowWriterNotes(value => !value)}>Writer: {showWriterNotes ? 'on' : 'off'}</button>}
-                        {!!script.personalNotes?.some(note => note.sectionId === script.sections[idx].id) && <button type="button" className="hover:underline" onClick={() => setShowPersonalNotes(value => !value)}>Personal: {showPersonalNotes ? 'on' : 'off'}</button>}
+                      <div className="flex flex-wrap gap-3 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                        {script.sections[idx]?.notes?.trim() && (
+                          <button type="button" className="hover:underline" onClick={() => setShowWriterNotes(value => !value)}>
+                            Writer notes: {showWriterNotes ? 'on' : 'off'}
+                          </button>
+                        )}
+                        {!!script.personalNotes?.some(note => note.sectionId === script.sections[idx].id) && (
+                          <button type="button" className="text-primary hover:underline" onClick={() => setShowPersonalNotes(value => !value)}>
+                            Personal notes: {showPersonalNotes ? 'on' : 'off'}
+                          </button>
+                        )}
                       </div>
                     </div>
                     {showWriterNotes && script.sections[idx]?.notes?.trim() && (
@@ -1786,26 +1861,43 @@ export default function Reader() {
                       </p>
                     )}
                     {showPersonalNotes && script.personalNotes?.filter(note => note.sectionId === script.sections[idx].id).map(note => (
-                      <p key={note.id} className="scene-notes mt-2 whitespace-pre-wrap text-sm font-normal leading-relaxed"><strong className="text-xs uppercase tracking-wide text-primary">Personal:</strong>{'\n'}{note.content}</p>
+                      <p key={note.id} className="scene-notes mt-2 whitespace-pre-wrap text-sm font-normal leading-relaxed">
+                        <strong className="text-xs uppercase tracking-wide text-primary">Personal:</strong>{'\n'}{note.content}
+                      </p>
                     ))}
                   </aside>
                 )}
-                {!sceneEnabled && idx === activeSectionIdx && (script.sections[idx]?.notes?.trim() || script.personalNotes?.some(note => note.sectionId === script.sections[idx].id)) && (
+                {!sceneEnabled && idx === activeSectionIdx &&
+                  (script.sections[idx]?.notes?.trim() ||
+                    script.personalNotes?.some(note => note.sectionId === script.sections[idx].id)) && (
                   <aside
                     className="mb-4 rounded-lg border border-border bg-muted/50 px-4 py-3"
                     aria-label="Section notes"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {script.sections[idx]?.notes?.trim() && <button type="button" className="underline" onClick={() => setShowWriterNotes(value => !value)}>Writer notes: {showWriterNotes ? 'on' : 'off'}</button>}
-                        {!!script.personalNotes?.some(note => note.sectionId === script.sections[idx].id) && <button type="button" className="underline" onClick={() => setShowPersonalNotes(value => !value)}>Personal notes: {showPersonalNotes ? 'on' : 'off'}</button>}
+                        {script.sections[idx]?.notes?.trim() && (
+                          <button type="button" className="underline" onClick={() => setShowWriterNotes(value => !value)}>
+                            Writer notes: {showWriterNotes ? 'on' : 'off'}
+                          </button>
+                        )}
+                        {!!script.personalNotes?.some(note => note.sectionId === script.sections[idx].id) && (
+                          <button type="button" className="text-primary underline" onClick={() => setShowPersonalNotes(value => !value)}>
+                            Personal notes: {showPersonalNotes ? 'on' : 'off'}
+                          </button>
+                        )}
                       </div>
                     </div>
                     {showWriterNotes && script.sections[idx]?.notes?.trim() && (
-                      <p className="mt-2 whitespace-pre-wrap text-sm"><strong className="text-xs uppercase tracking-wide text-muted-foreground">{script.sections[idx].notesProvenance === 'writer' ? 'Writer:' : 'Notes (legacy / unspecified):'}</strong>{'\n'}{script.sections[idx].notes}</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm font-normal">
+                        <strong className="text-xs uppercase tracking-wide text-muted-foreground">{script.sections[idx].notesProvenance === 'writer' ? 'Writer:' : 'Notes (legacy / unspecified):'}</strong>{'\n'}
+                        {script.sections[idx].notes}
+                      </p>
                     )}
                     {showPersonalNotes && script.personalNotes?.filter(note => note.sectionId === script.sections[idx].id).map(note => (
-                      <p key={note.id} className="mt-2 whitespace-pre-wrap text-sm"><strong className="text-xs uppercase tracking-wide text-primary">Personal:</strong>{'\n'}{note.content}</p>
+                      <p key={note.id} className="mt-2 whitespace-pre-wrap text-sm font-normal">
+                        <strong className="text-xs uppercase tracking-wide text-primary">Personal:</strong>{'\n'}{note.content}
+                      </p>
                     ))}
                   </aside>
                 )}
@@ -1887,18 +1979,22 @@ export default function Reader() {
         />
       )}
 
-      {showWizard && !sceneEnabled && (
+      {showWizard && (
         <FlowSetupWizard
-          flow={{ ...flow, start: () => dispatchCommand({ action: 'playPause' }) }}
+          flow={{
+            ...flow,
+            start: sceneEnabled
+              ? flow.start
+              : () => dispatchCommand({ action: 'playPause' }),
+          }}
           onComplete={() => {
             localStorage.setItem('quickque-flow-setup-done', 'true');
             setShowWizard(false);
           }}
           onCancel={() => {
             const isSetupDone = localStorage.getItem('quickque-flow-setup-done') === 'true';
-            if (!isSetupDone) {
-              dispatchCommand({ action: 'setReadMode', mode: 'manual' });
-            }
+            if (sceneEnabled) setSceneFlowEnabled(false);
+            else if (!isSetupDone) dispatchCommand({ action: 'setReadMode', mode: 'manual' });
             setShowWizard(false);
           }}
         />
@@ -1912,7 +2008,7 @@ export default function Reader() {
           <button
             onClick={() => dispatchCommand({ action: 'playPause' })}
             aria-label={['countdown', 'starting', 'playing'].includes(playbackState.phase) ? isPerformance ? 'Pause rehearsal' : 'Pause presentation' : sceneEnabled ? 'Start or resume scene' : 'Play presentation'}
-            disabled={!sceneEnabled && readMode === 'flow' && !['ready', 'listening', 'paused', 'silence-stopped', 'stopped', 'loading', 'error'].includes(flow.status)}
+            disabled={voiceFollowSelected && (!voiceFollowReadiness?.ready || !microphoneReady)}
             className={`w-12 h-12 flex items-center justify-center rounded-xl shadow-md transition-all focus:outline-none focus:ring-4 focus:ring-primary/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed ${
               ['countdown', 'starting', 'playing'].includes(playbackState.phase) 
                 ? 'bg-amber-500 hover:bg-amber-600 text-white' 
@@ -1964,7 +2060,7 @@ export default function Reader() {
             {enrichedSections.map((sec, idx) => (
               <option key={sec.id} value={idx}>
                 {idx + 1}. {isPerformance
-                  ? `${characters.find(character => character.id === script.sections[idx]?.characterId)?.name ?? 'Unassigned'} · ${sceneMyRoleIds.includes(script.sections[idx]?.characterId ?? '') ? 'In Person' : 'AI Partner'} · ${sec.title || 'Untitled'}`
+                  ? `${characters.find(character => character.id === script.sections[idx]?.characterId)?.name ?? 'Unassigned'} · ${roleLabel(script.sections[idx]?.characterId ?? '')} · ${sec.title || 'Untitled'}`
                   : sec.title || 'Untitled'}
               </option>
             ))}

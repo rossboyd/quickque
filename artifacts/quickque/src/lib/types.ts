@@ -34,10 +34,18 @@ export type ActorCharacter = {
   voice: ActorVoice;
 };
 
+/** An explicit, user-confirmed responsibility for a character in a rehearsal. */
+export type CharacterRoleAssignment = 'my-role' | 'another-person' | 'computer-partner';
 export type ActorMode = {
   enabled: boolean;
   characters: ActorCharacter[];
   myRoleIds: string[];
+  /**
+   * New setup flow assignments. `myRoleIds` remains for portable compatibility
+   * with older libraries; an absent map is never treated as a confirmation by
+   * readiness checks.
+   */
+  roleAssignments?: Record<string, CharacterRoleAssignment>;
 };
 
 /** Descriptive aliases used by integrations that call this an actor config. */

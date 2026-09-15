@@ -1,5 +1,6 @@
 import type { Script } from './types.ts';
 import { getScriptPurpose } from './script-purpose.ts';
+import { isComputerPartner } from './script-readiness.ts';
 
 export const DEFAULT_AUDIO_VOICE = 'chatterbox-turbo:default-en';
 export type AudioEntry = {
@@ -32,7 +33,7 @@ export function scriptAudioEntries(script: Script): AudioEntry[] {
       }];
     }
     const character = script.actor?.characters.find(item => item.id === section.characterId);
-    if (!character || script.actor!.myRoleIds.includes(character.id) || character.voice.engine !== 'turbo') return [];
+    if (!character || !isComputerPartner(script.actor!, character.id) || character.voice.engine !== 'turbo') return [];
     return [{
       id: section.id,
       text: section.content,

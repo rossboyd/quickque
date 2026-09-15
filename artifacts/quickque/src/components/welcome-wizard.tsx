@@ -3,11 +3,9 @@ import { useStore } from '@/lib/store';
 import { useLocation } from 'wouter';
 import { isDesktop } from '@/lib/desktop';
 import { BrandMark } from './brand-mark';
-import { AudioSetup } from './audio-setup';
-import { VoiceFollowSetupButton } from './voice-follow-setup-button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog';
 
-const steps = ['Welcome', 'Script storage', 'Optional audio', 'Ready'];
+const steps = ['Welcome', 'Script storage', 'Ready'];
 
 export function WelcomeWizard() {
   const store = useStore();
@@ -19,10 +17,6 @@ export function WelcomeWizard() {
   const [error, setError] = useState<string | null>(null);
   const [, setLocation] = useLocation();
   const desktop = isDesktop();
-  const references = scripts.flatMap(script => [
-    ...(script.narratorVoice?.voiceId ? [script.narratorVoice.voiceId] : []),
-    ...(script.actor?.characters.flatMap(character => character.voice.voiceId ? [character.voice.voiceId] : []) ?? []),
-  ]);
   useEffect(() => { if (!profile.onboardingComplete) { setOpen(true); setStep(0); } }, [profile.onboardingComplete]);
   useEffect(() => {
     const reopen = () => { setOpen(true); setStep(0); setName(profile.name || ''); setError(null); };
@@ -32,7 +26,7 @@ export function WelcomeWizard() {
   const next = () => {
     if (step === 0 && (!name.trim() || !updateProfile({ name: name.trim() }))) { setError('Enter your name and try again.'); return; }
     if (step === 1 && desktop && !libraryDirectory) return;
-    setError(null); setStep(current => Math.min(3, current + 1));
+    setError(null); setStep(current => Math.min(2, current + 1));
   };
   const finish = () => {
     if (!name.trim() || (desktop && !libraryDirectory)) { setStep(!name.trim() ? 0 : 1); return false; }
@@ -68,12 +62,6 @@ export function WelcomeWizard() {
           <div className="space-y-2 text-sm"><h3 className="font-medium">What is saved where?</h3><p className="text-muted-foreground">Scripts live in {desktop ? 'your chosen folder' : 'this browser'}. In the Mac app, voice samples and generated audio are saved separately in app storage. Script backups do not include audio.</p></div>
         </>}
         {step === 2 && <>
-          <h2 className="text-2xl font-semibold">Choose how you want to use audio</h2>
-          <p className="text-sm text-muted-foreground">You can set up either feature, both, or neither. Return to Settings → Voices & audio at any time.</p>
-          <details className="rounded-xl border border-border p-4"><summary className="cursor-pointer font-semibold">AI voices · Read scripts aloud</summary><div className="mt-4"><AudioSetup referencedVoiceIds={references} /></div></details>
-          <VoiceFollowSetupButton />
-        </>}
-        {step === 3 && <>
           <h2 className="text-2xl font-semibold">Your workspace is ready, {name.trim()}.</h2>
           <p className="text-sm text-muted-foreground">Start with a script. Any voice setup you skipped is available in Settings → Voices & audio.</p>
           <div className="rounded-xl border border-border p-4 text-sm space-y-2"><p>✓ Profile saved</p><p>✓ {desktop ? 'Script folder selected' : 'Browser storage ready'}</p><p className="text-muted-foreground">Optional audio setup can be checked at any time.</p></div>
@@ -85,7 +73,7 @@ export function WelcomeWizard() {
       </div>
       <div className="flex items-center justify-between gap-3 border-t border-border px-6 py-4">
         {step > 0 ? <button type="button" className="text-sm text-muted-foreground" onClick={() => { setStep(value => value - 1); setError(null); }}>Back</button> : <button type="button" className="text-sm text-muted-foreground" onClick={() => setOpen(false)}>Set up later</button>}
-        {step < 3 ? <button type="button" disabled={(step === 0 && !name.trim()) || (step === 1 && desktop && (!libraryDirectory || folderLoading))} onClick={next} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{step === 2 ? 'Continue to workspace' : 'Continue'}</button> : <button type="button" className="text-sm text-primary" onClick={() => { if (finish()) setLocation('/'); }}>Go to my library</button>}
+        {step < 2 ? <button type="button" disabled={(step === 0 && !name.trim()) || (step === 1 && desktop && (!libraryDirectory || folderLoading))} onClick={next} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Continue</button> : <button type="button" className="text-sm text-primary" onClick={() => { if (finish()) setLocation('/'); }}>Go to my library</button>}
       </div>
     </DialogContent>
   </Dialog>;

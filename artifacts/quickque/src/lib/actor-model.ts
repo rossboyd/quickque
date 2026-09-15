@@ -63,6 +63,7 @@ export function migrateActorVoices(actor: ActorMode): ActorMode {
       voice: migrateLegacyVoice(character.voice),
     })),
     myRoleIds: [...actor.myRoleIds],
+    ...(actor.roleAssignments ? { roleAssignments: { ...actor.roleAssignments } } : {}),
   };
 }
 
@@ -127,16 +128,25 @@ export function isValidActor(value: unknown): value is ActorMode {
   }
 
   const roleIds = new Set<string>();
-  return value.myRoleIds.every(roleId => (
+  if (!value.myRoleIds.every(roleId => (
     isBoundedId(roleId) &&
     !roleIds.has(roleId) &&
     characterIds.has(roleId) &&
     (roleIds.add(roleId), true)
-  ));
+  ))) return false;
+  if (value.roleAssignments !== undefined) {
+    if (!isRecord(value.roleAssignments)) return false;
+    const validAssignments = new Set(['my-role', 'another-person', 'computer-partner']);
+    if (Object.keys(value.roleAssignments).length > MAX_ACTOR_ROLES) return false;
+    if (!Object.entries(value.roleAssignments).every(([id, assignment]) =>
+      characterIds.has(id) && typeof assignment === 'string' && validAssignments.has(assignment)
+    )) return false;
+  }
+  return true;
 }
 
 export function cloneActor(actor: ActorMode): ActorMode {
-  return {
+  const cloned: ActorMode = {
     enabled: actor.enabled,
     characters: actor.characters.map(character => ({
       id: character.id,
@@ -149,6 +159,8 @@ export function cloneActor(actor: ActorMode): ActorMode {
     })),
     myRoleIds: [...actor.myRoleIds],
   };
+  if (actor.roleAssignments) cloned.roleAssignments = { ...actor.roleAssignments };
+  return cloned;
 }
 
 function freshCharacterId(
@@ -200,6 +212,13 @@ export function cloneActorWithFreshCharacterIds(
       myRoleIds: actor.myRoleIds
         .map(roleId => characterIdMap.get(roleId))
         .filter((roleId): roleId is string => Boolean(roleId)),
+      ...(actor.roleAssignments ? {
+        roleAssignments: Object.fromEntries(
+          Object.entries(actor.roleAssignments)
+            .map(([roleId, assignment]) => [characterIdMap.get(roleId), assignment] as const)
+            .filter((entry): entry is readonly [string, NonNullable<ActorMode['roleAssignments']>[string]] => Boolean(entry[0])),
+        ),
+      } : {}),
     },
     characterIdMap,
   };
@@ -227,6 +246,11 @@ export function deleteActorCharacter(
         voice: cloneVoiceData(character.voice),
       })),
     myRoleIds: actor.myRoleIds.filter(roleId => roleId !== characterId),
+    ...(actor.roleAssignments ? {
+      roleAssignments: Object.fromEntries(
+        Object.entries(actor.roleAssignments).filter(([id]) => id !== characterId),
+      ),
+    } : {}),
   };
 }
 

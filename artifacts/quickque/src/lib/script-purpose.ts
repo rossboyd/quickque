@@ -11,6 +11,12 @@ export function isValidScriptPurpose(value: unknown): boolean {
 
 export type SceneSetupIssue = { message: string; sectionId?: string; characterId?: string; focusDialogue?: boolean };
 
+function isComputerPartner(actor: NonNullable<Script['actor']>, characterId: string): boolean {
+  return actor.roleAssignments
+    ? actor.roleAssignments[characterId] === 'computer-partner'
+    : !actor.myRoleIds.includes(characterId);
+}
+
 /** Available IDs are supplied only after local voice discovery has completed. */
 export function getSceneSetupIssues(script: Script, availableVoiceIds?: ReadonlySet<string>): SceneSetupIssue[] {
   if (getScriptPurpose(script) !== 'performance' || !script.actor?.enabled) return [];
@@ -26,7 +32,12 @@ export function getSceneSetupIssues(script: Script, availableVoiceIds?: Readonly
     if (!section.content.trim()) issues.push({ sectionId: section.id, focusDialogue: true, message: `Turn ${index + 1}: add dialogue or remove the empty turn.` });
   });
   actor.characters.forEach(character => {
-    if (!assigned.has(character.id) || actor.myRoleIds.includes(character.id)) return;
+    if (!assigned.has(character.id)) return;
+    if (actor.roleAssignments && !actor.roleAssignments[character.id]) {
+      issues.push({ characterId: character.id, message: `${character.name}: confirm My role, Another person, or Computer partner in Scene Partner setup.` });
+      return;
+    }
+    if (!isComputerPartner(actor, character.id)) return;
     if (!character.voice.voiceId ||
       (availableVoiceIds && !availableVoiceIds.has(character.voice.voiceId))) {
       issues.push({ characterId: character.id, message: `${character.name}: choose an available local voice in Scene Partner setup.` });
@@ -37,6 +48,16 @@ export function getSceneSetupIssues(script: Script, availableVoiceIds?: Readonly
 
 export function getPerformanceSummary(script: Script): string {
   const actor = script.actor;
-  const names = actor?.characters.filter(c => actor.myRoleIds.includes(c.id)).map(c => c.name) ?? [];
-  return `${names.length ? `In Person: ${names.join(', ')}` : 'Full AI Partner read-through'} · ${script.sections.length} turns`;
+  const humanNames = actor?.characters
+    .filter(c => !isComputerPartner(actor, c.id))
+    .map(c => c.name) ?? [];
+  const anotherNames = actor?.characters
+    .filter(c => actor.roleAssignments?.[c.id] === 'another-person')
+    .map(c => c.name) ?? [];
+  const myNames = humanNames.filter(name => !anotherNames.includes(name));
+  const roleSummary = [
+    myNames.length ? `In Person: ${myNames.join(', ')}` : '',
+    anotherNames.length ? `Another person: ${anotherNames.join(', ')}` : '',
+  ].filter(Boolean).join(' · ') || 'Full AI Partner read-through';
+  return `${roleSummary} · ${script.sections.length} turns`;
 }

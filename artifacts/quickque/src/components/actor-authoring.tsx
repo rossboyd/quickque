@@ -5,7 +5,7 @@ import { Plus, Trash2, Users, User, Volume2, Square, RefreshCw, X, Play, Setting
 import { createSceneSpeech, voiceFailureMessage } from '@/lib/scene-speech';
 import { createVoiceLibrary, type ClonedVoice } from '@/lib/voice-library';
 import { VoiceLibraryPanel } from '@/components/voice-library';
-import type { ActorCharacter, ActorMode, ScriptSection } from '@/lib/types';
+import type { ActorCharacter, ActorMode, CharacterRoleAssignment, ScriptSection } from '@/lib/types';
 import { CHARACTER_COLORS, getCharacterColor, nextCharacterColor } from '@/lib/actor-colors';
 import { toast } from '@/hooks/use-toast';
 import { generateId } from '@/lib/utils';
@@ -146,13 +146,17 @@ export function ActorAuthoringPanel({
     setReassignToId('unassign');
   };
 
-  const setAssignment = (id: string, inPerson: boolean) => {
+  const setAssignment = (id: string, assignment: CharacterRoleAssignment) => {
     stopPreview();
     onChange({
       ...currentActor,
-      myRoleIds: inPerson
+      myRoleIds: assignment === 'my-role'
         ? [...currentActor.myRoleIds.filter(roleId => roleId !== id), id]
         : currentActor.myRoleIds.filter(roleId => roleId !== id),
+      roleAssignments: {
+        ...(currentActor.roleAssignments ?? {}),
+        [id]: assignment,
+      },
     });
   };
 
@@ -297,7 +301,17 @@ export function ActorAuthoringPanel({
             <div className="space-y-3">
               {currentActor.characters.map((char) => {
                 const isExpanded = editingCharId === char.id;
-                const isInPerson = currentActor.myRoleIds.includes(char.id);
+                const explicitAssignment = currentActor.roleAssignments?.[char.id];
+                // Legacy casts keep their visual role until the user changes
+                // it, but the readiness model does not count this as
+                // confirmation.
+                const isInPerson = explicitAssignment
+                  ? explicitAssignment === 'my-role'
+                  : currentActor.myRoleIds.includes(char.id);
+                const isAnotherPerson = explicitAssignment === 'another-person';
+                const isComputerPartner = explicitAssignment
+                  ? explicitAssignment === 'computer-partner'
+                  : !currentActor.myRoleIds.includes(char.id);
 
                 return (
                   <div
@@ -325,13 +339,17 @@ export function ActorAuthoringPanel({
                         <div className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5 mt-0.5">
                           {isInPerson ? (
                             <><User className="w-3 h-3" /> You (In Person)</>
+                          ) : isAnotherPerson ? (
+                            <><Users className="w-3 h-3" /> Another person</>
+                          ) : explicitAssignment ? (
+                            <><Sparkles className="w-3 h-3 text-primary/70" /> Computer partner</>
                           ) : (
-                            <><Sparkles className="w-3 h-3 text-primary/70" /> AI Partner</>
+                            <><Sparkles className="w-3 h-3 text-primary/70" /> Needs role confirmation</>
                           )}
                         </div>
                       </div>
 
-                      {!isInPerson && !isExpanded && (
+                       {isComputerPartner && !isExpanded && (
                         <div
                           role="button"
                           tabIndex={0}
@@ -373,7 +391,7 @@ export function ActorAuthoringPanel({
                                   ? 'bg-background text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/5'
                                   : 'text-muted-foreground hover:text-foreground'
                               }`}
-                              onClick={() => setAssignment(char.id, true)}
+                               onClick={() => setAssignment(char.id, 'my-role')}
                             >
                               <User className="w-3.5 h-3.5" />
                               In Person
@@ -385,16 +403,29 @@ export function ActorAuthoringPanel({
                                   ? 'bg-background text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/5'
                                   : 'text-muted-foreground hover:text-foreground'
                               }`}
-                              onClick={() => setAssignment(char.id, false)}
+                               onClick={() => setAssignment(char.id, 'computer-partner')}
                             >
                               <Sparkles className="w-3.5 h-3.5" />
-                              AI Partner
+                               AI Partner
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Another person"
+                              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-md transition-all ${
+                                isAnotherPerson
+                                  ? 'bg-background text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/5'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                              onClick={() => setAssignment(char.id, 'another-person')}
+                            >
+                              <Users className="w-3.5 h-3.5" />
+                              Another person
                             </button>
                           </div>
                         </div>
 
                         {/* AI Partner Settings */}
-                        {!isInPerson && (
+                        {isComputerPartner && (
                           <div className="space-y-4 pt-4 border-t border-border/50">
                             <div className="space-y-3">
                               <div className="flex items-center justify-between">

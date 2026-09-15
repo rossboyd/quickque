@@ -18,3 +18,4 @@
 - [Pointer reorder testing](pointer-reorder-testing.md) — keep drag source and destination inside the test viewport; offscreen coordinates do not produce a usable pointer gesture.
 - [Root-mounted browser module tests](root-mounted-browser-module-tests.md) — absolute dynamic imports require a root-mounted Vite test server, not an artifact base path.
 - [Post-merge database safety](post-merge-schema-safety.md) — incomplete schema pushes can propose table deletion; inspect logs even when the setup runner reports success.
+- [Rehearsal role authority](rehearsal-role-authority.md) — explicit cast roles must drive readiness, audio generation and scene execution together.
