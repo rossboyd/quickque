@@ -203,7 +203,7 @@ export function loadSiteDataSync(root = packageDirectory) {
     .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
     .map((entry) => readArticle(path.join(guideDirectory, entry.name), config))
     .sort((a, b) => {
-      const order = ['requirements-installation', 'first-presentation', 'scripts', 'document-import', 'backup-restore', 'playback', 'mac-overlay', 'local-flow', 'phone-remote', 'privacy', 'updating-uninstalling', 'contributing'];
+      const order = ['requirements-installation', 'first-presentation', 'scripts', 'format-with-your-ai', 'document-import', 'backup-restore', 'playback', 'mac-overlay', 'local-flow', 'phone-remote', 'privacy', 'updating-uninstalling', 'contributing'];
       const rank = (slug) => order.includes(slug) ? order.indexOf(slug) : order.length;
       return rank(a.slug) - rank(b.slug) || a.slug.localeCompare(b.slug);
     });

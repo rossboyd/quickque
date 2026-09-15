@@ -15,6 +15,8 @@ async function fixture(name: string): Promise<ArrayBuffer> {
 
 test('validates supported extensions and rejects unsafe file sizes', () => {
   assert.equal(validateFile('speech.TXT', 12), 'txt');
+  assert.equal(validateFile('speech.md', 12), 'md');
+  assert.equal(validateFile('speech.MARKDOWN', 12), 'md');
   assert.equal(validateFile('speech.docx', 12), 'docx');
   assert.equal(validateFile('speech.rtf', 12), 'rtf');
   assert.equal(validateFile('speech.pdf', 12), 'pdf');
@@ -27,6 +29,13 @@ test('extracts plain Unicode text without rendering markup', async () => {
   assert.equal(result.format, 'txt');
   assert.match(result.text, /Quickque — 世界/);
   assert.match(result.text, /<script>alert/);
+});
+
+test('preserves Quickque Markdown for deterministic local parsing', async () => {
+  const source = '# Demo\n\n## Opening\n**Alex:**\nHello there.\n> Pause';
+  const result = await extractDocument('demo.md', new TextEncoder().encode(source).buffer);
+  assert.equal(result.format, 'md');
+  assert.equal(result.text, source);
 });
 
 test('extracts RTF paragraphs and Unicode while skipping rich payloads', async () => {

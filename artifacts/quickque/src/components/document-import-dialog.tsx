@@ -80,10 +80,10 @@ export function DocumentImportDialog({
     setError(null);
     
     // Check file extension client side
-    const validExtensions = ['.txt', '.docx', '.rtf', '.pdf'];
+    const validExtensions = ['.txt', '.md', '.markdown', '.docx', '.rtf', '.pdf'];
     const extension = selectedFile.name.substring(selectedFile.name.lastIndexOf('.')).toLowerCase();
     if (!validExtensions.includes(extension)) {
-      setError(`Unsupported file type. Please select a .txt, .docx, .rtf, or .pdf file.`);
+      setError(`Unsupported file type. Please select a .txt, .md, .docx, .rtf, or .pdf file.`);
       return;
     }
 
@@ -198,7 +198,7 @@ export function DocumentImportDialog({
       return;
     }
 
-    const result = importDocument(finalTitle, finalText);
+    const result = importDocument(finalTitle, finalText, extracted?.format === 'md' ? 'markdown' : 'plain');
     if (result.ok) {
       onSuccess();
       handleOpenChange(false);
@@ -218,7 +218,7 @@ export function DocumentImportDialog({
         <DialogHeader>
           <DialogTitle>Import Document</DialogTitle>
           <DialogDescription>
-            {step === 'idle' && "Select a local file (max 10MB) to import. Processing happens locally—no data is uploaded. Note: Only plain text is extracted; formatting and images are lost. PDF extraction may vary and requires layout review."}
+            {step === 'idle' && "Select a local file (max 10MB) to import. Processing happens locally—no data is uploaded. Quickque Markdown preserves script structure; other document formats are converted to plain text. PDF extraction may vary and requires layout review."}
             {step === 'extracting' && `Extracting plain text from ${file?.name}...`}
             {step === 'review' && "Review and edit the extracted text. Save when you're ready to create the script."}
           </DialogDescription>
@@ -251,14 +251,14 @@ export function DocumentImportDialog({
               type="file" 
               ref={fileInputRef}
               onChange={handleFileSelect}
-              accept=".txt,.pdf,.docx,.rtf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/rtf"
+              accept=".txt,.md,.markdown,.pdf,.docx,.rtf,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/rtf"
               className="hidden" 
               aria-hidden="true"
             />
             <UploadCloud className={`w-12 h-12 mb-4 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
             <h3 className="text-lg font-medium mb-1">Click to upload or drag and drop</h3>
             <p className="text-sm text-muted-foreground max-w-xs">
-              Single file only. Plain text will be extracted.
+               TXT, Markdown, DOCX, RTF or PDF. Processed locally.
             </p>
           </div>
         )}
@@ -281,7 +281,7 @@ export function DocumentImportDialog({
 
         {step === 'review' && extracted && (
           <div className="flex flex-col flex-1 min-h-0 space-y-4 overflow-y-auto pr-2">
-            {(extracted.format !== 'txt' || extracted.warnings.length > 0) && (
+            {(extracted.format !== 'txt' && extracted.format !== 'md' || extracted.warnings.length > 0) && (
               <div className="bg-muted/50 border border-border rounded-md p-3 text-sm flex gap-2 items-start text-muted-foreground">
                 <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <div className="space-y-1">

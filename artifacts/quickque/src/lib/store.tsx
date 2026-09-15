@@ -18,6 +18,7 @@ import {
   PresentationPreferences,
 } from './types';
 import { generateId } from './utils';
+import { parseScriptMarkdown } from './script-markdown';
 import { pruneResumePositions } from './reader-resume-position';
 import {
   collectScriptIds,
@@ -99,7 +100,7 @@ type StoreContextType = {
   setSortMode: (mode: SortMode) => boolean;
   reorderScripts: (ids: string[]) => boolean;
   importScripts: (data: string) => boolean;
-  importDocument: (title: string, text: string) => ImportDocumentResult;
+  importDocument: (title: string, text: string, format?: 'plain' | 'markdown') => ImportDocumentResult;
   exportScripts: (ids?: string[], format?: 'json' | 'txt') => string;
   recoveryData: string | null;
   recoveryRequired: boolean;
@@ -1046,7 +1047,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return committed.ok;
   }, [commitLibrary]);
 
-  const importDocument = useCallback((title: string, text: string): ImportDocumentResult => {
+  const importDocument = useCallback((title: string, text: string, format: 'plain' | 'markdown' = 'plain'): ImportDocumentResult => {
     const document = createDocumentScript(
       title,
       text,
@@ -1057,6 +1058,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if ('error' in document) {
       setError(document.error);
       return document;
+    }
+    if (format === 'markdown') {
+      const parsed = parseScriptMarkdown(text, document.script);
+      if (!parsed.ok) {
+        setError(parsed.error);
+        return { ok: false, error: parsed.error };
+      }
+      document.script = { ...document.script, ...parsed.updates, updatedAt: Date.now() };
     }
     const nextOrder = [
       document.script.id,

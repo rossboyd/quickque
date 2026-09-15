@@ -2,7 +2,7 @@ import { ScriptAudioPanel } from './script-audio-panel';
 import { ScriptPurposeIcon } from './script-purpose-icon';
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { calculateWordCount, estimateTime, formatTime, generateId } from '@/lib/utils';
-import { Play, Plus, Trash, ChevronUp, ChevronDown, ChevronLeft, Users, PanelLeft, SplitSquareVertical } from 'lucide-react';
+import { Play, Plus, Trash, ChevronUp, ChevronDown, ChevronLeft, Users, PanelLeft, SplitSquareVertical, GripVertical } from 'lucide-react';
 import { Script, ScriptSection, Settings, DEFAULT_SETTINGS } from '@/lib/types';
 import { MAX_SECTIONS } from '@/lib/store-persistence';
 import { getFontFamilyCss, getTextColorCss } from '@/lib/appearance';
@@ -44,6 +44,10 @@ export function Editor({
   const isPerformance = getScriptPurpose(script) === 'performance';
   const sectionLabel = isPerformance ? 'turn' : 'section';
   const [showMarkdown, setShowMarkdown] = useState(false);
+  const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
+  const [sectionDropTarget, setSectionDropTarget] = useState<{ id: string; edge: 'before' | 'after' } | null>(null);
+  const draggedSectionRef = useRef<string | null>(null);
+  const sectionDropTargetRef = useRef<{ id: string; edge: 'before' | 'after' } | null>(null);
   const [checkingVoices, setCheckingVoices] = useState(false);
   const [preflightIssues, setPreflightIssues] = useState<SceneSetupIssue[] | null>(null);
   const voiceLibrary = useMemo(() => createVoiceLibrary(), []);
@@ -123,6 +127,31 @@ export function Editor({
     newSections[index] = newSections[index + direction];
     newSections[index + direction] = temp;
     onChange({ sections: newSections });
+  };
+
+  const dropSection = (targetId: string, edge: 'before' | 'after') => {
+    const sourceId = draggedSectionRef.current;
+    if (!sourceId || sourceId === targetId) return;
+    const next = [...script.sections];
+    const sourceIndex = next.findIndex(section => section.id === sourceId);
+    if (sourceIndex === -1) return;
+    const [moved] = next.splice(sourceIndex, 1);
+    const targetIndex = next.findIndex(section => section.id === targetId);
+    if (targetIndex === -1) return;
+    next.splice(targetIndex + (edge === 'after' ? 1 : 0), 0, moved);
+    onChange({ sections: next });
+  };
+
+  const clearSectionDrag = () => {
+    draggedSectionRef.current = null;
+    sectionDropTargetRef.current = null;
+    setDraggedSectionId(null);
+    setSectionDropTarget(null);
+  };
+
+  const updateSectionDropTarget = (target: { id: string; edge: 'before' | 'after' } | null) => {
+    sectionDropTargetRef.current = target;
+    setSectionDropTarget(target);
   };
   
   const splitSection = (id: string) => {
@@ -260,10 +289,51 @@ export function Editor({
             </div>}
             <ScriptAudioPanel key={script.id} script={script} />
             {script.sections.map((section, idx) => (
-              <div key={section.id} style={isPerformance ? { borderLeftWidth: 4, borderLeftColor: getCharacterColor(script.actor?.characters.find(character => character.id === section.characterId)) } : undefined} className="document-section group relative border-b border-border/70 pb-6 focus-within:border-primary/40 transition-colors">
+              <div
+                key={section.id}
+                data-testid={`section-editor-${section.id}`}
+                data-section-id={section.id}
+                style={isPerformance ? { borderLeftWidth: 4, borderLeftColor: getCharacterColor(script.actor?.characters.find(character => character.id === section.characterId)) } : undefined}
+                className={`document-section group relative border-b border-border/70 pb-6 transition-all focus-within:border-primary/40 ${draggedSectionId === section.id ? 'opacity-45' : ''}`}
+              >
+                {sectionDropTarget?.id === section.id && <div aria-hidden="true" className={`pointer-events-none absolute inset-x-0 z-20 h-0.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))] ${sectionDropTarget.edge === 'before' ? '-top-px' : '-bottom-px'}`} />}
                 <div className="flex flex-col min-w-0">
                   <div className="flex items-center justify-between gap-2 py-2">
                     <div className="flex items-center flex-1 gap-2 min-w-0">
+                      <button
+                        type="button"
+                        onPointerDown={event => {
+                          if (script.sections.length <= 1) return;
+                          event.preventDefault();
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                          draggedSectionRef.current = section.id;
+                          setDraggedSectionId(section.id);
+                        }}
+                        onPointerMove={event => {
+                          if (!draggedSectionRef.current) return;
+                          const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-section-id]');
+                          const targetId = target?.dataset.sectionId;
+                          if (!target || !targetId || targetId === draggedSectionRef.current) {
+                            updateSectionDropTarget(null);
+                            return;
+                          }
+                          const bounds = target.getBoundingClientRect();
+                          updateSectionDropTarget({ id: targetId, edge: event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after' });
+                        }}
+                        onPointerUp={event => {
+                          const target = sectionDropTargetRef.current;
+                          if (target) dropSection(target.id, target.edge);
+                          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                          clearSectionDrag();
+                        }}
+                        onPointerCancel={clearSectionDrag}
+                        disabled={script.sections.length <= 1}
+                        className="section-tools block cursor-grab touch-none rounded p-1.5 text-muted-foreground hover:bg-black/5 hover:text-foreground active:cursor-grabbing disabled:opacity-30 dark:hover:bg-white/10"
+                        aria-label={`Drag ${sectionLabel} "${section.title}" to reorder`}
+                        title={`Drag to reorder ${sectionLabel}s`}
+                      >
+                        <GripVertical className="h-4 w-4" />
+                      </button>
                       <div className="section-tools section-reorder flex flex-col text-muted-foreground flex-shrink-0">
                         <button 
                           onClick={() => moveSection(idx, -1)} 

@@ -6,7 +6,7 @@ const here = new URL('../', import.meta.url);
 const config = JSON.parse(await fs.readFile(new URL('config/site.json', here), 'utf8'));
 const files = (await fs.readdir(new URL('content/guide/', here))).filter(f => f.endsWith('.json'));
 const articles = await Promise.all(files.map(async file => JSON.parse(await fs.readFile(new URL(`content/guide/${file}`, here), 'utf8'))));
-const required = ['requirements-installation', 'first-presentation', 'scripts', 'document-import', 'backup-restore', 'playback', 'mac-overlay', 'local-flow', 'phone-remote', 'privacy', 'updating-uninstalling', 'contributing'];
+const required = ['requirements-installation', 'first-presentation', 'scripts', 'format-with-your-ai', 'document-import', 'backup-restore', 'playback', 'mac-overlay', 'local-flow', 'phone-remote', 'privacy', 'updating-uninstalling', 'contributing'];
 assert.deepEqual(articles.map(a => a.slug).sort(), required.sort(), 'Required guide inventory');
 assert.equal(config.release.status, 'unavailable', 'Do not enable prebuilt install without a verified installer implementation');
 assert.equal(config.repository, 'https://github.com/rossboyd/quickque');

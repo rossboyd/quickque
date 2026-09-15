@@ -100,3 +100,43 @@ test('scripts can be pinned to a persistent top section', async ({ page }) => {
   await talk.getByRole('button', { name: 'Options for All hands', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: 'Unpin from top', exact: true })).toBeVisible();
 });
+
+test('sections can be reordered by dragging while buttons remain available', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1600 });
+  await seed(page);
+  await page.getByRole('article', { name: 'All hands', exact: true }).getByRole('button', { name: 'Edit All hands', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Section', exact: true }).click();
+  const titles = page.getByRole('textbox', { name: 'Section Title', exact: true });
+  await titles.nth(1).fill('Closing');
+  await expect(page.getByRole('button', { name: 'Move section "Opening" down', exact: true })).toBeVisible();
+  const handle = page.getByRole('button', { name: 'Drag section "Opening" to reorder', exact: true });
+  const target = page.getByTestId(/section-editor-/).nth(1);
+  const handleBounds = await handle.boundingBox();
+  const targetBounds = await target.boundingBox();
+  if (!handleBounds || !targetBounds) throw new Error('Section drag controls are not visible.');
+  await page.mouse.move(handleBounds.x + handleBounds.width / 2, handleBounds.y + handleBounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBounds.x + targetBounds.width / 2, targetBounds.y + targetBounds.height * 0.75, { steps: 8 });
+  await page.mouse.up();
+  await expect(titles.nth(0)).toHaveValue('Closing');
+  await expect(titles.nth(1)).toHaveValue('Opening');
+  await page.reload();
+  await expect(titles.nth(0)).toHaveValue('Closing');
+  await expect(titles.nth(1)).toHaveValue('Opening');
+});
+
+test('editor sidebar uses compact actions and expands search on demand', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 950 });
+  await seed(page);
+  await page.getByRole('article', { name: 'All hands', exact: true }).getByRole('button', { name: 'Edit All hands', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Search scripts input', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Import Document', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New script', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Search scripts', exact: true }).click();
+  const search = page.getByRole('textbox', { name: 'Search scripts input', exact: true });
+  await expect(search).toBeFocused();
+  await search.fill('All hands');
+  await expect(page.getByText('1 results', { exact: true })).toBeVisible();
+  await search.press('Escape');
+  await expect(search).toHaveCount(0);
+});

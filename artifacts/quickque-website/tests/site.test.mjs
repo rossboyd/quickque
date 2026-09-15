@@ -184,6 +184,6 @@ test('search exposes keyboard instructions and an atomic live selection announce
   const { html } = render('/guide', {}, data);
   assert.match(html, /aria-describedby="search-help search-selection"/);
   assert.match(html, /id="search-selection" role="status" aria-live="polite" aria-atomic="true"/);
-  assert.match(html, /12 articles found/);
+  assert.match(html, /13 articles found/);
   assert.match(html, /Escape clears the search/);
 });

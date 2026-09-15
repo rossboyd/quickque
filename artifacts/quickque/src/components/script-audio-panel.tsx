@@ -9,6 +9,7 @@ import { AUDIO_CHANGED, AUDIO_JOB_CHANGED, audioJobs, audioEntitlement, audioSta
 import { isDesktop } from '@/lib/desktop';
 import { createVoiceLibrary, type ClonedVoice } from '@/lib/voice-library';
 import { useStore } from '@/lib/store';
+import { Download, Headphones, MoreHorizontal, Pause, Play, RefreshCw, Sparkles, Trash2, Volume2 } from 'lucide-react';
 
 function remainingTime(job: AudioJob | null, now: number) {
   if (!job || job.stage !== 'generation' || job.completed <= 0 || job.completed >= job.total) return null;
@@ -156,15 +157,18 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
   const completedWork = job?.completedWork ?? 0;
   const progress = totalWork ? Math.round((completedWork / totalWork) * 100) : 0;
   const button = 'rounded-xl border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40';
-  return <details className="group rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
-    <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
-      <span>
-        <span className="block text-base font-semibold">Rehearsal audio</span>
-        <span className="mt-0.5 block text-sm font-normal text-muted-foreground">Listen to your script and learn it anywhere.</span>
-      </span>
-      <span aria-hidden="true" className="text-xl text-muted-foreground transition-transform group-open:rotate-45">+</span>
-    </summary>
-    <div className="mt-5 space-y-4 text-sm">
+  return <section aria-labelledby={`script-audio-title-${script.id}`} className="space-y-4">
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <h2 id={`script-audio-title-${script.id}`} className="text-base font-semibold">Rehearsal audio</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">Listen to your script and learn it anywhere.</p>
+      </div>
+      {ready && <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        Ready
+      </span>}
+    </div>
+    <div className="space-y-4 text-sm">
       {performance && <p className="text-muted-foreground">Quickque will speak your AI Partner’s lines. Your lines and notes stay silent.</p>}
       {!performance && <div className="space-y-1">
          <label htmlFor={`narrator-voice-${script.id}`} className="text-sm font-medium">Choose a voice</label>
@@ -181,7 +185,7 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
            {voices.map(voice => <option key={voice.id} value={voice.referenceId}>{voice.name} (revision {voice.revision})</option>)}
          </select> : <p className="text-xs text-muted-foreground" data-testid="status-narrator-desktop-only">Narrator voices require the Quickque Mac desktop app. Browser speech is not used.</p>}
       </div>}
-       {(generating || operation === 'generate') ? <div className="space-y-3 rounded-2xl bg-muted/60 p-4" role="status" data-testid="audio-generation-progress">
+      {(generating || operation === 'generate') ? <div className="space-y-3 rounded-2xl border border-border bg-muted/60 p-4" role="status" data-testid="audio-generation-progress">
          <div className="flex items-start justify-between gap-3">
            <span>
              <span className="block font-medium">{job?.stage === 'model_load' ? 'Getting ready…' : job?.stage === 'voice_prepare' ? 'Preparing the voice…' : job?.stage === 'generation' ? 'Creating your rehearsal audio…' : 'Getting ready…'}</span>
@@ -191,18 +195,62 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
         </div>
          <progress aria-label="Audio generation progress" className="h-2 w-full overflow-hidden rounded-full accent-primary" max={totalWork || 1} value={job?.stage === 'generation' ? completedWork : undefined} />
          <button type="button" className="text-xs text-muted-foreground underline-offset-4 hover:underline" onClick={() => { void cancelAudioGeneration().catch(error => setMessage(String(error))); }}>Stop</button>
-       </div> : <p role="status" className="rounded-xl bg-muted/50 px-4 py-3 text-sm text-muted-foreground">{message}</p>}
-      <div className="flex flex-wrap gap-2">
-         <button type="button" className={`${button} border-primary bg-primary text-primary-foreground hover:bg-primary/90`} disabled={!paid || busy || !scriptAudioEntries(script).length} onClick={generate}>{ready ? 'Create new audio' : 'Create rehearsal audio'}</button>
-         <button type="button" className={button} disabled={!paid || !ready || busy} onClick={play}>Listen</button>
-        <button type="button" className={button} disabled={!paid || !ready || busy} onClick={() => run('export', async valid => { const request = await audioRequest(script); if (!valid()) return; const path = await exportAudio(request); if (path && valid()) setMessage('MP4 exported.'); })}>Export MP4</button>
-        {playing && <button type="button" className={button} onClick={() => { aborter.current?.abort(); }}>Stop listening</button>}
-      </div>
-       <details className="rounded-xl border border-border px-3 py-2.5">
-         <summary className="cursor-pointer text-xs text-muted-foreground">More options</summary>
+      </div> : ready ? <div data-testid="audio-ready-player" className="overflow-hidden rounded-2xl bg-[#18181b] text-white shadow-lg shadow-black/10">
+        <div className="flex items-center gap-3 p-3 sm:p-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/55 shadow-inner">
+            <Volume2 className="h-5 w-5" />
+          </div>
+          <button
+            type="button"
+            disabled={busy && !playing}
+            onClick={() => playing ? aborter.current?.abort() : play()}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform hover:scale-105 disabled:opacity-40"
+            aria-label={playing ? 'Stop saved audio' : 'Play saved audio'}
+          >
+            {playing ? <Pause className="h-4 w-4 fill-current" /> : <Play className="ml-0.5 h-4 w-4 fill-current" />}
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold">{script.title}</p>
+            <p role="status" className="mt-0.5 truncate text-xs text-white/60">{playing ? 'Playing saved audio…' : `${total} saved ${total === 1 ? 'passage' : 'passages'} · On this Mac`}</p>
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/15">
+              <div className={`h-full rounded-full bg-white transition-all ${playing ? 'w-2/3 animate-pulse' : 'w-0'}`} />
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run('export', async valid => { const request = await audioRequest(script); if (!valid()) return; const path = await exportAudio(request); if (path && valid()) setMessage('MP4 exported.'); })}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/65 hover:bg-white/10 hover:text-white disabled:opacity-40"
+            aria-label="Export MP4"
+            title="Export MP4"
+          >
+            <Download className="h-4 w-4" />
+          </button>
+        </div>
+      </div> : <div data-testid="audio-missing-cta" className="flex flex-col gap-4 rounded-2xl border border-dashed border-primary/35 bg-primary/[0.045] p-5 sm:flex-row sm:items-center">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Headphones className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">Prepare audio for this script</p>
+          <p role="status" className="mt-1 text-sm text-muted-foreground">{message}</p>
+        </div>
+        <button type="button" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40" disabled={!paid || busy || !scriptAudioEntries(script).length} onClick={generate}>
+          <Sparkles className="h-4 w-4" />
+          Prepare audio
+        </button>
+      </div>}
+      <details className="rounded-xl border border-border px-3 py-2.5">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-xs text-muted-foreground">
+            <MoreHorizontal className="h-4 w-4" />
+            More options
+          </summary>
          <div className="mt-3 space-y-3">
            <p className="text-xs text-muted-foreground">Audio stays on this Mac and is not included in script backups.</p>
-           {isDesktop() && <button type="button" className={button} disabled={busy} onClick={() => run('delete', () => deleteAudio(script.id))}>Remove saved audio</button>}
+            <div className="flex flex-wrap gap-2">
+              {ready && <button type="button" className={`${button} inline-flex items-center gap-2`} disabled={!paid || busy || !scriptAudioEntries(script).length} onClick={generate}><RefreshCw className="h-3.5 w-3.5" />Prepare new audio</button>}
+              {isDesktop() && ready && <button type="button" className={`${button} inline-flex items-center gap-2`} disabled={busy} onClick={() => run('delete', () => deleteAudio(script.id))}><Trash2 className="h-3.5 w-3.5" />Remove saved audio</button>}
+            </div>
            <details>
              <summary className="cursor-pointer text-xs text-muted-foreground">Troubleshooting details</summary>
              <div className="mt-2"><FlowDebugPanel /></div>
@@ -210,5 +258,5 @@ export function ScriptAudioPanel({ script }: { script: Script }) {
          </div>
        </details>
     </div>
-  </details>;
+  </section>;
 }

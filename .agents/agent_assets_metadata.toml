@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "qdNpKQb2OeSjTdkwSWUbN"
+uri = "file://artifacts/quickque-website/public/prompts/quickque-script-formatter.md"
+type = "text"
+title = "Quickque Script Formatter Prompt"
+description = "A reusable provider-neutral prompt for formatting scripts in Claude, ChatGPT, or another LLM before local Quickque import."
+logical_id = "1b2b807c-6a03-4a21-a8d6-82a7683ed6f5"
+content_hash = "sha256:ae98370d901bb23604c7f5325ffb82d512d3831e489e00569abc6e1afd532565"
+size = 2507
+mtime_ms = 1789456600004
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:44a97cfe-9ea1-4804-95e7-a2c558c4e90d/1b2b807c-6a03-4a21-a8d6-82a7683ed6f5/e9314d15-4a98-43bc-86d7-a059badadf38"
+storage_version_token = "1789457033668494"
+content_type = "text/markdown"

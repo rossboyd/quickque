@@ -12,7 +12,7 @@ export const IMPORT_LIMITS = Object.freeze({
 /** PDF page count is kept separate so the public limits object remains stable. */
 export const PDF_PAGE_LIMIT = 500;
 
-export type DocumentFormat = 'txt' | 'docx' | 'rtf' | 'pdf';
+export type DocumentFormat = 'txt' | 'md' | 'docx' | 'rtf' | 'pdf';
 
 export interface ExtractedDocument {
   title: string;
@@ -45,6 +45,9 @@ export function validateFile(name: string, size: number): DocumentFormat {
   switch (extension) {
     case 'txt':
       return 'txt';
+    case 'md':
+    case 'markdown':
+      return 'md';
     case 'docx':
       return 'docx';
     case 'rtf':
@@ -52,6 +55,6 @@ export function validateFile(name: string, size: number): DocumentFormat {
     case 'pdf':
       return 'pdf';
     default:
-      throw new Error('Unsupported document type. Choose a TXT, DOCX, RTF, or text-based PDF file.');
+      throw new Error('Unsupported document type. Choose a TXT, Markdown, DOCX, RTF, or text-based PDF file.');
   }
 }

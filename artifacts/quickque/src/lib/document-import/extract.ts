@@ -47,6 +47,12 @@ export async function extractDocument(name: string, buffer: ArrayBuffer): Promis
         format,
         fallbackTitle,
       );
+    case 'md':
+      return checkResult(
+        { ...decodePlainText(new Uint8Array(buffer)), title: fallbackTitle },
+        format,
+        fallbackTitle,
+      );
     case 'rtf':
       return checkResult(
         { ...extractRtf(new Uint8Array(buffer)), title: fallbackTitle },

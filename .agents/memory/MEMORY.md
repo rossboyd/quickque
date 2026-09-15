@@ -15,3 +15,5 @@
 - [Expo 57 splash configuration](expo-57-splash-configuration.md) — Expo Doctor rejects the legacy top-level splash field in static app.json.
 - [Licence signing configuration](licence-signing-configuration.md) — Mac packages require public licence values; securely stored PEM keys may arrive flattened.
 - [Cloned voice profile metadata](cloned-voice-profile-metadata.md) — descriptive tags remain local and must not invalidate recording revisions or script assignments.
+- [Pointer reorder testing](pointer-reorder-testing.md) — keep drag source and destination inside the test viewport; offscreen coordinates do not produce a usable pointer gesture.
+- [Root-mounted browser module tests](root-mounted-browser-module-tests.md) — absolute dynamic imports require a root-mounted Vite test server, not an artifact base path.

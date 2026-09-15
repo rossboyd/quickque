@@ -11,10 +11,9 @@ test('presentation audio is optional and locked without paid Mac access', async 
     localStorage.setItem('quickque_active_script', 'talk');
   });
   await page.goto('/edit');
-  await page.getByText('AI rehearsal audio', { exact: false }).click();
-  await expect(page.getByRole('button', { name: 'Generate audio', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Listen to script', exact: true })).toBeDisabled();
-  await expect(page.getByText(/Optional: generate a spoken version/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Rehearsal audio', exact: true })).toBeVisible();
+  await expect(page.getByTestId('audio-missing-cta')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Prepare audio', exact: true })).toBeDisabled();
   await expect(page.getByText(/AI audio is available in the Quickque Mac app/)).toBeVisible();
 });
 
@@ -219,6 +218,36 @@ test('desktop security policy permits local WAV blob playback', async ({ page })
   expect(result).toBe('playing');
 });
 
+test('saved audio is presented as an obvious mini player', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => localStorage.setItem('quickque_profile', JSON.stringify({ name: 'Sam', onboardingComplete: true })));
+  await page.reload();
+  await page.evaluate(async () => {
+    const { default: React } = await import('/node_modules/.vite/deps/react.js');
+    const { default: { createRoot } } = await import('/node_modules/.vite/deps/react-dom_client.js');
+    const { ScriptAudioPanel } = await import('/src/components/script-audio-panel.tsx');
+    const { StoreProvider } = await import('/src/lib/store.tsx');
+    (window as any).__TAURI_INTERNALS__ = {
+      invoke: async (command: string) => {
+        if (command === 'get_local_library') return { directory: null, scriptsJson: null };
+        if (command === 'script_audio_entitlement') return { paid: true };
+        if (command === 'voice_library_list') return [];
+        if (command === 'script_audio_status') return { status: 'ready', entries: [] };
+        throw new Error(command);
+      },
+    };
+    const host = document.createElement('div');
+    document.body.replaceChildren(host);
+    const script = { id: 'ready-test', title: 'Launch keynote', purpose: 'presentation', createdAt: 1, updatedAt: 1, sections: [{ id: 'one', title: 'Opening', content: 'Hello everyone.' }] };
+    createRoot(host).render(React.createElement(StoreProvider, null, React.createElement(ScriptAudioPanel, { script })));
+  });
+  await expect(page.getByTestId('audio-ready-player')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Play saved audio', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Export MP4', exact: true })).toBeVisible();
+  await expect(page.getByText('Launch keynote', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('audio-missing-cta')).toHaveCount(0);
+});
+
 test('audio panel shows truthful progress and retains it when reopened without status polling', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(() => localStorage.setItem('quickque_profile', JSON.stringify({ name: 'Sam', onboardingComplete: true })));
@@ -265,8 +294,8 @@ test('audio panel shows truthful progress and retains it when reopened without s
     (window as any).remountAudio = render;
     render();
   });
-  await page.getByText('Rehearsal audio', { exact: true }).click();
-  await page.getByRole('button', { name: 'Create rehearsal audio', exact: true }).click();
+  await expect(page.getByTestId('audio-missing-cta')).toBeVisible();
+  await page.getByRole('button', { name: 'Prepare audio', exact: true }).click();
   await expect(page.getByText('Getting ready…')).toBeVisible();
   await expect(page.getByRole('progressbar', { name: 'Audio generation progress' })).not.toHaveAttribute('value');
   const checks = await page.evaluate(() => (window as any).statusChecks());
@@ -275,7 +304,6 @@ test('audio panel shows truthful progress and retains it when reopened without s
   await expect(page.getByText('Working out the time remaining…')).toBeVisible();
   expect(await page.evaluate(() => (window as any).statusChecks())).toBe(checks);
   await page.evaluate(() => (window as any).remountAudio());
-  await page.getByText('Rehearsal audio', { exact: true }).click();
   await expect(page.getByText('Working out the time remaining…')).toBeVisible();
   expect(await page.evaluate(() => (window as any).statusChecks())).toBe(checks);
   await page.getByText('More options', { exact: true }).click();

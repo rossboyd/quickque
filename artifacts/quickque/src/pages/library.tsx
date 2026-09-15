@@ -107,6 +107,7 @@ export default function Library() {
   } = store;
   
   const [search, setSearch] = useState('');
+  const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [libraryVisible, setLibraryVisible] = useState(() => localStorage.getItem('quickque-library-visible') !== 'false');
   const [showCreate, setShowCreate] = useState(false);
   const [creatingSample, setCreatingSample] = useState(false);
@@ -474,21 +475,37 @@ export default function Library() {
                <PanelLeftClose className="h-4 w-4" />
              </button>}
           </div>
-          {!isHome && <div className="flex flex-col gap-1.5">
+          {!isHome && <div className="flex items-center gap-1.5">
             <button
-              onClick={handleCreate}
-              className="flex items-center justify-center gap-2 rounded-lg bg-sidebar-accent px-3 py-2.5 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+              type="button"
+              onClick={() => setSidebarSearchOpen(open => !open)}
+              className={cn(
+                "inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                (sidebarSearchOpen || search) && "bg-sidebar-accent text-sidebar-foreground"
+              )}
+              aria-label="Search scripts"
+              aria-expanded={sidebarSearchOpen}
+              title="Search scripts"
             >
-              <Plus className="h-4 w-4" />
-              New script
+              <Search className="h-4 w-4" />
             </button>
             <button
+              type="button"
               onClick={() => setIsImportOpen(true)}
-              className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Import Document"
+              title="Import document"
             >
               <FileUp className="h-4 w-4" />
-              Import document
+            </button>
+            <button
+              type="button"
+              onClick={handleCreate}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+              aria-label="New script"
+              title="New script"
+            >
+              <Plus className="h-4 w-4" />
             </button>
           </div>
 
@@ -520,26 +537,32 @@ export default function Library() {
           </nav>
 
           <div className={isHome ? "hidden" : "space-y-3"}>
-            <div className="relative">
+            {sidebarSearchOpen && <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input 
+                autoFocus
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Escape') {
+                    setSearch('');
+                    setSidebarSearchOpen(false);
+                  }
+                }}
                 placeholder={viewMode === 'trash' ? 'Search Trash…' : 'Search scripts…'}
-                aria-label="Search scripts"
+                aria-label="Search scripts input"
                 className="w-full pl-9 pr-8 py-2.5 bg-background border border-sidebar-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
               />
-              {search && (
-                <button 
-                  onClick={() => setSearch('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full"
-                  aria-label="Clear search"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+              <button
+                type="button"
+                onClick={() => { setSearch(''); setSidebarSearchOpen(false); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full"
+                aria-label="Close search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>}
             
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-medium text-muted-foreground">
