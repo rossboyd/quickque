@@ -67,10 +67,12 @@ export function mergeImportedLibrary(
     usedIds.add(scriptId);
     identityMap.set(source.id, scriptId);
     const clonedSource = cloneScriptData(source);
+    const sectionIdMap = new Map<string, string>();
     const sections: Array<Script['sections'][number] | null> = clonedSource.sections.map(section => {
       const sectionId = usedIds.has(section.id) ? freshId(usedIds, idFactory) : section.id;
       if (!sectionId) return null;
       usedIds.add(sectionId);
+      sectionIdMap.set(section.id, sectionId);
       return { ...section, id: sectionId };
     });
     if (sections.some(section => section === null)) return null;
@@ -92,12 +94,45 @@ export function mergeImportedLibrary(
         : section.characterId;
       return { ...section, characterId };
     });
+    const baselineSections = clonedSource.protection?.original.sections.map(section => ({
+      ...section,
+      id: sectionIdMap.get(section.id) ?? section.id,
+      ...(typeof section.characterId === 'string'
+        ? { characterId: remappedActor?.characterIdMap.get(section.characterId) ?? null }
+        : {}),
+    }));
+    const protection = clonedSource.protection
+      ? {
+        ...clonedSource.protection,
+        state: 'protected' as const,
+        original: {
+          ...clonedSource.protection.original,
+          sections: baselineSections ?? remappedSections,
+        },
+      }
+      : source.purpose === 'performance'
+        ? {
+          state: 'protected' as const,
+          original: {
+            title: clonedSource.title,
+            purpose: 'performance' as const,
+            sections: remappedSections.map(section => ({ ...section })),
+          },
+        }
+        : undefined;
     return {
       ...clonedSource,
       id: scriptId,
       presentation: normalizePresentation(source.presentation),
       sections: remappedSections,
       ...(remappedActor ? { actor: remappedActor.actor } : {}),
+      ...(protection ? { protection } : {}),
+      ...(clonedSource.personalNotes ? {
+        personalNotes: clonedSource.personalNotes.map(note => ({
+          ...note,
+          sectionId: sectionIdMap.get(note.sectionId) ?? note.sectionId,
+        })),
+      } : {}),
     };
   };
 

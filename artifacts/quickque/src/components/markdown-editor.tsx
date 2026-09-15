@@ -3,10 +3,11 @@ import type { Script } from '@/lib/types';
 import { parseScriptMarkdown, scriptToMarkdown } from '@/lib/script-markdown';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
-export function MarkdownEditor({ script, onSave, onClose }: {
+export function MarkdownEditor({ script, onSave, onClose, readOnly = false }: {
   script: Script;
   onSave: (updates: Partial<Script>) => boolean;
   onClose: () => void;
+  readOnly?: boolean;
 }) {
   const original = useRef(script);
   const ownSavePending = useRef(false);
@@ -48,15 +49,16 @@ export function MarkdownEditor({ script, onSave, onClose }: {
   return <Dialog open onOpenChange={open => { if (!open) close(); }}>
     <DialogContent className="flex h-[92dvh] max-h-[92dvh] w-[96vw] max-w-5xl flex-col overflow-hidden p-4 sm:p-6" onInteractOutside={event => event.preventDefault()}>
       <DialogHeader className="pr-6">
-        <DialogTitle>Markdown editor</DialogTitle>
-        <DialogDescription>Write your entire script in one pane. Save to update the section editor and rehearsal.</DialogDescription>
+     <DialogTitle>{readOnly ? 'Original script Markdown (protected)' : 'Markdown editor'}</DialogTitle>
+     <DialogDescription>{readOnly ? 'This source is read-only while protected. Choose Edit script to create a practice copy or explicitly unlock it.' : 'Write your entire script in one pane. Save to update the section editor and rehearsal.'}</DialogDescription>
       </DialogHeader>
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer font-medium">Markup guide</summary>
-        <p className="mt-2"><code># Script title</code> · <code>## Section or turn title</code> · <code>**Alex:**</code> starts Alex’s turn · <code>&gt; Stage direction</code> adds a note.</p>
+       <p className="mt-2"><code># Script title</code> · <code>## Section or turn title</code> · <code>**Alex:**</code> starts Alex’s turn · <code>&gt; Stage direction</code> adds a writer note.</p>
+       <p className="mt-1">Portable Markdown excludes personal rehearsal notes by default. To intentionally include them, use the exported Markdown option <code>includePersonalNotes: true</code>; they are marked <code>&gt; [Personal note]</code> and reimport as personal notes.</p>
         <p className="mt-1">New character names create AI Partners; assign In Person and choose colours in Scene Partner. Prefix a markup line with a backslash to speak it literally. Other text stays as dialogue; no HTML is rendered.</p>
       </details>
-      <textarea aria-label="Script Markdown" spellCheck value={draft}
+       <textarea aria-label="Script Markdown" spellCheck value={draft} readOnly={readOnly}
         onChange={event => { setDraft(event.target.value); setError(''); setMessage(''); setDiscard(false); }}
         className="min-h-0 flex-1 resize-none rounded-lg border border-border bg-muted/20 p-4 font-mono text-sm leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -69,7 +71,7 @@ export function MarkdownEditor({ script, onSave, onClose }: {
         <span className="text-xs text-muted-foreground">{dirty ? 'Unsaved changes' : 'Up to date'}</span>
         <div className="flex gap-2">
           <button onClick={close} className="rounded-md border px-3 py-2 text-sm">Back to sections</button>
-          <button onClick={save} disabled={!dirty} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">Save script</button>
+           <button onClick={save} disabled={readOnly || !dirty} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">Save script</button>
         </div>
       </div>}
     </DialogContent>

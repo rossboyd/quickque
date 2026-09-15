@@ -866,6 +866,14 @@ export default function Library() {
             script={activeScript} 
             settings={settings}
             onChange={(updates) => updateScript(activeScript.id, updates)} 
+             onUnlock={() => store.unlockScript(activeScript.id)}
+             onRelock={() => store.relockScript(activeScript.id)}
+             onCreateEditableCopy={() => store.createEditableCopy(activeScript.id)}
+             onRestoreOriginal={() => store.restoreOriginalScript(activeScript.id)}
+             onAddPersonalNote={(sectionId, content) => store.addPersonalNote(activeScript.id, sectionId, content)}
+             onUpdatePersonalNote={(noteId, content) => store.updatePersonalNote(activeScript.id, noteId, content)}
+             onDeletePersonalNote={(noteId) => store.deletePersonalNote(activeScript.id, noteId)}
+             onDeleteSection={(sectionId) => store.deleteScriptSection(activeScript.id, sectionId)}
             onPresent={handlePresent}
             onCloseMobile={() => setIsMobileEditorOpen(false)}
             libraryVisible={libraryVisible}

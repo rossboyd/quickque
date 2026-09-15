@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseScriptMarkdown, scriptToMarkdown } from './script-markdown.ts';
-import { cloneActorWithFreshCharacterIds, deleteActorCharacter, isValidActor } from './actor-model.ts';
+import { cloneActorWithFreshCharacterIds, clonePortableScript, deleteActorCharacter, isValidActor } from './actor-model.ts';
 import { parseImportJson, serializeScripts } from './library-data.ts';
 import { createLibraryEnvelope, parseLibraryData } from './store-persistence.ts';
 import { getCharacterColor, nextCharacterColor } from './actor-colors.ts';
@@ -59,6 +59,40 @@ test('plain presentation stays a presentation; character markup enables performa
   const scene = parseScriptMarkdown('**Alex:** Hello.', script);
   assert.ok(scene.ok);
   assert.equal(scene.updates.purpose, 'performance');
+});
+
+test('portable Markdown excludes personal notes by default and includes marked notes explicitly', () => {
+  const script = fixture();
+  script.personalNotes = [{
+    id: 'note-1',
+    sectionId: 'one',
+    content: 'Breathe before the reply.',
+    createdAt: 1,
+    updatedAt: 1,
+  }];
+  const portable = scriptToMarkdown(script);
+  assert.equal(portable.includes('Breathe before'), false);
+  const withNotes = scriptToMarkdown(script, { includePersonalNotes: true });
+  assert.match(withNotes, /> \[Personal note\] Breathe before the reply\./);
+  const parsed = parseScriptMarkdown(withNotes, script, (() => {
+    let id = 0;
+    return () => `note-import-${++id}`;
+  })());
+  assert.ok(parsed.ok);
+  if (parsed.ok) assert.equal(parsed.updates.personalNotes?.[0].content, 'Breathe before the reply.');
+});
+
+test('portable JSON clones exclude private notes unless explicitly included', () => {
+  const script = fixture();
+  script.personalNotes = [{
+    id: 'private-note',
+    sectionId: 'one',
+    content: 'Do not share this rehearsal note.',
+    createdAt: 1,
+    updatedAt: 1,
+  }];
+  assert.equal(clonePortableScript(script).personalNotes, undefined);
+  assert.deepEqual(clonePortableScript(script, true).personalNotes, script.personalNotes);
 });
 
 test('invalid Markdown gives errors without mutating the saved script', () => {

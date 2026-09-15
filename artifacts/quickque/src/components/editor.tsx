@@ -31,6 +31,14 @@ export function Editor({
   libraryVisible = true,
   onToggleLibrary,
   settings = DEFAULT_SETTINGS,
+  onUnlock,
+  onRelock,
+  onCreateEditableCopy,
+  onRestoreOriginal,
+  onAddPersonalNote,
+  onUpdatePersonalNote,
+  onDeletePersonalNote,
+  onDeleteSection,
 }: { 
   script: Script; 
   onChange: (u: Partial<Script>) => boolean; 
@@ -39,9 +47,18 @@ export function Editor({
   libraryVisible?: boolean;
   onToggleLibrary?: () => void;
   settings?: Settings;
+  onUnlock?: () => boolean;
+  onRelock?: () => boolean;
+  onCreateEditableCopy?: () => string | null;
+  onRestoreOriginal?: () => boolean;
+  onAddPersonalNote?: (sectionId: string, content: string) => string | null;
+  onUpdatePersonalNote?: (noteId: string, content: string) => boolean;
+  onDeletePersonalNote?: (noteId: string) => boolean;
+  onDeleteSection?: (sectionId: string) => boolean;
 }) {
   const script = baseScript as ActorScript;
   const isPerformance = getScriptPurpose(script) === 'performance';
+  const isProtected = script.protection?.state === 'protected';
   const sectionLabel = isPerformance ? 'turn' : 'section';
   const [showMarkdown, setShowMarkdown] = useState(false);
   const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
@@ -79,6 +96,8 @@ export function Editor({
   const totalWords = script.sections.reduce((acc, sec) => acc + calculateWordCount(sec.content), 0);
   const timeSec = estimateTime(totalWords);
   const [showActorPanel, setShowActorPanel] = useState(false);
+  const [showProtectionDialog, setShowProtectionDialog] = useState(false);
+  const [personalDrafts, setPersonalDrafts] = useState<Record<string, string>>({});
   const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const documentRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -102,25 +121,40 @@ export function Editor({
   }, [script.sections, settings.fontFamily]);
 
   const addSection = () => {
+    if (isProtected) return;
     onChange({
       sections: [...script.sections, { id: generateId(), title: isPerformance ? 'New Turn' : 'New Section', content: '' }]
     });
   };
 
   const updateSection = (id: string, updates: Partial<ActorScriptSection>) => {
+    if (isProtected) return;
+    const hasNotes = script.personalNotes?.some(note => note.sectionId === id);
+    const replacing = updates.content !== undefined && updates.content !== script.sections.find(section => section.id === id)?.content;
+    if (hasNotes && replacing && typeof window !== 'undefined' &&
+      !window.confirm('This turn has personal notes. Replacing its dialogue will keep those notes attached. Continue?')) return;
     onChange({
       sections: script.sections.map((s) => s.id === id ? { ...s, ...updates } : s)
     });
   };
 
   const deleteSection = (id: string) => {
+    if (isProtected) return;
     if (script.sections.length <= 1) return;
+    const hasNotes = script.personalNotes?.some(note => note.sectionId === id);
+    if (hasNotes && typeof window !== 'undefined' &&
+      !window.confirm('This turn has personal notes. Delete the turn and its personal notes?')) return;
+    if (onDeleteSection) {
+      onDeleteSection(id);
+      return;
+    }
     onChange({
       sections: script.sections.filter((s) => s.id !== id)
     });
   };
 
   const moveSection = (index: number, direction: -1 | 1) => {
+    if (isProtected) return;
     if (index + direction < 0 || index + direction >= script.sections.length) return;
     const newSections = [...script.sections];
     const temp = newSections[index];
@@ -130,6 +164,7 @@ export function Editor({
   };
 
   const dropSection = (targetId: string, edge: 'before' | 'after') => {
+    if (isProtected) return;
     const sourceId = draggedSectionRef.current;
     if (!sourceId || sourceId === targetId) return;
     const next = [...script.sections];
@@ -155,6 +190,7 @@ export function Editor({
   };
   
   const splitSection = (id: string) => {
+    if (isProtected) return;
     if (script.sections.length >= MAX_SECTIONS) return;
     const sectionIndex = script.sections.findIndex(s => s.id === id);
     if (sectionIndex === -1) return;
@@ -191,6 +227,7 @@ export function Editor({
   };
 
   const handleDeleteCharacter = (oldId: string, newId: string | null) => {
+    if (isProtected) return;
     if (!script.actor) return;
     onChange({
       actor: {
@@ -205,6 +242,13 @@ export function Editor({
   };
 
   const isActorEnabled = isPerformance && (script.actor?.enabled ?? false);
+  const addPersonal = (sectionId: string) => {
+    const content = personalDrafts[sectionId] ?? '';
+    if (!content.trim() || !onAddPersonalNote) return;
+    if (onAddPersonalNote(sectionId, content)) {
+      setPersonalDrafts(current => ({ ...current, [sectionId]: '' }));
+    }
+  };
 
   return (
     <div className="workspace-editor flex-1 flex overflow-hidden relative">
@@ -221,10 +265,13 @@ export function Editor({
               </button>
               <button type="button" onClick={onToggleLibrary} title={libraryVisible ? 'Collapse library' : 'Show library'} aria-label={libraryVisible ? 'Collapse library' : 'Show library'} aria-expanded={libraryVisible} className="hidden md:inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"><PanelLeft className="h-4 w-4" /></button>
               <button type="button" aria-label="Back to workspace" onClick={onCloseMobile} className="hidden sm:inline text-sm text-muted-foreground hover:text-foreground">Workspace <span className="mx-2 opacity-40">/</span></button>
-              <span className="truncate text-sm font-medium">{script.title || 'Untitled script'}</span>
+               <span className="truncate text-sm font-medium">{script.title || 'Untitled script'}</span>
+               {isProtected && <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-300" role="status">Original script protected</span>}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <button onClick={() => setShowMarkdown(true)} className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">Markdown</button>
+               <button onClick={() => setShowMarkdown(true)} className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">Markdown</button>
+               {isProtected && <button type="button" onClick={() => setShowProtectionDialog(true)} className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">Edit script</button>}
+               {!isProtected && script.protection && <button type="button" onClick={() => onRelock?.()} className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">Relock original</button>}
               {isPerformance && <button
                 aria-label="Scene Partner setup"
                 onClick={() => setShowActorPanel(true)}
@@ -260,11 +307,12 @@ export function Editor({
                   className="w-full bg-transparent text-3xl md:text-[42px] leading-tight font-semibold tracking-tight text-foreground focus:outline-none placeholder:text-muted-foreground/50 truncate"
                   placeholder="Script Title"
                   aria-label="Script Title"
+                   disabled={isProtected}
                 />
                  <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-1 md:mt-2 text-xs md:text-sm text-muted-foreground">
                   <span className="flex items-center gap-1.5">
                   <ScriptPurposeIcon purpose={getScriptPurpose(script)} />
-                  <select aria-label="Script type" value={getScriptPurpose(script)} onChange={event => {
+                   <select aria-label="Script type" value={getScriptPurpose(script)} disabled={isProtected} onChange={event => {
                     const purpose = event.target.value as 'presentation' | 'performance';
                     onChange({ purpose, ...(purpose === 'performance' && !script.actor ? { actor: { enabled: true, characters: [], myRoleIds: [] } } : {}) });
                     setShowActorPanel(false);
@@ -303,6 +351,7 @@ export function Editor({
                       <button
                         type="button"
                         onPointerDown={event => {
+                           if (isProtected) return;
                           if (script.sections.length <= 1) return;
                           event.preventDefault();
                           event.currentTarget.setPointerCapture(event.pointerId);
@@ -327,7 +376,7 @@ export function Editor({
                           clearSectionDrag();
                         }}
                         onPointerCancel={clearSectionDrag}
-                        disabled={script.sections.length <= 1}
+                           disabled={isProtected || script.sections.length <= 1}
                         className="section-tools block cursor-grab touch-none rounded p-1.5 text-muted-foreground hover:bg-black/5 hover:text-foreground active:cursor-grabbing disabled:opacity-30 dark:hover:bg-white/10"
                         aria-label={`Drag ${sectionLabel} "${section.title}" to reorder`}
                         title={`Drag to reorder ${sectionLabel}s`}
@@ -337,7 +386,7 @@ export function Editor({
                       <div className="section-tools section-reorder flex flex-col text-muted-foreground flex-shrink-0">
                         <button 
                           onClick={() => moveSection(idx, -1)} 
-                          disabled={idx === 0}
+                           disabled={isProtected || idx === 0}
                           className="p-1.5 hover:bg-black/5 dark:hover:bg-white/10 rounded disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                           aria-label={`Move ${sectionLabel} "${section.title}" up`}
                         >
@@ -345,7 +394,7 @@ export function Editor({
                         </button>
                         <button 
                           onClick={() => moveSection(idx, 1)} 
-                          disabled={idx === script.sections.length - 1}
+                           disabled={isProtected || idx === script.sections.length - 1}
                           className="p-1.5 hover:bg-black/5 dark:hover:bg-white/10 rounded disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                           aria-label={`Move ${sectionLabel} "${section.title}" down`}
                         >
@@ -360,12 +409,14 @@ export function Editor({
                         className="flex-1 min-w-0 bg-transparent font-semibold text-foreground focus:outline-none px-2 py-1"
                         placeholder={isPerformance ? 'Turn Title' : 'Section Title'}
                         aria-label={isPerformance ? 'Turn Title' : 'Section Title'}
+                         disabled={isProtected}
                       />
                     </div>
                     
                     <div className="section-tools flex items-center gap-1 transition-opacity flex-shrink-0">
                       <button
                         onClick={() => splitSection(section.id)}
+                         disabled={isProtected}
                         className="p-1.5 text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10 rounded focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                         title="Split at cursor"
                         aria-label={`Split ${sectionLabel} at cursor`}
@@ -378,6 +429,7 @@ export function Editor({
                       {script.sections.length > 1 && (
                         <button 
                           onClick={() => deleteSection(section.id)}
+                           disabled={isProtected}
                           className="p-1.5 text-destructive hover:bg-destructive/10 rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-destructive focus-visible:outline-none"
                           title={`Delete ${sectionLabel}`}
                           aria-label={`Delete ${sectionLabel} "${section.title}"`}
@@ -397,6 +449,7 @@ export function Editor({
                           aria-label={`Character for turn ${idx + 1}`}
                           value={section.characterId || ''}
                           onChange={(e) => updateSection(section.id, { characterId: e.target.value || null })}
+                           disabled={isProtected}
                           className="bg-background border border-border text-sm rounded-md px-2 py-1 focus:outline-none focus:border-primary"
                         >
                           <option value="">Unassigned</option>
@@ -407,13 +460,14 @@ export function Editor({
                       </div>
                     )}
                     <details className="section-notes flex-1 min-w-[180px] text-xs text-muted-foreground" open={section.notes ? true : undefined}>
-                      <summary className="cursor-pointer py-1">{section.notes ? 'Notes' : 'Add a note'}</summary>
+                        <summary className="cursor-pointer py-1">{section.notes ? (section.notesProvenance === 'writer' ? 'Writer notes' : 'Notes (legacy / unspecified)') : 'Add writer note'}</summary>
                       <div className="flex items-center gap-2 pt-1">
-                      <label className="text-xs font-medium text-muted-foreground">Notes:</label>
+                      <label className="text-xs font-medium text-muted-foreground">{section.notesProvenance === 'writer' ? 'Writer notes:' : 'Notes (legacy / unspecified):'}</label>
                       <input
                         type="text"
                         value={section.notes || ''}
                         onChange={(e) => updateSection(section.id, { notes: e.target.value })}
+                        disabled={isProtected}
                         className="flex-1 bg-background border border-border text-sm rounded-md px-2 py-1 focus:outline-none focus:border-primary"
                         placeholder="Action, emotion, or direction..."
                         aria-label={`Notes for ${sectionLabel} ${idx + 1}`}
@@ -430,6 +484,7 @@ export function Editor({
                   }}
                   value={section.content}
                   onChange={e => updateSection(section.id, { content: e.target.value })}
+                   disabled={isProtected}
                   maxLength={500000}
                   className="document-text w-full bg-transparent text-foreground px-2 py-3 min-h-[96px] resize-none overflow-hidden focus:outline-none leading-[1.85]"
                   placeholder="Type your script here..."
@@ -440,12 +495,28 @@ export function Editor({
                     color: getTextColorCss(settings.textColor),
                   }}
                 />
+                 <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                   <div className="mb-2 flex items-center justify-between gap-2">
+                     <span className="text-xs font-semibold uppercase tracking-wide text-primary">Personal notes</span>
+                     <span className="text-[11px] text-muted-foreground">Private rehearsal annotation · never spoken</span>
+                   </div>
+                   {script.personalNotes?.filter(note => note.sectionId === section.id).map(note => (
+                     <div key={note.id} className="mb-2 flex gap-2">
+                       <textarea value={note.content} maxLength={20000} aria-label={`Personal note for ${sectionLabel} ${idx + 1}`} onChange={event => onUpdatePersonalNote?.(note.id, event.target.value)} className="min-h-12 flex-1 rounded border border-border bg-background px-2 py-1 text-sm" />
+                       <button type="button" onClick={() => onDeletePersonalNote?.(note.id)} className="text-xs text-destructive hover:underline">Delete</button>
+                     </div>
+                   ))}
+                   <div className="flex gap-2">
+                     <input value={personalDrafts[section.id] ?? ''} maxLength={20000} aria-label={`Add personal note for ${sectionLabel} ${idx + 1}`} onChange={event => setPersonalDrafts(current => ({ ...current, [section.id]: event.target.value }))} placeholder="What do you want to remember?" className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-sm" />
+                     <button type="button" onClick={() => addPersonal(section.id)} className="rounded border border-border px-2 py-1 text-xs hover:bg-muted">Add</button>
+                   </div>
+                 </div>
               </div>
             ))}
             
             <button 
               onClick={addSection}
-              disabled={script.sections.length >= MAX_SECTIONS}
+              disabled={isProtected || script.sections.length >= MAX_SECTIONS}
               title={script.sections.length >= MAX_SECTIONS ? `Maximum 500 ${sectionLabel}s reached` : undefined}
               className="py-2 px-3 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex items-center gap-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
@@ -456,7 +527,25 @@ export function Editor({
         </div>
       </div>
 
-      {showMarkdown && <MarkdownEditor key={script.id} script={script} onSave={onChange} onClose={() => setShowMarkdown(false)} />}
+      {showMarkdown && <MarkdownEditor key={script.id} script={script} onSave={onChange} onClose={() => setShowMarkdown(false)} readOnly={isProtected} />}
+      {showProtectionDialog && <Dialog open onOpenChange={setShowProtectionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit protected original script?</DialogTitle>
+            <DialogDescription>Original source content and writer directions are protected to prevent accidental learning changes. The recommended option is an editable practice copy; unlocking this original is explicit and the original baseline can be restored later.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={() => { const copy = onCreateEditableCopy?.(); if (copy) setShowProtectionDialog(false); }} className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground">Create editable practice copy (recommended)</button>
+            <button type="button" onClick={() => { if (onUnlock?.()) setShowProtectionDialog(false); }} className="rounded-md border border-border px-3 py-2 text-sm">Unlock this original</button>
+            <button type="button" onClick={() => {
+              const hasNotes = (script.personalNotes?.length ?? 0) > 0;
+              if (hasNotes && typeof window !== 'undefined' &&
+                !window.confirm('Restoring removes turns added after import and any personal notes attached to those added turns. Personal notes on original turns stay attached. Continue?')) return;
+              if (onRestoreOriginal?.()) setShowProtectionDialog(false);
+            }} className="rounded-md border border-border px-3 py-2 text-sm">Restore original baseline</button>
+          </div>
+        </DialogContent>
+      </Dialog>}
       <Dialog open={preflightIssues !== null} onOpenChange={open => { if (!open) setPreflightIssues(null); }}>
         <DialogContent className="max-h-[80vh] overflow-y-auto">
           <DialogHeader>

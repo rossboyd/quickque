@@ -1,4 +1,4 @@
-import type { ActorCharacter, Script, ScriptSection } from './types.ts';
+import type { ActorCharacter, Script, ScriptSection, PersonalNote } from './types.ts';
 import { cloneActor, MAX_ACTOR_CHARACTERS } from './actor-model.ts';
 import { nextCharacterColor } from './actor-colors.ts';
 import { generateId } from './utils.ts';
@@ -10,20 +10,24 @@ const label = (value: string) => /[\r\n]/.test(value) || value.trim() !== value 
 const unlabel = (value: string) => value.startsWith('"') ? JSON.parse(value) as string : value.trim();
 const escapeLine = (value: string) => structural.test(value) ? `\\${value}` : value;
 
-export function scriptToMarkdown(script: Script): string {
+export function scriptToMarkdown(script: Script, options: { includePersonalNotes?: boolean } = {}): string {
   return [`# ${label(script.title)}`, '', ...script.sections.map(section => {
     const character = script.actor?.characters.find(item => item.id === section.characterId);
+    const personal = options.includePersonalNotes
+      ? script.personalNotes?.filter(note => note.sectionId === section.id) ?? []
+      : [];
     return [
       `## ${label(section.title)}`,
       ...(character ? [`**${label(character.name)}:**`] : []),
       ...(section.notes !== undefined ? section.notes.split('\n').map(line => `> ${line}`) : []),
+      ...personal.flatMap(note => note.content.split('\n').map(line => `> [Personal note] ${line}`)),
       '',
       section.content.split('\n').map(escapeLine).join('\n'),
     ].join('\n');
   })].join('\n');
 }
 
-type TurnDraft = { title: string; characterId?: string; body: string[]; notes: string[]; contentStarted: boolean };
+type TurnDraft = { title: string; characterId?: string; body: string[]; notes: string[]; personal: string[]; contentStarted: boolean };
 
 type MarkdownResult = { ok: true; updates: Partial<Script>; newCharacters: string[] } | { ok: false; error: string };
 
@@ -33,6 +37,7 @@ export function parseScriptMarkdown(source: string, script: Script, idFactory = 
   const actor = script.actor ? cloneActor(script.actor) : { enabled: true, characters: [], myRoleIds: [] };
   const newCharacters: string[] = [];
   const sections: ScriptSection[] = [];
+  const personalNotes: PersonalNote[] = [];
   const usedIds = new Set<string>();
   let title = script.title;
   let titleSeen = false;
@@ -47,7 +52,7 @@ export function parseScriptMarkdown(source: string, script: Script, idFactory = 
     return parsed;
   };
   const start = (name?: string) => {
-    current = { title: name ?? `Turn ${sections.length + 1}`, body: [], notes: [], contentStarted: false };
+    current = { title: name ?? `Turn ${sections.length + 1}`, body: [], notes: [], personal: [], contentStarted: false };
   };
   const flush = () => {
     if (!current) return;
@@ -61,8 +66,21 @@ export function parseScriptMarkdown(source: string, script: Script, idFactory = 
     usedIds.add(id);
     sections.push({ id, title: current.title, content,
       ...(current.notes.length ? { notes } : {}),
+      ...(current.notes.length && previous?.notesProvenance
+        ? { notesProvenance: previous.notesProvenance }
+        : {}),
       ...(current.characterId ? { characterId: current.characterId } : previous?.characterId !== undefined ? { characterId: null } : {}),
     });
+    if (current.personal.length) {
+      const now = Date.now();
+      personalNotes.push(...current.personal.map(content => ({
+        id: idFactory(),
+        sectionId: id,
+        content,
+        createdAt: now,
+        updatedAt: now,
+      })));
+    }
     current = null;
   };
   try {
@@ -96,7 +114,11 @@ export function parseScriptMarkdown(source: string, script: Script, idFactory = 
       if (!current && !line.trim()) continue;
       if (!current) start(script.sections[0]?.title ?? 'Section 1');
       if (line.startsWith('>')) {
-        current!.notes.push(line.slice(line.startsWith('> ') ? 2 : 1)); continue;
+        const note = line.slice(line.startsWith('> ') ? 2 : 1);
+        if (note.startsWith('[Personal note]')) {
+          current!.personal.push(note.slice('[Personal note]'.length).trimStart());
+        } else current!.notes.push(note);
+        continue;
       }
       // One blank line separates metadata from dialogue in the canonical format.
       if (!current!.contentStarted && line === '') { current!.contentStarted = true; continue; }
@@ -106,6 +128,7 @@ export function parseScriptMarkdown(source: string, script: Script, idFactory = 
     flush();
     if (!sections.length) return { ok: false, error: 'Add a section with ## or write some dialogue before saving.' };
     return { ok: true, newCharacters, updates: { title, sections,
+      ...(personalNotes.length ? { personalNotes } : {}),
       ...(hasSpeakers || script.actor ? { actor } : {}),
       ...(hasSpeakers && !script.sections.some(section => section.characterId) ? { purpose: 'performance' } : {}),
     } };

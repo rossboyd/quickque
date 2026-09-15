@@ -17,6 +17,8 @@ import {
   SortMode,
   PresentationPreferences,
 } from './types';
+import type { PersonalNote, ScriptSection } from './types';
+import { MAX_PERSONAL_NOTE_LENGTH, MAX_PERSONAL_NOTES } from './actor-model.ts';
 import { generateId } from './utils';
 import { validateImportReviewDraft, type ImportReviewDraft } from './document-import/review';
 import { pruneResumePositions } from './reader-resume-position';
@@ -63,11 +65,13 @@ import {
 } from './presentation-preferences';
 import {
   cloneActorWithFreshCharacterIds,
+  clonePortableScript,
   cloneScriptData,
 } from './actor-model.ts';
 import { StartupShell } from '@/components/startup-shell';
 import { getStartupContract, type HydrationPhase } from './startup';
 import { recordAnonymousAnalytics } from './anonymous-analytics';
+import { scriptToMarkdown } from './script-markdown';
 
 const SEED_SCRIPTS: Script[] = createInitialScripts();
 type StoreContextType = {
@@ -92,6 +96,14 @@ type StoreContextType = {
     id: string,
     updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt' | 'presentation'>>,
   ) => boolean;
+  unlockScript: (id: string) => boolean;
+  relockScript: (id: string) => boolean;
+  createEditableCopy: (id: string) => string | null;
+  restoreOriginalScript: (id: string) => boolean;
+  addPersonalNote: (id: string, sectionId: string, content: string) => string | null;
+  updatePersonalNote: (id: string, noteId: string, content: string) => boolean;
+  deletePersonalNote: (id: string, noteId: string) => boolean;
+  deleteScriptSection: (id: string, sectionId: string) => boolean;
   deleteScript: (id: string) => void;
   deleteScripts: (ids: string[]) => boolean;
   restoreScripts: (ids: string[]) => boolean;
@@ -101,7 +113,7 @@ type StoreContextType = {
   reorderScripts: (ids: string[]) => boolean;
   importScripts: (data: string) => boolean;
   importDocument: (draft: ImportReviewDraft) => ImportDocumentResult;
-  exportScripts: (ids?: string[], format?: 'json' | 'txt') => string;
+  exportScripts: (ids?: string[], format?: 'json' | 'txt' | 'md', options?: { includePersonalNotes?: boolean }) => string;
   recoveryData: string | null;
   recoveryRequired: boolean;
   recoverLibrary: (data: string) => boolean;
@@ -837,12 +849,214 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     id: string,
     updates: Partial<Omit<Script, 'id' | 'createdAt' | 'updatedAt' | 'presentation'>>,
   ) => {
-    if (!scriptsRef.current.some(script => script.id === id)) return false;
+    const current = scriptsRef.current.find(script => script.id === id);
+    if (!current) return false;
+    if (current.protection?.state === 'protected') {
+      // A protected source can still be rehearsed and configured, but no
+      // source-authored field may be changed through this generic mutation
+      // path. Presentation preferences use their own protected-independent API.
+      const allowed = new Set(['actor', 'narratorVoice']);
+      if (Object.keys(updates).some(key => !allowed.has(key))) {
+        setError('This imported performance is protected. Choose Edit script to make a practice copy or unlock the original.');
+        return false;
+      }
+    }
+    if (updates.sections && current.personalNotes?.some(note =>
+      !updates.sections!.some(section => section.id === note.sectionId))) {
+      setError('This edit would delete turns with personal notes. Review or delete those notes first, then retry.');
+      return false;
+    }
     const nextScripts = scriptsRef.current.map(script => (
       script.id === id ? { ...script, ...updates, updatedAt: Date.now() } : script
     ));
     return commitLibrary({
       scripts: nextScripts,
+      trash: trashRef.current,
+      customOrder: customOrderRef.current,
+      sortMode: sortModeRef.current,
+      activeScriptId: activeScriptIdRef.current,
+    }).ok;
+  }, [commitLibrary]);
+
+  const unlockScript = useCallback((id: string) => {
+    const current = scriptsRef.current.find(script => script.id === id);
+    if (!current?.protection || current.protection.state === 'unlocked') return Boolean(current);
+    return commitLibrary({
+      scripts: scriptsRef.current.map(script => script.id === id
+        ? { ...script, protection: { ...script.protection!, state: 'unlocked' }, updatedAt: Date.now() }
+        : script),
+      trash: trashRef.current,
+      customOrder: customOrderRef.current,
+      sortMode: sortModeRef.current,
+      activeScriptId: activeScriptIdRef.current,
+    }).ok;
+  }, [commitLibrary]);
+
+  const relockScript = useCallback((id: string) => {
+    const current = scriptsRef.current.find(script => script.id === id);
+    if (!current?.protection || current.protection.state === 'protected') return Boolean(current);
+    return commitLibrary({
+      scripts: scriptsRef.current.map(script => script.id === id
+        ? { ...script, protection: { ...script.protection!, state: 'protected' }, updatedAt: Date.now() }
+        : script),
+      trash: trashRef.current,
+      customOrder: customOrderRef.current,
+      sortMode: sortModeRef.current,
+      activeScriptId: activeScriptIdRef.current,
+    }).ok;
+  }, [commitLibrary]);
+
+  const createEditableCopy = useCallback((id: string) => {
+    const source = scriptsRef.current.find(script => script.id === id);
+    if (!source) return null;
+    const clonedSource = cloneScriptData(source);
+    const usedIds = collectScriptIds(scriptsRef.current, trashRef.current);
+    const newId = freshId(usedIds);
+    if (!newId) return null;
+    const sectionIds = new Map<string, string>();
+    const sections = clonedSource.sections.map(section => {
+      const sectionId = freshId(usedIds);
+      if (!sectionId) return null;
+      sectionIds.set(section.id, sectionId);
+      return { ...section, id: sectionId };
+    });
+    if (sections.some(section => section === null)) return null;
+    const copy: Script = {
+      ...clonedSource,
+      id: newId,
+      title: `${clonedSource.title.slice(0, 193)} (Practice Copy)`,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      protection: undefined,
+      sections: (sections as ScriptSection[]).map(section => ({ ...section })),
+      ...(clonedSource.personalNotes ? {
+        personalNotes: clonedSource.personalNotes.map(note => ({
+          ...note,
+          id: freshId(usedIds) ?? note.id,
+          sectionId: sectionIds.get(note.sectionId) ?? note.sectionId,
+        })),
+      } : {}),
+    };
+    const committed = commitLibrary({
+      scripts: [copy, ...scriptsRef.current],
+      trash: trashRef.current,
+      customOrder: [newId, ...customOrderRef.current],
+      sortMode: sortModeRef.current,
+      activeScriptId: newId,
+    }).ok;
+    return committed ? newId : null;
+  }, [commitLibrary]);
+
+  const restoreOriginalScript = useCallback((id: string) => {
+    const current = scriptsRef.current.find(script => script.id === id);
+    const baseline = current?.protection?.original;
+    if (!current || !baseline) return false;
+    const baselineSectionIds = new Set(baseline.sections.map(section => section.id));
+    return commitLibrary({
+      scripts: scriptsRef.current.map(script => script.id === id
+        ? {
+          ...script,
+          title: baseline.title,
+          purpose: baseline.purpose,
+          sections: baseline.sections.map(section => ({ ...section })),
+          // Notes attached to source turns remain. Notes on turns created
+          // after unlocking are removed with those turns after confirmation.
+          personalNotes: script.personalNotes?.filter(note => baselineSectionIds.has(note.sectionId)),
+          // Keep current cast voices/roles; restoration is source-content
+          // recovery, not a destructive actor reset.
+          updatedAt: Date.now(),
+        }
+        : script),
+      trash: trashRef.current,
+      customOrder: customOrderRef.current,
+      sortMode: sortModeRef.current,
+      activeScriptId: activeScriptIdRef.current,
+    }).ok;
+  }, [commitLibrary]);
+
+  const addPersonalNote = useCallback((id: string, sectionId: string, content: string) => {
+    if (typeof content !== 'string' || content.length > MAX_PERSONAL_NOTE_LENGTH) {
+      setError(`Personal notes must be ${MAX_PERSONAL_NOTE_LENGTH} characters or fewer.`);
+      return null;
+    }
+    const current = scriptsRef.current.find(script => script.id === id);
+    if (!current || !current.sections.some(section => section.id === sectionId)) return null;
+    if ((current.personalNotes?.length ?? 0) >= MAX_PERSONAL_NOTES) {
+      setError(`A script can have at most ${MAX_PERSONAL_NOTES} personal notes.`);
+      return null;
+    }
+    const usedIds = collectScriptIds(scriptsRef.current, trashRef.current);
+    const noteId = freshId(usedIds);
+    if (!noteId) return null;
+    const now = Date.now();
+    const note: PersonalNote = { id: noteId, sectionId, content, createdAt: now, updatedAt: now };
+    const saved = commitLibrary({
+      scripts: scriptsRef.current.map(script => script.id === id
+        ? { ...script, personalNotes: [...(script.personalNotes ?? []), note], updatedAt: now }
+        : script),
+      trash: trashRef.current,
+      customOrder: customOrderRef.current,
+      sortMode: sortModeRef.current,
+      activeScriptId: activeScriptIdRef.current,
+    }).ok;
+    return saved ? noteId : null;
+  }, [commitLibrary]);
+
+  const updatePersonalNote = useCallback((id: string, noteId: string, content: string) => {
+    if (typeof content !== 'string' || content.length > MAX_PERSONAL_NOTE_LENGTH) {
+      setError(`Personal notes must be ${MAX_PERSONAL_NOTE_LENGTH} characters or fewer.`);
+      return false;
+    }
+    const current = scriptsRef.current.find(script => script.id === id);
+    if (!current?.personalNotes?.some(note => note.id === noteId)) return false;
+    const now = Date.now();
+    return commitLibrary({
+      scripts: scriptsRef.current.map(script => script.id === id
+        ? {
+          ...script,
+          personalNotes: script.personalNotes!.map(note => note.id === noteId
+            ? { ...note, content, updatedAt: now }
+            : note),
+          updatedAt: now,
+        }
+        : script),
+      trash: trashRef.current,
+      customOrder: customOrderRef.current,
+      sortMode: sortModeRef.current,
+      activeScriptId: activeScriptIdRef.current,
+    }).ok;
+  }, [commitLibrary]);
+
+  const deletePersonalNote = useCallback((id: string, noteId: string) => {
+    const current = scriptsRef.current.find(script => script.id === id);
+    if (!current?.personalNotes?.some(note => note.id === noteId)) return false;
+    return commitLibrary({
+      scripts: scriptsRef.current.map(script => script.id === id
+        ? { ...script, personalNotes: script.personalNotes!.filter(note => note.id !== noteId), updatedAt: Date.now() }
+        : script),
+      trash: trashRef.current,
+      customOrder: customOrderRef.current,
+      sortMode: sortModeRef.current,
+      activeScriptId: activeScriptIdRef.current,
+    }).ok;
+  }, [commitLibrary]);
+
+  const deleteScriptSection = useCallback((id: string, sectionId: string) => {
+    const current = scriptsRef.current.find(script => script.id === id);
+    if (!current || current.protection?.state === 'protected' || current.sections.length <= 1) {
+      return false;
+    }
+    if (!current.sections.some(section => section.id === sectionId)) return false;
+    const now = Date.now();
+    return commitLibrary({
+      scripts: scriptsRef.current.map(script => script.id === id
+        ? {
+          ...script,
+          sections: script.sections.filter(section => section.id !== sectionId),
+          personalNotes: script.personalNotes?.filter(note => note.sectionId !== sectionId),
+          updatedAt: now,
+        }
+        : script),
       trash: trashRef.current,
       customOrder: customOrderRef.current,
       sortMode: sortModeRef.current,
@@ -939,8 +1153,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setError('Could not create a unique script ID.');
       return null;
     }
+    const sectionIdMap = new Map<string, string>();
     const newSections = clonedSource.sections.map(section => {
       const sectionId = freshId(usedIds);
+      if (sectionId) sectionIdMap.set(section.id, sectionId);
       return sectionId ? { ...section, id: sectionId } : null;
     });
     if (newSections.some(section => section === null)) {
@@ -969,6 +1185,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         clonedSource.presentation,
         presentationDefaultsRef.current,
       ),
+      ...(clonedSource.protection ? {
+        protection: {
+          ...clonedSource.protection,
+          original: {
+            ...clonedSource.protection.original,
+            sections: clonedSource.protection.original.sections.map(section => ({
+              ...section,
+              id: sectionIdMap.get(section.id) ?? section.id,
+               ...(typeof section.characterId === 'string'
+                 ? { characterId: remappedActor?.characterIdMap.get(section.characterId) ?? null }
+                 : {}),
+            })),
+          },
+        },
+      } : {}),
       sections: (newSections as Script['sections']).map(section => {
         if (!clonedSource.actor) return section;
         const characterId = typeof section.characterId === 'string'
@@ -976,6 +1207,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           : section.characterId;
         return { ...section, characterId };
       }),
+      ...(clonedSource.personalNotes ? {
+        personalNotes: clonedSource.personalNotes.map(note => ({
+          ...note,
+          id: freshId(usedIds) ?? note.id,
+          sectionId: sectionIdMap.get(note.sectionId) ?? note.sectionId,
+        })),
+      } : {}),
       ...(remappedActor ? { actor: remappedActor.actor } : {}),
     };
     const nextOrder = [newId, ...customOrderRef.current.filter(orderId => orderId !== newId)];
@@ -1083,6 +1321,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       sections.push({
         ...reviewedSection,
         id,
+        ...(section.notes ? { notesProvenance: 'writer' as const } : {}),
         ...(section.characterId !== undefined
           ? { characterId: section.characterId ? remap.get(section.characterId) ?? null : null }
           : {}),
@@ -1098,6 +1337,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         originalText: draft.provenance.originalText,
         warnings: [...draft.provenance.warnings],
       },
+      ...(draft.purpose === 'performance' ? {
+        protection: {
+          state: 'protected' as const,
+          original: {
+            title: document.script.title,
+            purpose: 'performance' as const,
+            sections: sections.map(section => ({ ...section })),
+          },
+        },
+      } : {}),
       ...(draft.purpose === 'performance' ? {
         actor: {
           enabled: true,
@@ -1126,13 +1375,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { ok: true, id: document.script.id };
   }, [commitLibrary]);
 
-  const exportScripts = useCallback((ids?: string[], format: 'json' | 'txt' = 'json') => {
+  const exportScripts = useCallback((ids?: string[], format: 'json' | 'txt' | 'md' = 'json', options: { includePersonalNotes?: boolean } = {}) => {
     const selected = ids === undefined
       ? scriptsRef.current
       : customOrderRef.current
         .filter(id => ids.includes(id))
         .map(id => scriptsRef.current.find(script => script.id === id))
         .filter((script): script is Script => Boolean(script));
+    if (format === 'md') {
+      return selected.map(script => scriptToMarkdown(script, options)).join('\n\n---\n\n');
+    }
     if (format === 'txt') {
       const activeText = selected.map(script => [
         `# ${script.title}`,
@@ -1155,7 +1407,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ].join('\n\n');
     }
     if (ids !== undefined) {
-      return JSON.stringify(selected.map(cloneScript), null, 2);
+      return JSON.stringify(selected.map(script =>
+        clonePortableScript(script, options.includePersonalNotes === true)), null, 2);
     }
     return JSON.stringify(createLibraryEnvelope(
       selected.map(cloneScript),
@@ -1342,6 +1595,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
        resetScriptPresentation,
       createScript,
       updateScript,
+       unlockScript,
+       relockScript,
+       createEditableCopy,
+       restoreOriginalScript,
+       addPersonalNote,
+       updatePersonalNote,
+       deletePersonalNote,
+       deleteScriptSection,
       deleteScript,
       deleteScripts,
       restoreScripts,

@@ -122,7 +122,8 @@ export default function Reader() {
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
-  const [showSceneNotes, setShowSceneNotes] = useState(true);
+  const [showWriterNotes, setShowWriterNotes] = useState(true);
+  const [showPersonalNotes, setShowPersonalNotes] = useState(true);
   const [timingMessage, setTimingMessage] = useState<string | null>(null);
   const [resumeChoice, setResumeChoice] = useState<ReaderResumePosition | null>(null);
   const resumePendingRef = useRef(true);
@@ -1377,6 +1378,14 @@ export default function Reader() {
           </div>
           
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+            <div className="flex items-center gap-1" aria-label="Reader note controls">
+              <button type="button" onClick={() => setShowWriterNotes(value => !value)} className="present-glass-button rounded-full px-2.5 py-1.5 text-xs font-medium" aria-pressed={showWriterNotes}>
+                Writer notes {showWriterNotes ? 'on' : 'off'}
+              </button>
+              <button type="button" onClick={() => setShowPersonalNotes(value => !value)} className="present-glass-button rounded-full px-2.5 py-1.5 text-xs font-medium" aria-pressed={showPersonalNotes}>
+                Personal notes {showPersonalNotes ? 'on' : 'off'}
+              </button>
+            </div>
             {!sceneEnabled && (
               <Popover>
                 <PopoverTrigger asChild>
@@ -1761,43 +1770,43 @@ export default function Reader() {
                     </aside>
                   );
                 })()}
-                {sceneEnabled && idx === scene.turnIndex && script.sections[idx]?.notes?.trim() && (
+                {sceneEnabled && idx === scene.turnIndex && (script.sections[idx]?.notes?.trim() || script.personalNotes?.some(note => note.sectionId === script.sections[idx].id)) && (
                   <aside className="scene-notes-rail" aria-label="Performance notes">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Notes</p>
-                      <button
-                        type="button"
-                        className="text-xs font-medium text-primary hover:underline"
-                        onClick={() => setShowSceneNotes(value => !value)}
-                      >
-                        {showSceneNotes ? 'Hide' : 'Show'}
-                      </button>
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Rehearsal notes</p>
+                      <div className="flex gap-3 text-xs font-medium text-primary">
+                        {script.sections[idx]?.notes?.trim() && <button type="button" className="hover:underline" onClick={() => setShowWriterNotes(value => !value)}>Writer: {showWriterNotes ? 'on' : 'off'}</button>}
+                        {!!script.personalNotes?.some(note => note.sectionId === script.sections[idx].id) && <button type="button" className="hover:underline" onClick={() => setShowPersonalNotes(value => !value)}>Personal: {showPersonalNotes ? 'on' : 'off'}</button>}
+                      </div>
                     </div>
-                    {showSceneNotes && (
+                    {showWriterNotes && script.sections[idx]?.notes?.trim() && (
                       <p className="scene-notes mt-2 whitespace-pre-wrap text-sm font-normal leading-relaxed">
+                        <strong className="text-xs uppercase tracking-wide text-muted-foreground">{script.sections[idx].notesProvenance === 'writer' ? 'Writer:' : 'Notes (legacy / unspecified):'}</strong>{'\n'}
                         {script.sections[idx].notes}
                       </p>
                     )}
+                    {showPersonalNotes && script.personalNotes?.filter(note => note.sectionId === script.sections[idx].id).map(note => (
+                      <p key={note.id} className="scene-notes mt-2 whitespace-pre-wrap text-sm font-normal leading-relaxed"><strong className="text-xs uppercase tracking-wide text-primary">Personal:</strong>{'\n'}{note.content}</p>
+                    ))}
                   </aside>
                 )}
-                {!sceneEnabled && idx === activeSectionIdx && (script.sections[idx]?.notes?.trim()) && (
+                {!sceneEnabled && idx === activeSectionIdx && (script.sections[idx]?.notes?.trim() || script.personalNotes?.some(note => note.sectionId === script.sections[idx].id)) && (
                   <aside
                     className="mb-4 rounded-lg border border-border bg-muted/50 px-4 py-3"
                     aria-label="Section notes"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes</p>
-                      <button
-                        type="button"
-                        className="text-xs underline"
-                        onClick={() => setShowSceneNotes(value => !value)}
-                      >
-                        {showSceneNotes ? 'Hide notes' : 'Show notes'}
-                      </button>
+                      <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {script.sections[idx]?.notes?.trim() && <button type="button" className="underline" onClick={() => setShowWriterNotes(value => !value)}>Writer notes: {showWriterNotes ? 'on' : 'off'}</button>}
+                        {!!script.personalNotes?.some(note => note.sectionId === script.sections[idx].id) && <button type="button" className="underline" onClick={() => setShowPersonalNotes(value => !value)}>Personal notes: {showPersonalNotes ? 'on' : 'off'}</button>}
+                      </div>
                     </div>
-                    {showSceneNotes && (
-                      <p className="mt-2 whitespace-pre-wrap text-sm font-normal">{script.sections[idx].notes}</p>
+                    {showWriterNotes && script.sections[idx]?.notes?.trim() && (
+                      <p className="mt-2 whitespace-pre-wrap text-sm"><strong className="text-xs uppercase tracking-wide text-muted-foreground">{script.sections[idx].notesProvenance === 'writer' ? 'Writer:' : 'Notes (legacy / unspecified):'}</strong>{'\n'}{script.sections[idx].notes}</p>
                     )}
+                    {showPersonalNotes && script.personalNotes?.filter(note => note.sectionId === script.sections[idx].id).map(note => (
+                      <p key={note.id} className="mt-2 whitespace-pre-wrap text-sm"><strong className="text-xs uppercase tracking-wide text-primary">Personal:</strong>{'\n'}{note.content}</p>
+                    ))}
                   </aside>
                 )}
                 <div 

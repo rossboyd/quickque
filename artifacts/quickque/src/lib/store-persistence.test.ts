@@ -10,6 +10,7 @@ import {
   QUICKQUE_ACTIVE_SCRIPT_KEY,
   storageErrors,
 } from './store-persistence.ts';
+import { mergeImportedLibrary } from './store-model.ts';
 import type { Script } from './types.ts';
 import { DEFAULT_PRESENTATION } from './presentation-preferences.ts';
 import { isValidActor } from './actor-model.ts';
@@ -498,4 +499,101 @@ test('imports retain actor metadata but drop unknown audio/model payloads', () =
   assert.equal((character.voice as typeof character.voice & Record<string, unknown>).model, undefined);
   assert.equal(character.voice.engine, 'turbo');
   assert.equal(character.voice.voiceId, 'rights-cleared-1');
+});
+
+test('new imported performances receive explicit protection and preserve personal notes', () => {
+  const source = script('imported');
+  source.purpose = 'performance';
+  source.importSource = {
+    fileName: 'scene.md',
+    format: 'md',
+    originalText: '**Alex:** Hello',
+    warnings: [],
+  };
+  const merged = mergeImportedLibrary(
+    { scripts: [source], trash: [], customOrder: [source.id] },
+    [],
+    [],
+    (() => {
+      let next = 0;
+      return () => `fresh-${++next}`;
+    })(),
+  );
+  assert.ok(merged);
+  assert.equal(merged?.scripts[0].protection?.state, 'protected');
+  const imported = merged!.scripts[0];
+  imported.personalNotes = [{
+    id: 'note-1',
+    sectionId: imported.sections[0].id,
+    content: 'Try a slower breath.',
+    createdAt: 1,
+    updatedAt: 1,
+  }];
+  const storage = new MemoryStorage();
+  assert.equal(persistLibrary(storage, [imported], imported.id).ok, true);
+  const loaded = loadLibrary(storage, []);
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) return;
+  assert.deepEqual(loaded.scripts[0].personalNotes, imported.personalNotes);
+  assert.equal(loaded.scripts[0].protection?.original.sections[0].content, 'content');
+});
+
+test('import remaps protected baseline cast references with active turns', () => {
+  const source = script('protected-cast');
+  source.purpose = 'performance';
+  source.actor = {
+    enabled: true,
+    characters: [{
+      id: 'alex',
+      name: 'Alex',
+      age: '',
+      gender: '',
+      style: '',
+      voice: { engine: 'turbo', voiceId: 'alex-voice', rate: 1 },
+    }],
+    myRoleIds: ['alex'],
+  };
+  source.sections[0].characterId = 'alex';
+  source.protection = {
+    state: 'protected',
+    original: {
+      title: source.title,
+      purpose: 'performance',
+      sections: source.sections.map(section => ({ ...section })),
+    },
+  };
+  const merged = mergeImportedLibrary(
+    { scripts: [source], trash: [], customOrder: [source.id] },
+    [script('existing')],
+    [],
+    (() => {
+      let next = 0;
+      return () => `remapped-${++next}`;
+    })(),
+  );
+  assert.ok(merged);
+  const imported = merged!.scripts[0];
+  const characterId = imported.actor!.characters[0].id;
+  assert.notEqual(characterId, 'alex');
+  assert.equal(imported.sections[0].characterId, characterId);
+  assert.equal(imported.protection!.original.sections[0].characterId, characterId);
+});
+
+test('orphaned or oversized personal notes fail closed without changing storage', () => {
+  const storage = new MemoryStorage();
+  const valid = script('notes');
+  const original = JSON.stringify([valid]);
+  storage.put(QUICKQUE_SCRIPTS_KEY, original);
+  const orphaned = {
+    ...valid,
+    personalNotes: [{
+      id: 'note',
+      sectionId: 'missing',
+      content: 'orphan',
+      createdAt: 1,
+      updatedAt: 1,
+    }],
+  };
+  assert.equal(persistLibrary(storage, [orphaned], valid.id).ok, false);
+  assert.equal(storage.getItem(QUICKQUE_SCRIPTS_KEY), original);
 });

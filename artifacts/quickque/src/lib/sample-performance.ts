@@ -37,7 +37,7 @@ export function createMatildaSample(voices: LocalVoice[] = [], now = Date.now(),
     sections: turns.map((turn, index) => ({
       id: idFactory(), title: `${index + 1}. ${turn.who}`, content: turn.content,
       characterId: characters.find(character => character.name === turn.who)!.id,
-      ...(turn.notes ? { notes: turn.notes } : {}),
+       ...(turn.notes ? { notes: turn.notes, notesProvenance: 'writer' as const } : {}),
     })),
   };
 }

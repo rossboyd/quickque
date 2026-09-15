@@ -4,6 +4,8 @@ export type ScriptSection = {
   content: string;
   /** Optional director's notes/cues; never part of spoken dialogue. */
   notes?: string;
+  /** Missing means legacy/undifferentiated notes; never infer writer authorship. */
+  notesProvenance?: 'writer' | 'legacy';
   /** Script-scoped cast identity. A missing identity is visibly unassigned. */
   characterId?: string | null;
 };
@@ -52,6 +54,27 @@ export type ScriptImportSource = {
   warnings: string[];
 };
 
+/** A rehearsal annotation owned by this device/user, not by the script author. */
+export type PersonalNote = {
+  id: string;
+  sectionId: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+/** The source-authored baseline retained for an imported performance. */
+export type OriginalScriptBaseline = {
+  title: string;
+  purpose: ScriptPurpose;
+  sections: ScriptSection[];
+};
+
+export type ScriptProtection = {
+  state: 'protected' | 'unlocked';
+  original: OriginalScriptBaseline;
+};
+
 export type Script = {
   /** Script identity is independent of whether partner audio is enabled. */
   purpose?: ScriptPurpose;
@@ -73,6 +96,13 @@ export type Script = {
    */
   narratorVoice?: ActorVoice | null;
   importSource?: ScriptImportSource;
+  /**
+   * New imported performances explicitly retain their source baseline. Missing
+   * protection on older files means legacy data remains editable.
+   */
+  protection?: ScriptProtection;
+  /** Personal annotations are separate from writer directions (`sections.notes`). */
+  personalNotes?: PersonalNote[];
 };
 
 export type Settings = {

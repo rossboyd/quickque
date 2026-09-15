@@ -19,6 +19,8 @@ export const MAX_ACTOR_STYLE_LENGTH = 500;
 export const MAX_ACTOR_VOICE_ID_LENGTH = 200;
 export const MAX_ACTOR_ROLES = 100;
 export const MAX_SECTION_NOTES_LENGTH = 500_000;
+export const MAX_PERSONAL_NOTE_LENGTH = 20_000;
+export const MAX_PERSONAL_NOTES = 2_000;
 // Browser/macOS system speech exposes the useful, portable 0.5–2 range.
 export const MIN_ACTOR_VOICE_RATE = 0.5;
 export const MAX_ACTOR_VOICE_RATE = 2;
@@ -235,8 +237,26 @@ function cloneSectionData(section: ScriptSection): ScriptSection {
     content: section.content,
   };
   if (section.notes !== undefined) cloned.notes = section.notes;
+  if (section.notesProvenance !== undefined) cloned.notesProvenance = section.notesProvenance;
   if (section.characterId !== undefined) cloned.characterId = section.characterId;
   return cloned;
+}
+
+function clonePersonalNotes(script: Script): Script['personalNotes'] {
+  if (!script.personalNotes) return undefined;
+  return script.personalNotes.map(note => ({ ...note }));
+}
+
+function cloneProtection(script: Script): Script['protection'] {
+  if (!script.protection) return undefined;
+  return {
+    state: script.protection.state,
+    original: {
+      title: script.protection.original.title,
+      purpose: script.protection.original.purpose,
+      sections: script.protection.original.sections.map(cloneSectionData),
+    },
+  };
 }
 
 export function unassignDeletedCharacter(
@@ -285,6 +305,18 @@ export function cloneScriptData(script: Script): Script {
       warnings: [...script.importSource.warnings],
     };
   }
+  if (script.protection) cloned.protection = cloneProtection(script);
+  if (script.personalNotes) cloned.personalNotes = clonePersonalNotes(script);
+  return cloned;
+}
+
+/** Portable script sharing is private-note-free unless the user explicitly opts in. */
+export function clonePortableScript(
+  script: Script,
+  includePersonalNotes = false,
+): Script {
+  const cloned = cloneScriptData(script);
+  if (!includePersonalNotes) delete cloned.personalNotes;
   return cloned;
 }
 

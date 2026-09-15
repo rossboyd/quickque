@@ -81,6 +81,13 @@ export function isValidScriptSection(value: unknown): value is ScriptSection {
     return false;
   }
   if (
+    value.notesProvenance !== undefined &&
+    value.notesProvenance !== 'writer' &&
+    value.notesProvenance !== 'legacy'
+  ) {
+    return false;
+  }
+  if (
     value.characterId !== undefined &&
     value.characterId !== null &&
     (typeof value.characterId !== 'string' ||

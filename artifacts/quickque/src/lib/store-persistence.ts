@@ -20,6 +20,8 @@ import {
   MAX_SECTION_NOTES_LENGTH,
   normalizeActorSectionReferences,
   migrateActorVoices,
+  MAX_PERSONAL_NOTE_LENGTH,
+  MAX_PERSONAL_NOTES,
 } from './actor-model.ts';
 
 export const QUICKQUE_SCRIPTS_KEY = 'quickque_scripts';
@@ -144,6 +146,43 @@ function isValidScriptFields(value: unknown): value is Omit<Script, 'presentatio
       value.importSource.warnings.length > 100 ||
       value.importSource.warnings.some(warning => !isBoundedString(warning, 2_000))) return false;
   }
+  if (value.protection !== undefined) {
+    if (!isRecord(value.protection) ||
+      (value.protection.state !== 'protected' && value.protection.state !== 'unlocked') ||
+      !isRecord(value.protection.original) ||
+      !isBoundedString(value.protection.original.title, MAX_TITLE_LENGTH) ||
+      !isValidScriptPurpose(value.protection.original.purpose) ||
+      !Array.isArray(value.protection.original.sections) ||
+      value.protection.original.sections.length > MAX_SECTIONS) return false;
+    const baselineIds = new Set<string>();
+    if (value.protection.original.sections.some(section => {
+      if (!isRecord(section) || !isValidId(section.id) || baselineIds.has(section.id)) return true;
+      baselineIds.add(section.id);
+      return !isBoundedString(section.title, MAX_TITLE_LENGTH) ||
+        !isBoundedString(section.content, MAX_CONTENT_LENGTH) ||
+        (section.notes !== undefined && !isBoundedString(section.notes, MAX_SECTION_NOTES_LENGTH)) ||
+        (section.notesProvenance !== undefined &&
+          section.notesProvenance !== 'writer' && section.notesProvenance !== 'legacy') ||
+        (section.characterId !== undefined && section.characterId !== null &&
+          (!isBoundedString(section.characterId, MAX_ACTOR_ID_LENGTH) ||
+            section.characterId.trim().length === 0));
+    })) return false;
+  }
+  if (value.personalNotes !== undefined) {
+    if (!Array.isArray(value.personalNotes) || value.personalNotes.length > MAX_PERSONAL_NOTES) return false;
+    const noteIds = new Set<string>();
+    const sectionIds = new Set((value.sections as unknown[]).map((section: unknown) =>
+      isRecord(section) && typeof section.id === 'string' ? section.id : ''));
+    if (value.personalNotes.some(note =>
+      !isRecord(note) ||
+      !isValidId(note.id) ||
+      noteIds.has(note.id) ||
+      (noteIds.add(note.id), !isValidId(note.sectionId) || !sectionIds.has(note.sectionId)) ||
+      !isBoundedString(note.content, MAX_PERSONAL_NOTE_LENGTH) ||
+      !isValidTimestamp(note.createdAt) ||
+      !isValidTimestamp(note.updatedAt)
+    )) return false;
+  }
   if (!isValidTimestamp(value.createdAt) || !isValidTimestamp(value.updatedAt)) {
     return false;
   }
@@ -159,7 +198,9 @@ function isValidScriptFields(value: unknown): value is Omit<Script, 'presentatio
       isBoundedString(section.title, MAX_TITLE_LENGTH) &&
       isBoundedString(section.content, MAX_CONTENT_LENGTH) &&
       (section.notes === undefined ||
-        isBoundedString(section.notes, MAX_SECTION_NOTES_LENGTH)) &&
+         isBoundedString(section.notes, MAX_SECTION_NOTES_LENGTH)) &&
+       (section.notesProvenance === undefined ||
+         section.notesProvenance === 'writer' || section.notesProvenance === 'legacy') &&
       (section.characterId === undefined ||
         section.characterId === null ||
         (
@@ -195,6 +236,19 @@ function normalizeScriptPresentation(
     ...cloned,
     sections: normalizeActorSectionReferences(value.actor, cloned.sections),
     ...(value.actor ? { actor: migrateActorVoices(cloneActor(value.actor)) } : {}),
+    ...(value.protection ? {
+      protection: {
+        state: value.protection.state,
+        original: {
+          title: value.protection.original.title,
+          purpose: value.protection.original.purpose,
+          sections: value.protection.original.sections.map(section => ({ ...section })),
+        },
+      },
+    } : {}),
+    ...(value.personalNotes ? {
+      personalNotes: value.personalNotes.map(note => ({ ...note })),
+    } : {}),
     presentation: normalizePresentation(value.presentation, fallback),
   };
 }
