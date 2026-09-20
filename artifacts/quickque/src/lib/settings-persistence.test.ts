@@ -44,7 +44,7 @@ test('appearance defaults preserve the existing presentation settings', () => {
   assert.equal(DEFAULT_SETTINGS.fontFamily, 'system');
   assert.equal(FONT_FAMILY_OPTIONS.length, 4);
   assert.match(getFontFamilyCss(DEFAULT_SETTINGS.fontFamily), /system-ui/);
-  assert.equal(DEFAULT_SETTINGS.darkTheme, true);
+  assert.equal(DEFAULT_SETTINGS.darkTheme, false);
   assert.equal(getThemeDefaultPickerColor(true), '#F4F5FA');
   assert.equal(getThemeDefaultPickerColor(false), '#14182E');
   assert.ok((getTextContrastRatio('#000000', true) ?? 0) < 4.5);

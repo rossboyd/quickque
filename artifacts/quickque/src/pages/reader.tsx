@@ -55,10 +55,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  applyDocumentTheme,
-  QUICKQUE_READER_THEME_ATTRIBUTE,
-} from '@/lib/settings-persistence';
 import { recordAnonymousAnalytics } from '@/lib/anonymous-analytics';
 import { audioRequest } from '@/lib/script-audio-model';
 import { currentAudioReadiness } from '@/lib/script-audio';
@@ -102,17 +98,6 @@ export default function Reader() {
     updateScript,
     updateSettings: persistAppSettings, addPersonalNote, updatePractice,
   } = useStore();
-  const workbenchDarkThemeRef = useRef(settings.darkTheme);
-  workbenchDarkThemeRef.current = settings.darkTheme;
-  useLayoutEffect(() => {
-    if (typeof document === 'undefined') return;
-    document.documentElement.setAttribute(QUICKQUE_READER_THEME_ATTRIBUTE, 'dark');
-    applyDocumentTheme(document, true);
-    return () => {
-      document.documentElement.removeAttribute(QUICKQUE_READER_THEME_ATTRIBUTE);
-      applyDocumentTheme(document, workbenchDarkThemeRef.current);
-    };
-  }, []);
   const params = useParams();
   const [_, setLocation] = useLocation();
   const script = scripts.find(s => s.id === params.id);

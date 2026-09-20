@@ -4,7 +4,6 @@ import { DEFAULT_SETTINGS } from './types.ts';
 import {
   applyDocumentTheme,
   applyPersistedTheme,
-  QUICKQUE_READER_THEME_ATTRIBUTE,
   QUICKQUE_SETTINGS_KEY,
 } from './settings-persistence.ts';
 import {
@@ -75,17 +74,15 @@ test('persisted light and dark themes apply before the first React paint', () =>
   assert.equal(document.documentElement.attributes.get('data-quickque-theme'), 'dark');
 });
 
-test('reader theme remains dark independently of the workbench preference', () => {
+test('document theme follows the explicit settings preference', () => {
   const document = fakeDocument();
-  document.documentElement.setAttribute(QUICKQUE_READER_THEME_ATTRIBUTE, 'dark');
-  assert.equal(applyDocumentTheme(document, false), true);
-  assert.equal(document.classes.has('dark'), true);
-  assert.equal(document.documentElement.attributes.get('data-quickque-theme'), 'dark');
-
-  document.documentElement.removeAttribute(QUICKQUE_READER_THEME_ATTRIBUTE);
   assert.equal(applyDocumentTheme(document, false), false);
   assert.equal(document.classes.has('dark'), false);
   assert.equal(document.documentElement.attributes.get('data-quickque-theme'), 'light');
+
+  assert.equal(applyDocumentTheme(document, true), true);
+  assert.equal(document.classes.has('dark'), true);
+  assert.equal(document.documentElement.attributes.get('data-quickque-theme'), 'dark');
 });
 
 test('delayed native hydration keeps startup pending until both sources are ready', () => {

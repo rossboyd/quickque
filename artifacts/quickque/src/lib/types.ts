@@ -172,7 +172,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fontSize: 48,
   speed: 50,
   backgroundOpacity: 85,
-  darkTheme: true, // Default to dark for prompter
+  darkTheme: false,
   compactMode: false,
   textColor: null,
   fontFamily: 'system',

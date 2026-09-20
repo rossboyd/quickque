@@ -19,7 +19,7 @@
   // This runs before the React module is fetched/painted. Keep it deliberately
   // dependency-free so a persisted light theme cannot flash dark (or vice
   // versa) while settings and the native library hydrate.
-  let darkTheme = true;
+  let darkTheme = false;
   try {
     const raw = window.localStorage.getItem('quickque_settings');
     if (raw !== null) {

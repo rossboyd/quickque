@@ -6,7 +6,6 @@
 - [Native library compatibility](native-library-compatibility.md) — reconcile chosen-folder scripts with browser metadata; recovery must block queued autosaves.
 - [React SSR router compatibility](react-ssr-router.md) — Wouter's memory-location hook can fail React 19 SSR despite passing typechecks; verify actual HTML responses.
 - [Reader reflow anchoring](reader-reflow-anchoring.md) — capture the reading word before requesting font changes; parent layout cleanup can already see the new DOM.
-- [Reader theme isolation](reader-theme-isolation.md) — the workbench may be light or dark, but reader mode must always use the main dark theme.
 - [Native test exit status](native-test-exit-status.md) — a passing XCTest summary can precede command-entry-point failure; check the entire Swift invocation.
 - [Local cloned voice ownership](local-cloned-voice-ownership.md) — Quickque voices are user-created, device-local assets; onboarding uses a rehearsal-style reference recording.
 - [Chatterbox word timing](chatterbox-word-timing.md) — bundled generation exposes passage audio and duration, not word timestamps; exact highlights require local alignment.
