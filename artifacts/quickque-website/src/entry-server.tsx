@@ -27,7 +27,7 @@ function markUnknownRoute(route: string | null, siteData: SiteData | null, conte
     context.status = 404;
     return;
   }
-  const known = new Set(['/', '/install', '/guide', '/privacy', '/license', '/pricing', '/checkout/result']);
+  const known = new Set(['/', '/install', '/guide', '/privacy', '/license', '/pricing', '/checkout/result', '/support', '/release-notes', '/changelog']);
   if (known.has(route)) return;
   if (route.startsWith('/guide/')) {
     const slug = route.slice('/guide/'.length);

@@ -152,7 +152,7 @@ function sendJson(res, value, status = 200) {
 function sitemapXml(siteData, isProduction) {
   const origin = isProduction ? safeOrigin(siteData.config.productionOrigin) : null;
   const basePath = getBasePath(siteData.config);
-  const routes = ['/', '/install', '/guide', '/privacy', '/license', '/pricing'];
+  const routes = ['/', '/install', '/guide', '/privacy', '/license', '/pricing', '/support', '/release-notes'];
   for (const article of siteData.articles) routes.push(`/guide/${article.slug}`);
   const urls = origin
     ? routes.map((route) => `  <url><loc>${xmlEscape(urlForRoute(origin, basePath, route))}</loc></url>`).join('\n')

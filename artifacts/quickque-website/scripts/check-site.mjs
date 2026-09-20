@@ -13,6 +13,10 @@ assert.equal(config.repository, 'https://github.com/rossboyd/quickque');
 const updateArticle = articles.find(a => a.slug === 'updating-uninstalling');
 assert.ok(!updateArticle.body.includes('{{SOURCE_COMMAND}}'), 'Existing-checkout updates must not clone again');
 assert.match(updateArticle.body, /git pull --ff-only[\s\S]*pnpm install --frozen-lockfile[\s\S]*desktop:build/, 'Reproducible existing-checkout update sequence');
+assert.match(updateArticle.body, /macOS 26\+/i, 'Updating guide uses the configured macOS requirement');
+assert.doesNotMatch(updateArticle.body, /macOS 14/i, 'Updating guide has no stale macOS 14 requirement');
+const websiteArticles = articles.map(article => article.body).join('\n');
+assert.doesNotMatch(websiteArticles, /macOS 14/i, 'Website guides have no stale macOS 14 requirement');
 for (const article of articles) {
   for (const field of ['slug', 'title', 'description', 'category', 'body']) assert.equal(typeof article[field], 'string', `${article.slug}.${field}`);
   assert.ok(article.body.length > 1000, `Complete article: ${article.slug}`);
@@ -34,7 +38,7 @@ process.stdout.write(`Content: ${articles.length} complete articles; source-buil
 if (!process.argv.includes('--content-only')) {
   // The managed preview is the default. CI supplies a test server URL explicitly.
   const base = new URL(process.env.SITE_CHECK_URL || `http://localhost:80${config.basePath}`);
-  const paths = ['', 'install/', 'pricing/', 'checkout/result/', 'guide/', 'privacy/', 'license/', ...articles.map(a => `guide/${a.slug}/`)];
+  const paths = ['', 'install/', 'pricing/', 'checkout/result/', 'guide/', 'privacy/', 'license/', 'support/', 'release-notes/', 'changelog/', ...articles.map(a => `guide/${a.slug}/`)];
   const pages = new Map();
   const titles = new Set();
   const descriptions = new Set();
@@ -80,6 +84,16 @@ if (!process.argv.includes('--content-only')) {
       assert.match(html, /No payment was made/, 'Dummy completion is explicitly non-payment');
       assert.doesNotMatch(html, /Download Quickque|Payment confirmed/, 'Dummy completion grants nothing');
     }
+    if (route === 'support/') {
+      assert.match(html, /Open Quickque issues/, 'Support issue route is server rendered');
+      assert.match(html, /private scripts|private script content/i, 'Support protects private report content');
+      assert.match(html, /github\.com\/rossboyd\/quickque\/issues/, 'Support links to the GitHub issue tracker');
+    }
+    if (route === 'release-notes/' || route === 'changelog/') {
+      assert.match(html, /Verified public releases/, 'Release notes distinguish verified releases');
+      assert.match(html, /GitHub release details/, 'Release notes link to GitHub release details');
+      assert.match(html, /macOS 26|Apple Silicon/, 'Release notes include current platform evidence');
+    }
     pages.set(new URL(route, base).pathname.replace(/\/$/, ''), html);
   }
   const checkedAssets = new Set();
@@ -117,3 +131,7 @@ if (!process.argv.includes('--content-only')) {
   assert.doesNotMatch(sitemap, /\.replit\.dev/);
   process.stdout.write(`HTTP: ${pages.size} initial-HTML pages, metadata, links, images, anchors, robots, sitemap and real 404s passed.\n`);
 }
+
+// Node's fetch pool can retain idle sockets after the last assertion. Exit
+// explicitly so this validation command reports its result promptly in CI.
+process.exit(0);

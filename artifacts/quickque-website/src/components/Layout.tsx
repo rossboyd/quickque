@@ -31,6 +31,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Link href="/pricing" className="hover:text-[var(--accent)] transition-colors">Pricing</Link>
           <Link href="/guide" className="hover:text-[var(--accent)] transition-colors">Manual</Link>
           <Link href="/install" className="hover:text-[var(--accent)] transition-colors">Install</Link>
+           <Link href="/release-notes" className="hover:text-[var(--accent)] transition-colors">Release notes</Link>
+           <Link href="/support" className="hover:text-[var(--accent)] transition-colors">Support</Link>
            <Link href="/install#download" className="hover:text-[var(--accent)] transition-colors">Download</Link>
           <a href={config?.demoUrl} className="hover:text-[var(--accent)] transition-colors">Live demo</a>
           <a href={config?.repository} target="_blank" rel="noreferrer" className="hover:text-[var(--accent)] transition-colors">GitHub</a>
@@ -55,6 +57,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Link href="/pricing" className="block py-2">Pricing</Link>
           <Link href="/guide" className="block py-2">Manual</Link>
           <Link href="/install" className="block py-2">Source build</Link>
+           <Link href="/release-notes" className="block py-2">Release notes</Link>
+           <Link href="/support" className="block py-2">Support</Link>
            <Link href="/install#download" className="block py-2">Download</Link>
            <a href={config?.demoUrl} className="block py-2">Live demo</a>
           <a href={config?.repository} target="_blank" rel="noreferrer" className="block py-2">GitHub</a>
@@ -74,6 +78,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex gap-6 font-medium">
             <Link href="/privacy" className="hover:text-[var(--foreground)]">Privacy</Link>
             <Link href="/license" className="hover:text-[var(--foreground)]">Licence</Link>
+            <Link href="/release-notes" className="hover:text-[var(--foreground)]">Release notes</Link>
+            <Link href="/support" className="hover:text-[var(--foreground)]">Support</Link>
           </div>
         </div>
       </footer>

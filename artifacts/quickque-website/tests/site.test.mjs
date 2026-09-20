@@ -48,7 +48,7 @@ test('SSR remains readable without JavaScript and has no remote first-frame depe
   const head = html;
   assert.match(head, /<h1[^>]*>Keep your place\./);
   assert.match(head, /href="\/demo\/read\/seed-1"/);
-  assert.match(head, /src="\/images\/library\.webp"/);
+  assert.match(head, /src="\/images\/workspace-cards\.webp"/);
   assert.doesNotMatch(head, /https?:\/\/[^"]+\.(?:css|woff2?|ttf)/);
   assert.doesNotMatch(head, /Loading (article|manual)/);
 });
@@ -132,11 +132,13 @@ test('hydration serialization cannot close its script element', () => {
 test('root base path accepts public website routes', () => {
   assert.equal(routePath('/', data.config), '/');
   assert.equal(routePath('/guide/scripts/', data.config), '/guide/scripts');
+  assert.equal(routePath('/support/', data.config), '/support');
+  assert.equal(routePath('/release-notes/', data.config), '/release-notes');
 });
 
 test('every public page renders on the server with unique production metadata', () => {
   const publicData = { ...data, config: { ...data.config, productionOrigin: 'https://example.org' } };
-  const routes = ['', 'install', 'pricing', 'guide', 'privacy', 'license', ...data.articles.map(a => `guide/${a.slug}`)];
+  const routes = ['', 'install', 'pricing', 'guide', 'privacy', 'license', 'support', 'release-notes', 'changelog', ...data.articles.map(a => `guide/${a.slug}`)];
   const titles = new Set();
   for (const route of routes) {
     const context = { isProduction: true };
@@ -148,6 +150,25 @@ test('every public page renders on the server with unique production metadata', 
     assert.equal(result.metadata.openGraph.url, result.metadata.canonical);
     assert.ok(!titles.has(result.metadata.title));
     titles.add(result.metadata.title);
+  }
+});
+
+test('public information routes stay evidence-backed', () => {
+  const updateArticle = data.articles.find(article => article.slug === 'updating-uninstalling');
+  const localFlowArticle = data.articles.find(article => article.slug === 'local-flow');
+  assert.ok(updateArticle);
+  assert.ok(localFlowArticle);
+  assert.match(updateArticle.body, /macOS 26\+/i);
+  assert.doesNotMatch(updateArticle.body, /macOS 14/i);
+  assert.doesNotMatch(localFlowArticle.body, /macOS 14/i);
+
+  for (const [route, heading] of [['/support', 'Get help with Quickque'], ['/release-notes', 'Release notes'], ['/changelog', 'Changelog']]) {
+    const context = { isProduction: false };
+    const result = render(route, context, data);
+    assert.notEqual(context.status, 404);
+    assert.match(result.html, new RegExp(`<h1[^>]*>${heading}</h1>`));
+    assert.ok(result.metadata.description);
+    assert.match(result.html, /<nav[^>]+aria-label="Main navigation"/);
   }
 });
 

@@ -52,7 +52,7 @@ source build, use the generated command block in the
 [`config/site.json`](artifacts/quickque-website/config/site.json).
 
 The native Swift test and desktop build require an Apple Silicon Mac running
-macOS 14 or newer, Xcode 16, and stable Rust. Follow
+macOS 26 or newer, Xcode 26 / Swift 6.2, and stable Rust. Follow
 [`artifacts/quickque/DESKTOP.md`](artifacts/quickque/DESKTOP.md) for native
 work. Report the actual platform and hardware checks you ran; never describe a
 browser preview or Linux build as Mac verification.

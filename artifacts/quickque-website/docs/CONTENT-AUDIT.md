@@ -23,8 +23,8 @@ feature set or a release promise.
   `PORT=5173 BASE_PATH=/ pnpm --filter @workspace/quickque dev`.
 - Native prerequisites and local build commands are evidenced by
   `artifacts/quickque/DESKTOP.md:9-45` and
-  `artifacts/quickque/package.json:10-17`: Apple Silicon, macOS 14+, Xcode
-  16/Swift 6, stable Rust, Node, pnpm, and the `native:*`/`desktop:*` scripts.
+  `artifacts/quickque/package.json:10-17`: Apple Silicon, macOS 26+, Xcode
+  26/Swift 6.2, stable Rust, Node, pnpm, and the `native:*`/`desktop:*` scripts.
   The root `package.json:4,7` pins pnpm 10.26.1, and the content pins Node 24
   and pnpm 10.26.1 accordingly.
 - The articles never call a source build a verified release. The repository
@@ -222,7 +222,9 @@ edit link to its actual JSON source under
 1. There is no verified public release, prebuilt download, installer script,
    or Homebrew package to document yet. The website's installation metadata
    must remain release-aware and fail closed until a release has verified
-   assets, checksums, and supported-Mac results.
+   assets, checksums, and supported-Mac results. The current configuration
+   records the v0.1.0 test release as unavailable while its unsigned Apple
+   Silicon DMG and native Mac verification remain outstanding.
 2. Native execution has not been verified in the current environment:
    `DESKTOP.md:293-311` lists the outstanding Mac-only checks. This includes
    native compilation/run, microphone authorization, helper packaging, model

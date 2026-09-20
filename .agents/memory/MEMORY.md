@@ -19,3 +19,4 @@
 - [Post-merge database safety](post-merge-schema-safety.md) — incomplete schema pushes can propose table deletion; inspect logs even when the setup runner reports success.
 - [Rehearsal role authority](rehearsal-role-authority.md) — explicit cast roles must drive readiness, audio generation and scene execution together.
 - [Guided practice data](guided-practice-data.md) — learning preferences stay local, remain separate from source text, and are safe on protected scripts.
+- [Website validation shutdown](website-validation-shutdown.md) — fetch-heavy SSR link checks may need an explicit process exit after printing successful results.

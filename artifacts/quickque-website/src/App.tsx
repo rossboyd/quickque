@@ -10,6 +10,8 @@ import { LicensePage } from './pages/License';
 import { NotFoundPage } from './pages/NotFound';
 import { PricingPage } from './pages/Pricing';
 import { CheckoutResultPage } from './pages/CheckoutResult';
+import { SupportPage } from './pages/Support';
+import { ReleaseNotesPage } from './pages/ReleaseNotes';
 
 export function App({ context }: { context?: any }) {
   return (
@@ -23,6 +25,9 @@ export function App({ context }: { context?: any }) {
         <Route path="/guide/:slug" component={() => <GuideArticlePage context={context} />} />
         <Route path="/privacy" component={() => <PrivacyPage context={context} />} />
         <Route path="/license" component={() => <LicensePage context={context} />} />
+        <Route path="/support" component={() => <SupportPage context={context} />} />
+        <Route path="/release-notes" component={() => <ReleaseNotesPage context={context} />} />
+        <Route path="/changelog" component={() => <ReleaseNotesPage context={context} />} />
         <Route component={() => {
           if (context) context.status = 404;
           return <NotFoundPage context={context} />;

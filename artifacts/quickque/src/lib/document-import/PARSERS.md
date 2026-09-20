@@ -51,7 +51,7 @@ the CMap, Foxit and Liberation font licenses. Source notices are in
   Review this adaptation and upstream security advisories before upgrading;
   do not replace it with an unguarded worker or CDN URL.
 - PDF.js's legacy build is selected for the Mac system-webview path. Native
-  macOS 14 compatibility still needs the hardware checks in `DESKTOP.md`.
+  macOS 26 compatibility still needs the hardware checks in `DESKTOP.md`.
 - Returned text is at most 500,000 UTF-16 code units. Over-limit text is an
   actionable error, not a truncated result.
 - PDF text order and line breaks depend on the source's text operators.
