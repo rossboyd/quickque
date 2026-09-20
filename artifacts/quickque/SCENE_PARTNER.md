@@ -143,6 +143,25 @@ same default voice and natural rate. Each turn currently loads the model, so
 preparation can take time. See `turbo/README.md` for build and validation status.
 Mac playback and the rebuilt DMG still require validation on Apple Silicon.
 
+## Guided practice queues
+
+In **Practice**, choose a continuous range or **Bookmarked passages only**
+when difficult passages have been marked. A bookmarked queue visits only those
+turns, in script order; it does not play the intervening dialogue. Deleted turns
+are ignored. Bookmark changes during a run apply the next time you start a queue.
+
+Use Next when you finish an in-person turn. Previous navigates within the queue.
+**Repeat current passage** restarts just that turn and hides a revealed learner
+line again; **Repeat bookmarked queue** restarts the entire selection. Prompted
+and off-book practice both offer Reveal. Focusing a private reflection pauses
+playback, and unsaved drafts remain attached to their own turn while navigating.
+
+The final summary names completed turns rather than awarding scores or streaks.
+Skipped or interrupted partner turns are not reported as completed. Queue state
+and completion are session-only; existing bookmarks and saved personal notes
+remain local. Partner playback and microphone shutdown use the same acknowledged
+turn-transition boundary, including the end of the queue.
+
 ## Verification boundary
 
 Browser/unit checks establish data handling and control logic, not audible

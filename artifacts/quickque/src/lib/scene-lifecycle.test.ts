@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { chainDisposalBarrier } from './disposal-barrier.ts';
 import { SceneLifecycle, type SceneSpeaker, type SceneVoice } from './scene-lifecycle.ts';
 
 const voice: SceneVoice = { engine: 'system', voiceId: 'local', rate: 1 };
@@ -9,9 +10,11 @@ const turns = [
   { id: 'partner-2', content: 'Partner two', characterId: 'partner' },
 ];
 const flush = async () => {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  // A transition now crosses a serialized stop barrier and (optionally) a
+  // microphone barrier. Let the current microtask graph drain at the next
+  // turn of the event loop instead of depending on an arbitrary promise
+  // depth.
+  await new Promise<void>(resolve => setImmediate(resolve));
 };
 
 class DeferredSpeaker implements SceneSpeaker {
@@ -38,6 +41,26 @@ class DeferredSpeaker implements SceneSpeaker {
 
   report(call: number, charStart: number, charEnd: number): void {
     this.pending[call]?.progress?.({ charStart, charEnd });
+  }
+}
+
+class DelayedStopSpeaker extends DeferredSpeaker {
+  private pendingStops: (() => void)[] = [];
+  private delayStops = false;
+
+  delayNextStop(): void {
+    this.delayStops = true;
+  }
+
+  releaseStop(): void {
+    this.pendingStops.shift()?.();
+  }
+
+  override stop(): Promise<void> {
+    this.stops += 1;
+    if (!this.delayStops) return Promise.resolve();
+    this.delayStops = false;
+    return new Promise(resolve => this.pendingStops.push(resolve));
   }
 }
 
@@ -314,4 +337,299 @@ test('a bounded passage starts and completes at its selected turn limits', async
   await scene.startOver();
   assert.equal(scene.state.turnIndex, 1);
   assert.deepEqual(speaker.calls, []);
+});
+
+test('bookmark queues resolve in script order, retain coordinates, and skip removed IDs', async () => {
+  const speaker = new DeferredSpeaker();
+  const scene = new SceneLifecycle({
+    turns: [
+      { id: 'first', content: 'First', characterId: 'mine' },
+      { id: 'second', content: 'Second', characterId: 'mine' },
+      { id: 'third', content: 'Third', characterId: 'mine' },
+      { id: 'fourth', content: 'Fourth', characterId: 'mine' },
+    ],
+    myRoleIds: ['mine'],
+    voiceForCharacter: () => voice,
+    speaker,
+    turnIds: ['missing', 'fourth', 'first', 'fourth'],
+  });
+
+  assert.equal(scene.state.turnIndex, 0);
+  await scene.start();
+  assert.equal(scene.state.phase, 'waiting');
+  await scene.next();
+  assert.equal(scene.state.turnIndex, 3);
+  assert.deepEqual(scene.state.completedTurnIds, ['first']);
+  await scene.next();
+  assert.equal(scene.state.phase, 'completed');
+  assert.equal(scene.state.turnIndex, 4);
+  assert.deepEqual(scene.state.completedTurnIds, ['first', 'fourth']);
+
+  await scene.goTo(1);
+  assert.equal(scene.state.turnIndex, 3, 'a jump into the gap selects the next bookmark');
+  assert.equal(scene.state.phase, 'idle');
+  await scene.goTo(99);
+  assert.equal(scene.state.phase, 'completed');
+  assert.equal(scene.state.turnIndex, 4);
+});
+
+test('an explicit empty bookmark queue completes safely and does not expose a turn', async () => {
+  const speaker = new DeferredSpeaker();
+  const scene = new SceneLifecycle({
+    turns: [{ id: 'not-bookmarked', content: 'Nope', characterId: 'mine' }],
+    myRoleIds: ['mine'],
+    voiceForCharacter: () => voice,
+    speaker,
+    turnIds: [],
+  });
+
+  await scene.start();
+  assert.equal(scene.state.phase, 'completed');
+  assert.equal(scene.currentTurn, null);
+  assert.deepEqual(scene.state.completedTurnIds, []);
+  assert.deepEqual(speaker.calls, []);
+});
+
+test('a sparse explicit queue completes at the script end coordinate', async () => {
+  const scene = new SceneLifecycle({
+    turns: [
+      { id: 'bookmarked', content: 'Bookmarked', characterId: 'mine' },
+      { id: 'unrelated', content: 'Do not expose', characterId: 'mine' },
+      { id: 'also-unrelated', content: 'Do not expose', characterId: 'mine' },
+    ],
+    myRoleIds: ['mine'],
+    voiceForCharacter: () => voice,
+    speaker: new DeferredSpeaker(),
+    turnIds: ['bookmarked'],
+  });
+
+  await scene.start();
+  await scene.next();
+  assert.equal(scene.state.phase, 'completed');
+  assert.equal(scene.state.turnIndex, 3);
+  assert.equal(scene.currentTurn, null);
+});
+
+test('only waiting turns advance completion, including a paused actor cue', async () => {
+  const speaker = new DeferredSpeaker();
+  const scene = new SceneLifecycle({
+    turns: [
+      { id: 'one', content: 'One', characterId: 'mine' },
+      { id: 'two', content: 'Two', characterId: 'mine' },
+    ],
+    myRoleIds: ['mine'],
+    voiceForCharacter: () => voice,
+    speaker,
+    turnIds: ['one', 'two'],
+  });
+
+  await scene.start();
+  await scene.pause();
+  await scene.next();
+  assert.equal(scene.state.phase, 'paused');
+  assert.equal(scene.state.turnIndex, 1);
+  assert.deepEqual(scene.state.completedTurnIds, ['one']);
+  await scene.goTo(0);
+  assert.deepEqual(scene.state.completedTurnIds, ['one'], 'arbitrary jumps do not claim turns');
+});
+
+test('automatic partner completion records only the spoken turn before continuing', async () => {
+  const speaker = new DeferredSpeaker();
+  const scene = new SceneLifecycle({
+    turns: [
+      { id: 'partner', content: 'Partner', characterId: 'partner' },
+      { id: 'actor', content: 'Actor', characterId: 'mine' },
+    ],
+    myRoleIds: ['mine'],
+    voiceForCharacter: () => voice,
+    speaker,
+  });
+
+  void scene.start();
+  await flush();
+  speaker.finish(0);
+  await flush();
+  assert.equal(scene.state.phase, 'waiting');
+  assert.equal(scene.state.turnIndex, 1);
+  assert.deepEqual(scene.state.completedTurnIds, ['partner']);
+});
+
+test('a delayed turn barrier waits before waiting and repeated pause retains actor completion eligibility', async () => {
+  const speaker = new DeferredSpeaker();
+  let releaseBarrier!: () => void;
+  let holdBarrier = true;
+  const barrier = new Promise<void>(resolve => { releaseBarrier = resolve; });
+  const scene = new SceneLifecycle({
+    turns: [
+      { id: 'one', content: 'One', characterId: 'mine' },
+      { id: 'two', content: 'Two', characterId: 'mine' },
+    ],
+    myRoleIds: ['mine'],
+    voiceForCharacter: () => voice,
+    speaker,
+    beforeTurnChange: () => {
+      if (holdBarrier) {
+        holdBarrier = false;
+        return barrier;
+      }
+      return Promise.resolve();
+    },
+  });
+
+  const start = scene.start();
+  await flush();
+  assert.equal(scene.state.phase, 'preparing');
+  releaseBarrier();
+  await start;
+  assert.equal(scene.state.phase, 'waiting');
+
+  await scene.pause();
+  await scene.pause();
+  await scene.next();
+  assert.equal(scene.state.phase, 'paused');
+  assert.equal(scene.state.turnIndex, 1);
+  assert.deepEqual(scene.state.completedTurnIds, ['one']);
+});
+
+test('a stale speech completion after pause cannot mark or advance a turn', async () => {
+  const speaker = new DeferredSpeaker();
+  const scene = new SceneLifecycle({
+    turns: [{ id: 'partner', content: 'Partner', characterId: 'partner' }],
+    myRoleIds: [],
+    voiceForCharacter: () => voice,
+    speaker,
+  });
+
+  void scene.start();
+  await flush();
+  await scene.pause();
+  speaker.finish(0);
+  await flush();
+  assert.equal(scene.state.phase, 'paused');
+  assert.equal(scene.state.turnIndex, 0);
+  assert.deepEqual(scene.state.completedTurnIds, []);
+});
+
+test('reset superseded while stop is pending resolves without an unhandled cancellation error', async () => {
+  const speaker = new DelayedStopSpeaker();
+  const scene = new SceneLifecycle({
+    turns: [{ id: 'actor', content: 'Actor', characterId: 'mine' }],
+    myRoleIds: ['mine'],
+    voiceForCharacter: () => voice,
+    speaker,
+  });
+  await scene.start();
+  speaker.delayNextStop();
+  const reset = scene.reset();
+  await flush();
+  const restart = scene.start();
+  speaker.releaseStop();
+  await reset;
+  await restart;
+  assert.equal(scene.state.phase, 'waiting');
+});
+
+test('dispose preserves a failed stop as a rejecting replacement barrier', async () => {
+  const scene = new SceneLifecycle({
+    turns: [{ id: 'actor', content: 'Actor', characterId: 'mine' }],
+    myRoleIds: ['mine'],
+    voiceForCharacter: () => voice,
+    speaker: {
+      stop: async () => { throw new Error('native stop failed'); },
+      speak: async () => {},
+    },
+  });
+
+  await assert.rejects(scene.dispose(), /native stop failed/);
+});
+
+test('disposal barriers remain monotonic across a cleaned generation', async () => {
+  let releaseA!: () => void;
+  const inheritedA = new Promise<void>(resolve => { releaseA = resolve; });
+  const events: string[] = [];
+  const barrierB = chainDisposalBarrier(inheritedA, async () => {
+    events.push('B');
+  });
+  const barrierC = chainDisposalBarrier(barrierB, async () => {
+    events.push('C');
+  });
+
+  await Promise.resolve();
+  assert.deepEqual(events, []);
+  releaseA();
+  await barrierC;
+  assert.deepEqual(events, ['B', 'C']);
+});
+
+test('disposal barriers preserve inherited failures while settling child cleanup', async () => {
+  const inheritedError = new Error('A stop failed');
+  const barrier = chainDisposalBarrier(
+    Promise.reject(inheritedError),
+    async () => { throw new Error('B cleanup failed'); },
+  );
+  await assert.rejects(barrier, error => error === inheritedError);
+});
+
+test('replacement invalidates an old handoff before its inherited cleanup settles', async () => {
+  let releaseInherited!: () => void;
+  const inherited = new Promise<void>(resolve => { releaseInherited = resolve; });
+  let releaseHandoff!: () => void;
+  const handoff = new Promise<void>(resolve => { releaseHandoff = resolve; });
+  const updates: string[] = [];
+  let spoken = false;
+  const lifecycle = new SceneLifecycle({
+    turns: [{ id: 'old', content: 'Old partner', characterId: 'partner' }],
+    myRoleIds: [],
+    voiceForCharacter: () => voice,
+    speaker: { stop: async () => {}, speak: async () => { spoken = true; } },
+    beforeTurnChange: () => handoff,
+    onChange: state => { updates.push(state.phase); },
+  });
+  const starting = lifecycle.start();
+  await flush();
+  assert.equal(lifecycle.state.phase, 'preparing');
+
+  // Same ordering as the hook: disposal invalidates synchronously; only its
+  // acknowledgement is chained behind prior generations' teardown.
+  const ownDisposal = lifecycle.dispose();
+  const barrier = chainDisposalBarrier(inherited, () => ownDisposal);
+  updates.length = 0;
+  releaseHandoff();
+  await starting;
+  assert.equal(spoken, false);
+  assert.deepEqual(updates, []);
+  releaseInherited();
+  await barrier;
+});
+
+test('turn-change teardown runs after speaker stop for actor transitions and completion', async () => {
+  const events: string[] = [];
+  const speaker: SceneSpeaker = {
+    stop: async () => { events.push('speaker-stop'); },
+    speak: async () => {},
+  };
+  const scene = new SceneLifecycle({
+    turns: [
+      { id: 'one', content: 'One', characterId: 'mine' },
+      { id: 'two', content: 'Two', characterId: 'mine' },
+    ],
+    myRoleIds: ['mine'],
+    voiceForCharacter: () => voice,
+    speaker,
+    beforeTurnChange: async () => { events.push('turn-change'); },
+  });
+
+  await scene.start();
+  assert.equal(scene.state.phase, 'waiting');
+  assert.deepEqual(events, ['speaker-stop', 'turn-change']);
+  await scene.next();
+  assert.equal(scene.state.phase, 'waiting');
+  assert.deepEqual(events, ['speaker-stop', 'turn-change', 'speaker-stop', 'turn-change']);
+  await scene.next();
+  assert.equal(scene.state.phase, 'completed');
+  assert.deepEqual(events, [
+    'speaker-stop', 'turn-change',
+    'speaker-stop', 'turn-change',
+    'speaker-stop', 'turn-change',
+  ]);
 });

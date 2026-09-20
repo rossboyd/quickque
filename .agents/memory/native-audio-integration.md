@@ -89,6 +89,16 @@ not a frontend “paused” state. Test with deferred stop acknowledgements, acr
 adapter remounts as well as ordinary next/previous navigation; browser completion
 callbacks cannot prove hardware shutdown.
 
+Every remount's teardown barrier must retain all inherited pending teardown,
+even when that intermediate instance never created an audio resource.
+
+**Why:** In a rapid A → B → C replacement, B may be disposed before A's stop
+finishes. Awaiting only B's empty cleanup lets C bypass A's still-playing audio.
+
+**How to apply:** Chain inherited shutdown through each replacement and test at
+least three generations with a deferred first stop. Two-instance tests cannot
+detect this loss of an inherited barrier.
+
 Error reporting must not turn a failed teardown into a resolved promise.
 **Why:** A wrapper that catches native errors to update the UI can silently
 defeat a caller's otherwise correct fail-closed barrier, even when lifecycle

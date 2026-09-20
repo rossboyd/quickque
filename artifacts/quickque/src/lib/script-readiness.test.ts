@@ -6,6 +6,7 @@ import {
   getDeliverySuggestions,
   getScriptFingerprint,
   getScriptReadiness,
+  getScriptReadinessKey,
   loadSetupCheckpoint,
   saveSetupCheckpoint,
 } from './script-readiness.ts';
@@ -55,6 +56,38 @@ test('legacy role selections do not count as explicit confirmation', () => {
   const result = getScriptReadiness(script());
   assert.equal(result.ready, false);
   assert.equal(result.issues.some(issue => issue.code === 'role-unconfirmed'), true);
+});
+
+test('readiness identity ignores private practice metadata but tracks all playback inputs', () => {
+  const value = script();
+  const key = getScriptReadinessKey(value);
+  const personalEdit = structuredClone(value);
+  personalEdit.updatedAt = 200;
+  personalEdit.title = 'New display title';
+  personalEdit.sections[0].title = 'New turn title';
+  personalEdit.sections[0].notes = 'New writer direction';
+  personalEdit.practice = {
+    mode: 'off-book', startTurn: 0, endTurn: 0, difficultSectionIds: ['turn-1'],
+  };
+  personalEdit.personalNotes = [{ id: 'note-1', sectionId: 'turn-1', content: 'My reflection', createdAt: 1, updatedAt: 1 }];
+  assert.equal(getScriptReadinessKey(personalEdit), key);
+  for (const change of [
+    (s: Script) => { s.id = 'different-script'; },
+    (s: Script) => { s.purpose = 'presentation'; },
+    (s: Script) => { s.sections[0].content = 'Changed dialogue'; },
+    (s: Script) => { s.sections[0].id = 'replacement-turn'; },
+    (s: Script) => { s.sections[0].characterId = 'someone-else'; },
+    (s: Script) => { s.actor!.enabled = false; },
+    (s: Script) => { s.actor!.myRoleIds = []; },
+    (s: Script) => { s.actor!.roleAssignments = { alex: 'computer-partner' }; },
+    (s: Script) => { s.actor!.characters[0].voice.voiceId = 'new-voice'; },
+    (s: Script) => { s.actor!.characters[0].voice.voiceRevision = 3; },
+    (s: Script) => { s.actor!.characters[0].voice.rate = 1.5; },
+  ]) {
+    const changed = structuredClone(value);
+    change(changed);
+    assert.notEqual(getScriptReadinessKey(changed), key);
+  }
 });
 
 test('computer partners require available matching local voice and revision', () => {

@@ -148,6 +148,28 @@ export function getScriptFingerprint(script: Pick<Script, 'id' | 'title' | 'purp
   return stableTextHash(data);
 }
 
+/**
+ * Runtime setup depends on script/cast/audio inputs, not personal rehearsal
+ * metadata. Returning the full signature avoids hash collisions in this gate.
+ */
+export function getScriptReadinessKey(script: Script): string {
+  return JSON.stringify({
+    id: script.id,
+    purpose: getScriptPurpose(script),
+    sections: script.sections.map(section => [
+      section.id, section.content, section.characterId ?? null,
+    ]),
+    actor: script.actor ? {
+      enabled: script.actor.enabled,
+      characters: script.actor.characters.map(character => [
+        character.id, character.name, character.voice,
+      ]),
+      myRoleIds: script.actor.myRoleIds,
+      roleAssignments: script.actor.roleAssignments ?? null,
+    } : null,
+  });
+}
+
 function usedCharacters(script: Script): ActorCharacter[] {
   const actor = script.actor;
   if (!actor) return [];
